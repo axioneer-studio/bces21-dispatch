@@ -40,10 +40,10 @@ body:
       label: Importance
       description: À quel point cette suggestion est-elle importante pour vous ?
       options:
-        - Critique - Bloque mon utilisation
-        - Haute - Améliorerait fortement mon usage
-        - Moyenne - Apporterait un confort appréciable
-        - Basse - Agréable mais pas indispensable
+        - Critique
+        - Haute
+        - Moyenne
+        - Basse
     validations:
       required: true
 
