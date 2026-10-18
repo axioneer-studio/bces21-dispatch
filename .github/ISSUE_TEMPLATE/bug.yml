@@ -1,0 +1,88 @@
+name: Signaler un bug
+description: Signalez un problème rencontré avec le Dispatch BCES.
+title: "[Bug] "
+labels: ["bug"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vous avez rencontré un problème avec le Dispatch BCES ?
+        Décrivez-le ci-dessous afin que nous puissions le reproduire et le corriger.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Avant de continuer
+      options:
+        - label: J'ai vérifié qu'aucun signalement similaire n'existe déjà
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      description: Que se passe-t-il ?
+      placeholder: "Lorsque je..., le Dispatch BCES..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire le problème
+      description: Détaillez les actions nécessaires pour reproduire le bug.
+      placeholder: |
+        1. Ouvrir...
+        2. Cliquer sur...
+        3. Constater...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+      description: Qu'auriez-vous dû observer à la place ?
+      placeholder: "Je m'attendais à ce que..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Que s'est-il passé exactement ?
+      placeholder: "À la place, le Dispatch BCES..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Gravité
+      description: Quel est l'impact de ce bug sur votre utilisation ?
+      options:
+        - Bloquant - Empêche toute utilisation
+        - Élevé - Bloque une fonctionnalité importante
+        - Moyen - Un contournement est possible
+        - Faible - Gêne mineure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environnement
+      description: Indiquez votre système d'exploitation, la version du Dispatch BCES et toute autre information utile.
+      placeholder: |
+        - Système d'exploitation :
+        - Version du Dispatch BCES :
+        - Navigateur (si applicable) :
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Captures d'écran et informations complémentaires
+      description: Ajoutez des captures d'écran, messages d'erreur ou journaux utiles.
+      placeholder: "Glissez-déposez vos fichiers ici si applicable..."
