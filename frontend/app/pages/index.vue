@@ -12,6 +12,10 @@ onMounted(() => {
     toast.error(message ?? 'La connexion a échoué.')
     window.history.replaceState({}, '', window.location.pathname)
   }
+  if (query.get('status') === 'pending') {
+    toast.warning(useErrorMessage('account_pending') ?? 'Compte en attente de validation.')
+    window.history.replaceState({}, '', window.location.pathname)
+  }
 })
 </script>
 
@@ -30,7 +34,7 @@ onMounted(() => {
     <DiscordButton :url="config.public.discordAuthUrl" />
 
     <p class="bces-card__hint">
-      Premier passage ? Ton compte est créé automatiquement.
+      Première connexion ? Ton compte est créé automatiquement.
     </p>
   </main>
 </template>

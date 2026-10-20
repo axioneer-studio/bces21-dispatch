@@ -1,0 +1,52 @@
+/*
+ * Palette dédiée au Dispatch.
+ * Volontairement plus froide / moins saturée que le thème global des écrans
+ * d'authentification : gris-bleu neutres, l'accent vert est réservé aux états
+ * actifs et aux boutons d'action.
+ */
+
+:root {
+  /* Fonds */
+  --dp-bg: #0f1216;
+  --dp-panel: #171b21;
+  --dp-panel-2: #1d222a;
+  --dp-panel-3: #232932;
+
+  /* Lignes */
+  --dp-line: #2a313b;
+  --dp-line-strong: #39424f;
+
+  /* Textes */
+  --dp-text: #e2e8f0;
+  --dp-text-2: #9aa7b6;
+  --dp-text-dim: #64717f;
+
+  /* Accent */
+  --dp-accent: #46996d;
+  --dp-accent-soft: rgba(70, 153, 109, 0.14);
+  --dp-accent-line: rgba(70, 153, 109, 0.42);
+
+  /* Sémantique */
+  --dp-danger: #d9534f;
+  --dp-danger-soft: rgba(217, 83, 79, 0.14);
+  --dp-danger-line: rgba(217, 83, 79, 0.40);
+  --dp-warn: #c98a2e;
+  --dp-warn-soft: rgba(201, 138, 46, 0.14);
+  --dp-warn-line: rgba(201, 138, 46, 0.40);
+  --dp-info: #3d7fb8;
+  --dp-info-soft: rgba(61, 127, 184, 0.14);
+
+  /* Tuiles agent (tailles fixes, cf. AgentTile) */
+  --dp-tile-bg: #1e242c;
+  --dp-tile-border: #303945;
+  --dp-tile-bg-active: #232c33;
+  --dp-tile-border-active: rgba(70, 153, 109, 0.45);
+}
+
+/* Le body porte background.png pour les écrans d'authentification.
+   Sur le layout dispatch on le neutralise pour un fond plat + palette dédiée. */
+body[data-layout='dispatch'] {
+  background-image: none !important;
+  background-color: var(--dp-bg) !important;
+  color: var(--dp-text) !important;
+}

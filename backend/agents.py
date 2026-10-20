@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -19,7 +19,13 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> AgentListResponse:
-    rows = (await db.execute(select(User).order_by(User.discord_username.asc()))).scalars().all()
+    rows = (
+        await db.execute(
+            select(User)
+            .where(or_(User.status == "active", User.status.is_(None)))
+            .order_by(User.prenom_rp.asc().nulls_last(), User.nom_rp.asc().nulls_last())
+        )
+    ).scalars().all()
     agents = [AgentSummary.model_validate(u) for u in rows]
     from datetime import datetime, timezone
     return AgentListResponse(

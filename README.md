@@ -1,4 +1,4 @@
-# bces21-dispatch
+# BCES-dispatch
 
 Application dispatch BCES - frontend Nuxt 4 + backend FastAPI (Discord OAuth).
 
