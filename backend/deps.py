@@ -1,7 +1,6 @@
 from collections.abc import AsyncIterator
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.session import current_user_id
@@ -18,5 +17,10 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session invalide.",
+        )
+    if (user.status or "active") == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Compte en attente de validation.",
         )
     return user

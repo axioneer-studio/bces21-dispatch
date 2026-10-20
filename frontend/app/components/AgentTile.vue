@@ -1,159 +1,153 @@
 <script setup lang="ts">
-type Agent = {
-  id: number
-  discord_id: string
-  discord_username: string
-  discord_avatar: string | null
-  prenom_rp: string | null
-  nom_rp: string | null
-}
+import type { Agent } from '~/utils/agent'
+import { agentCallsign, agentDisplayName } from '~/utils/agent'
 
-const props = defineProps<{
-  agent: Agent
-  displayName: string
-  series: string
-  avatarUrl: string | null
-  fromSlotId: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    agent: Agent
+    agents?: Agent[]
+    draggable?: boolean
+    removable?: boolean
+    tone?: 'default' | 'assigned' | 'pool'
+    compact?: boolean
+  }>(),
+  {
+    agents: () => [],
+    draggable: false,
+    removable: false,
+    tone: 'default',
+    compact: false
+  }
+)
 
 const emit = defineEmits<{
-  dragStart: [event: DragEvent]
-  unassign: []
+  dragstart: []
+  remove: []
 }>()
 
-function handleDragStart(event: DragEvent) {
-  emit('dragStart', event)
+function onDragStart(e: DragEvent) {
+  e.dataTransfer?.setData('application/json', JSON.stringify({ userId: props.agent.id }))
+  emit('dragstart')
 }
 
-function handleUnassign(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  emit('unassign')
+function onRemove(e: MouseEvent) {
+  e.stopPropagation()
+  emit('remove')
 }
 </script>
 
 <template>
   <div
-    class="agent-tile"
-    draggable="true"
-    @dragstart="handleDragStart"
+    class="at"
+    :class="[`at--${tone}`, { 'at--compact': compact }]"
+    :draggable="draggable"
+    :title="`${agentDisplayName(agent, agents)} — ${agent.phone || 'sans numéro'}`"
+    @dragstart="onDragStart"
   >
-    <img
-      v-if="avatarUrl"
-      :src="avatarUrl"
-      :alt="displayName"
-      class="agent-tile__avatar"
-      width="36"
-      height="36"
-      draggable="false"
-    />
-    <div v-else class="agent-tile__avatar agent-tile__avatar--placeholder" aria-hidden="true">
-      {{ displayName.charAt(0).toUpperCase() }}
-    </div>
-    <div class="agent-tile__meta">
-      <div class="agent-tile__name">{{ displayName }}</div>
-      <div class="agent-tile__series">{{ series }}</div>
-    </div>
+    <span class="at__name">{{ agentDisplayName(agent, agents) }}</span>
+    <span class="at__skills">{{ agent.competencies.join(' ') || '·' }}</span>
+    <span class="at__num">{{ agentCallsign(agent) }}</span>
     <button
-      v-if="fromSlotId"
+      v-if="removable"
       type="button"
-      class="agent-tile__unassign"
+      class="at__x"
       aria-label="Retirer"
-      @click="handleUnassign"
       @mousedown.stop
       @dragstart.stop.prevent
+      @click="onRemove"
     >
-      <Icon name="lucide:x" size="12" />
+      <Icon name="lucide:x" size="9" />
     </button>
   </div>
 </template>
 
 <style scoped>
-.agent-tile {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 0;
-  border: 1px dashed var(--bces-border-strong);
-  background: var(--bces-accent-soft);
-  cursor: grab;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+.at {
   position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  justify-items: center;
+  gap: 0;
+  width: 96px;
+  height: 58px;
+  padding: 3px 4px;
+  background: var(--dp-tile-bg);
+  border: 1px solid var(--dp-tile-border);
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
   user-select: none;
+  overflow: hidden;
 }
 
-.agent-tile:active {
+.at--compact {
+  width: 84px;
+  height: 48px;
+}
+
+.at--pool {
+  cursor: grab;
+}
+
+.at--pool:active {
   cursor: grabbing;
 }
 
-.agent-tile:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(70, 153, 109, 0.25);
-  background: rgba(70, 153, 109, 0.20);
+.at--assigned {
+  background: var(--dp-tile-bg-active);
+  border-color: var(--dp-tile-border-active);
 }
 
-.agent-tile__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: var(--bces-bg-elevated);
-  border: 1px solid var(--bces-border);
-}
-
-.agent-tile__unassign,
-.agent-tile__avatar {
-  border-radius: 0;
-}
-
-.agent-tile__avatar--placeholder {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.at__name {
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--bces-accent);
-  font-size: 12px;
-}
-
-.agent-tile__meta {
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-tile__name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--bces-text);
-  white-space: nowrap;
+  line-height: 1.15;
+  color: var(--dp-text);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  white-space: nowrap;
 }
 
-.agent-tile__series {
-  font-size: 9px;
-  color: var(--bces-text-dim);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+.at__skills {
+  font-size: 10px;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+  min-height: 12px;
+  filter: saturate(1.1);
 }
 
-.agent-tile__unassign {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+.at__num {
+  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--dp-text-dim);
+}
+
+.at__x {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 13px;
+  height: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--bces-text-dim);
-  background: rgba(0, 0, 0, 0.25);
-  transition: color 0.15s ease, background 0.15s ease;
-  flex-shrink: 0;
+  background: var(--dp-tile-bg);
+  border: none;
+  border-radius: 2px;
+  color: var(--dp-text-dim);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, color 0.12s ease;
 }
 
-.agent-tile__unassign:hover {
-  color: #ec8a86;
-  background: rgba(210, 85, 79, 0.20);
+.at:hover .at__x {
+  opacity: 1;
+}
+
+.at__x:hover {
+  color: var(--dp-danger);
 }
 </style>

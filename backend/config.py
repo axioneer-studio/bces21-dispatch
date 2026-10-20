@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_timezone: str = "Europe/Paris"
 
     database_url: str = Field(
-        default="sqlite+aiosqlite:///./bces21.db",
+        default="sqlite+aiosqlite:///./BCES.db",
         description="SQLAlchemy async URL",
     )
 

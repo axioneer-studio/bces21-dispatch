@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   color-scheme: dark;
 
@@ -555,6 +557,14 @@ button {
 
 .bces-field__hint--err {
   color: #ec8a86;
+}
+
+.bces-field__opt {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--bces-text-dim);
+  font-size: 10px;
+  margin-left: 4px;
 }
 
 .bces-toast-stack {

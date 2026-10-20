@@ -1,11 +1,26 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import tailwindcss from '@tailwindcss/vite'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
 
-  modules: ['@nuxt/icon'],
+  modules: [
+    '@nuxt/ui',
+    '@nuxt/icon',
+    '@pinia/nuxt',
+    '@vueuse/nuxt'
+  ],
 
-  css: ['~/assets/css/main.css'],
+  icon: {
+    localApiEndpoint: '/_nuxt_icon'
+  },
+
+  css: ['~/assets/css/main.css', '~/assets/css/dispatch.css'],
+
+  vite: {
+    plugins: [tailwindcss()]
+  },
 
   app: {
     head: {
@@ -16,7 +31,7 @@ export default defineNuxtConfig({
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'color-scheme', content: 'dark' },
-        { name: 'theme-color', content: '#0a0f0d' }
+        { name: 'theme-color', content: '#21252b' }
       ],
       link: [
         { rel: 'icon', type: 'image/png', href: '/images/logo.png' }
@@ -24,10 +39,18 @@ export default defineNuxtConfig({
     }
   },
 
+  ui: {
+    colorMode: false
+  },
+
   nitro: {
     routeRules: {
       '/api/**': {
         proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000') + '/api/**'
+      },
+      '/api/ws/**': {
+        proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000') + '/api/ws/**',
+        ws: true
       }
     }
   },

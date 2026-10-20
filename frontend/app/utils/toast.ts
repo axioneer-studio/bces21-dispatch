@@ -22,7 +22,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   missing_code: 'Code OAuth manquant.',
   not_authenticated: 'Tu dois être connecté pour accéder à cette page.',
   invalid_token: 'Session invalide.',
-  expired_token: 'Session expirée.'
+  expired_token: 'Session expirée.',
+  account_pending: 'Compte en attente de validation par un membre actif.'
 }
 
 export function useErrorMessage(code: string | null | undefined): string | null {

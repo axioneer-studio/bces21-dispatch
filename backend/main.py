@@ -11,6 +11,7 @@ from cleanup import cleanup_loop
 from config import get_settings
 from database import init_db
 from deps import get_current_user
+from dispatch import router as dispatch_router
 from models import User
 from schemas import HealthResponse, UserResponse
 
@@ -81,3 +82,4 @@ async def me(user: User = Depends(get_current_user)) -> User:
 
 app.include_router(auth_router)
 app.include_router(agents_router)
+app.include_router(dispatch_router)
