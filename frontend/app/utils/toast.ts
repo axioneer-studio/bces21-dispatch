@@ -1,18 +1,3 @@
-export type ToastType = 'info' | 'success' | 'error' | 'warning'
-
-export interface ToastInput {
-  type?: ToastType
-  message: string
-  title?: string
-  duration?: number
-}
-
-export interface Toast extends Required<Omit<ToastInput, 'title'>> {
-  id: number
-  title: string | null
-  createdAt: number
-}
-
 export const ERROR_MESSAGES: Record<string, string> = {
   discord_misconfigured: 'Identifiants Discord non configurés côté serveur.',
   invalid_state: 'Session OAuth expirée ou invalide.',
