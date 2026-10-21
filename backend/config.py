@@ -40,6 +40,15 @@ class Settings(BaseSettings):
 
     cleanup_interval_seconds: int = 60 * 30
 
+    # Google Sheet "Disponibilités LSES/BCES/SAFD" (export CSV)
+    status_sheet_csv_url: str = (
+        "https://docs.google.com/spreadsheets/d/"
+        "1A1gxOho_roNwxTtcbiEpLGSWbD8JUasMDu4NL-zdcbw/export?format=csv&gid=0"
+    )
+    # Google recommande de respecter Cache-Control/Retry-After et de rester
+    # sous ~60 requêtes/min : 30 s par défaut est largement dans les quotas.
+    status_sync_interval_seconds: int = 30
+
     cors_allow_origins: str = "http://localhost:3000"
 
     @property

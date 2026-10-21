@@ -1,18 +1,4 @@
-export type ToastType = 'info' | 'success' | 'error' | 'warning'
-
-export interface ToastInput {
-  type?: ToastType
-  message: string
-  title?: string
-  duration?: number
-}
-
-export interface Toast extends Required<Omit<ToastInput, 'title'>> {
-  id: number
-  title: string | null
-  createdAt: number
-  paused: boolean
-}
+import type { Toast, ToastInput } from '~/types/toast'
 
 const DEFAULT_DURATION = 5000
 const MAX_TOASTS = 6

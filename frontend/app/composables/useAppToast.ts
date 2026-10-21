@@ -1,4 +1,4 @@
-import type { ToastInput } from '~/composables/useToastStore'
+import type { ToastInput } from '~/types/toast'
 
 export function useAppToast() {
   const store = useToastStore()

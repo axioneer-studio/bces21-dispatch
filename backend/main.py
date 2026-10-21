@@ -14,6 +14,7 @@ from deps import get_current_user
 from dispatch import router as dispatch_router
 from models import User
 from schemas import HealthResponse, UserResponse
+from status_sync import status_sync_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
 
     stop_event = asyncio.Event()
     cleanup_task = asyncio.create_task(cleanup_loop(stop_event), name="cleanup")
+    sync_task = asyncio.create_task(status_sync_loop(stop_event), name="status-sync")
     logger.info(
         "Démarrage de l'API %s v%s (debug=%s)",
         settings.app_name,
@@ -45,6 +47,10 @@ async def lifespan(app: FastAPI):
             await asyncio.wait_for(cleanup_task, timeout=5)
         except asyncio.TimeoutError:
             cleanup_task.cancel()
+        try:
+            await asyncio.wait_for(sync_task, timeout=5)
+        except asyncio.TimeoutError:
+            sync_task.cancel()
 
 
 settings = get_settings()

@@ -214,7 +214,7 @@ async function addIntervention() {
         </section>
 
         <section v-if="conges" class="z z--conges">
-          <header class="z__head"><Icon name="lucide:beach" size="12" /><span>Congés</span></header>
+          <header class="z__head"><Icon name="lucide:umbrella" size="12" /><span>Congés</span></header>
           <SlotPanel :slot="conges" :agents="agents" />
         </section>
 
