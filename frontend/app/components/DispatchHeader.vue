@@ -24,23 +24,36 @@ async function setHospital(s: 'ouvert' | 'ferme' | 'nuit') {
   }
 }
 
-async function toggleLses() {
-  const next = state.value.lses_status === 'ouvert' ? 'ferme' : 'ouvert'
-  try {
-    await updateState({ lses_status: next })
-  } catch {
-    toast.error('Mise à jour impossible.')
+// LSES / SAFD : statuts synchronisés depuis le Google Sheet (lecture seule)
+const lsesLabel = computed(() => {
+  switch (state.value.lses_status) {
+    case 'ouvert':
+      return 'Ouvert'
+    case 'ferme':
+      return 'Fermé'
+    case 'nuit':
+      return 'Nuit'
+    default:
+      return "C'est bugué"
   }
-}
+})
 
-async function toggleSafd() {
-  const next = state.value.safd_status === 'disponible' ? 'indisponible' : 'disponible'
-  try {
-    await updateState({ safd_status: next })
-  } catch {
-    toast.error('Mise à jour impossible.')
+const lsesClass = computed(() => {
+  switch (state.value.lses_status) {
+    case 'ouvert':
+      return 'dh__chip--on'
+    case 'nuit':
+      return 'dh__chip--nuit'
+    case 'ferme':
+      return 'dh__chip--off'
+    default:
+      return 'dh__chip--bug'
   }
-}
+})
+
+const safdLabel = computed(() =>
+  state.value.safd_status === 'disponible' ? 'Disponibles' : 'Indisponibles'
+)
 
 </script>
 
@@ -88,27 +101,20 @@ async function toggleSafd() {
     </div>
 
     <div class="dh__group">
-      <button
-        type="button"
-        class="dh__chip"
-        :class="state.lses_status === 'ouvert' ? 'dh__chip--on' : 'dh__chip--off'"
-        @click="toggleLses"
-      >
+      <span class="dh__chip dh__chip--readonly" :class="lsesClass">
         <Icon name="lucide:door-open" size="14" />
-        LSES : <strong>{{ state.lses_status === 'ouvert' ? 'Ouvert' : 'Fermé' }}</strong>
-      </button>
+        LSES : <strong>{{ lsesLabel }}</strong>
+      </span>
     </div>
 
     <div class="dh__group">
-      <button
-        type="button"
-        class="dh__chip"
+      <span
+        class="dh__chip dh__chip--readonly"
         :class="state.safd_status === 'disponible' ? 'dh__chip--on' : 'dh__chip--off'"
-        @click="toggleSafd"
       >
         <Icon name="lucide:truck" size="14" />
-        SAFD : <strong>{{ state.safd_status === 'disponible' ? 'Disponible' : 'Indisponible' }}</strong>
-      </button>
+        SAFD : <strong>{{ safdLabel }}</strong>
+      </span>
     </div>
 
   </header>
@@ -180,6 +186,11 @@ async function toggleSafd() {
 .dh__chip--ferme {
   background: rgba(210, 85, 79, 0.18);
   border-color: rgba(210, 85, 79, 0.50);
+  color: #ec8a86;
+}
+
+.dh__chip--ferme strong {
+  color: #ec8a86;
 }
 
 .dh__chip--nuit {
@@ -190,6 +201,20 @@ async function toggleSafd() {
 
 .dh__chip--nuit strong {
   color: #c8c0f0;
+}
+
+.dh__chip--bug {
+  background: rgba(210, 160, 60, 0.18);
+  border-color: rgba(210, 160, 60, 0.50);
+  color: #e8c878;
+}
+
+.dh__chip--bug strong {
+  color: #e8c878;
+}
+
+.dh__chip--readonly {
+  cursor: default;
 }
 
 .dh__chip--freq {

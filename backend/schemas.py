@@ -255,8 +255,7 @@ class StateOut(BaseModel):
 
 class StateUpdateRequest(BaseModel):
     hospital_status: Optional[str] = Field(default=None, pattern=r"^(ouvert|ferme|nuit)$")
-    lses_status: Optional[str] = Field(default=None, max_length=16)
-    safd_status: Optional[str] = Field(default=None, max_length=16)
+    # lses_status / safd_status : pilotés par le Google Sheet (status_sync.py)
     radio_codes: Optional[str] = Field(default=None, max_length=2000)
 
 
