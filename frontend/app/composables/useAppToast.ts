@@ -1,6 +1,6 @@
 import type { ToastInput } from '~/composables/useToastStore'
 
-export function useToast() {
+export function useAppToast() {
   const store = useToastStore()
 
   function push(input: ToastInput) {

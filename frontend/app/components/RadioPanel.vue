@@ -9,7 +9,7 @@ const props = defineProps<{
   agents: Agent[]
 }>()
 
-const toast = useToast()
+const toast = useAppToast()
 
 const direction = computed(() => props.radios.filter((r) => r.is_direction))
 const normal = computed(() => props.radios.filter((r) => !r.is_direction))

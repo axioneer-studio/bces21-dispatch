@@ -14,7 +14,7 @@ const emit = defineEmits<{
   changed: []
 }>()
 
-const toast = useToast()
+const toast = useAppToast()
 
 const assigned = computed(() =>
   [...props.slot.assignments]
@@ -22,6 +22,19 @@ const assigned = computed(() =>
     .map((a) => props.agents.find((x) => x.id === a.user_id))
     .filter((a): a is Agent => Boolean(a))
 )
+
+const emptyMessage = computed(() => {
+  const messages: Record<string, string> = {
+    hopital: "Personne n'est à l’hôpital.",
+    astreinte: "Personne n'est d’astreinte.",
+    conges: "Personne n'est en congé.",
+    ipt: "Personne n'est en IPT.",
+    'astreinte-fin': "Personne n'est en astreinte de fin de service.",
+    pause: "Personne n'est en pause."
+  }
+
+  return messages[props.slot.kind] ?? 'Aucun agent assigné.'
+})
 
 const dropOver = ref<boolean>(false)
 
@@ -74,10 +87,11 @@ function unassign(agentId: number) {
       :agent="a"
       :agents="agents"
       tone="assigned"
+      draggable
       :removable="removable !== false"
       @remove="unassign(a.id)"
     />
-    <div v-if="!assigned.length" class="sp__empty">Vide</div>
+    <EmptySlotState v-if="!assigned.length" :message="emptyMessage" />
   </div>
 </template>
 
@@ -102,14 +116,4 @@ function unassign(agentId: number) {
   outline-offset: -4px;
 }
 
-.sp__empty {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  color: var(--dp-text-dim);
-  font-size: 10px;
-  font-style: italic;
-}
 </style>

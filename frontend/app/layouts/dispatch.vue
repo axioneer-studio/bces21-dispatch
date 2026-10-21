@@ -21,7 +21,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .dispatch-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--dp-bg);
   color: var(--dp-text);
 }
@@ -30,6 +31,7 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   min-width: 0;
 }
 </style>

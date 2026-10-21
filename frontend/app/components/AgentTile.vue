@@ -89,7 +89,12 @@ function onRemove(e: MouseEvent) {
   cursor: grab;
 }
 
-.at--pool:active {
+.at--assigned {
+  cursor: grab;
+}
+
+.at--pool:active,
+.at--assigned:active {
   cursor: grabbing;
 }
 

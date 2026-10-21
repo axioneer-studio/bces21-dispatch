@@ -2,11 +2,9 @@ export interface DispatchStatus {
   id: string
   label: string
   emoji: string
-  default?: boolean
 }
 
 export const INTERVENTION_STATUSES: DispatchStatus[] = [
-  { id: 'a_prendre', label: 'A PRENDRE', emoji: '⚠️', default: true },
   { id: 'inter_ambulance', label: 'Inter', emoji: '🚑' },
   { id: 'inter_helico', label: 'Inter', emoji: '🚁' },
   { id: 'inter_bateau', label: 'Inter', emoji: '⛵' },
@@ -35,8 +33,6 @@ export const INTERVENTION_STATUSES: DispatchStatus[] = [
   { id: 'prise_otage', label: "Prise d'otage", emoji: '🏦' },
   { id: 'envie_caner', label: 'Envie de caner', emoji: '☠️' }
 ]
-
-export const DEFAULT_STATUS_ID = 'a_prendre'
 
 export function findStatus(id: string | null | undefined): DispatchStatus | null {
   if (!id) return null

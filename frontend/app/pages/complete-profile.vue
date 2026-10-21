@@ -3,7 +3,7 @@ useHead({ title: 'Active ton compte' })
 
 const config = useRuntimeConfig()
 const route = useRoute()
-const toast = useToast()
+const toast = useAppToast()
 const { formatDate, formatTime, formatTzLabel, tz } = useTimezone()
 
 type Me = {

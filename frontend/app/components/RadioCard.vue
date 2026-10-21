@@ -8,7 +8,7 @@ const props = defineProps<{
   agents: Agent[]
 }>()
 
-const toast = useToast()
+const toast = useAppToast()
 
 const status = computed<'on' | 'off' | 'loading'>(() => {
   if (props.radio.is_loading) return 'loading'
