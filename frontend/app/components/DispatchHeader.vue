@@ -2,7 +2,7 @@
 import { updateState } from '~/composables/useDispatchApi'
 
 const { state } = useDispatchStore()
-const toast = useToast()
+const toast = useAppToast()
 
 const hospitalOpen = ref<boolean>(true)
 const hospitalMenu = ref<boolean>(false)

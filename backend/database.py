@@ -69,6 +69,22 @@ async def _run_user_migrations(conn) -> None:
             pass
 
 
+async def _run_dispatch_migrations(conn) -> None:
+    await conn.execute(
+        text(
+            """
+            UPDATE dispatch_slots
+            SET status = NULL
+            WHERE lower(trim(status)) IN (
+                'a_prendre',
+                'a prendre'
+            )
+            OR upper(trim(status)) LIKE '%A PRENDRE%'
+            """
+        )
+    )
+
+
 async def init_db() -> None:
     from models import (
         DispatchAssignment,
@@ -81,6 +97,7 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _run_user_migrations(conn)
+        await _run_dispatch_migrations(conn)
 
     # Ensure default dispatch state singleton exists
     from sqlalchemy import select

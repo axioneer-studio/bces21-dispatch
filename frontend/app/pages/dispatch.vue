@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { createSlot, fetchSnapshot } from '~/composables/useDispatchApi'
+import { createSlot, fetchSnapshot, unassignUser } from '~/composables/useDispatchApi'
 import type { Agent } from '~/utils/agent'
 
 definePageMeta({ layout: 'dispatch' })
@@ -36,7 +36,7 @@ const agents = computed<Agent[]>(() => agentsData.value ?? [])
 const { slots, interventions, centrale, hopital, snapshot, connected, applySnapshot } =
   useDispatchStore()
 const { connect, disconnect } = useDispatchSocket()
-const toast = useToast()
+const toast = useAppToast()
 
 const { data: initialSnapshot } = await useAsyncData('dispatch-snapshot-initial', async () => {
   try {
@@ -80,6 +80,24 @@ function onPoolDragLeave() {
   poolDrop.value = false
 }
 
+async function onPoolDrop(e: DragEvent) {
+  e.preventDefault()
+  poolDrop.value = false
+  try {
+    const raw = e.dataTransfer?.getData('application/json')
+    if (!raw) return
+    const payload = JSON.parse(raw) as { userId?: number }
+    if (typeof payload.userId !== 'number') return
+
+    const assignment = slots.value
+      .flatMap((slot) => slot.assignments.map((item) => ({ slot, item })))
+      .find(({ item }) => item.user_id === payload.userId)
+    if (assignment) await unassignUser(assignment.slot.id, payload.userId)
+  } catch {
+    toast.error('Désassignation impossible.')
+  }
+}
+
 const adding = ref<boolean>(false)
 async function addIntervention() {
   if (adding.value) return
@@ -109,6 +127,7 @@ async function addIntervention() {
             :slot="centrale"
             :agents="agents"
             :fixed="true"
+            compact
             label="Centrale"
           />
         </div>
@@ -135,6 +154,7 @@ async function addIntervention() {
             :key="slot.id"
             :slot="slot"
             :agents="agents"
+            :hospital-slot-id="hopital?.id"
             :label="slot.kind === 'consultation' ? 'Consultation' : `Int. ${i + 1}`"
           />
           <button
@@ -160,6 +180,7 @@ async function addIntervention() {
           class="z__body z__body--pool"
           @dragover="onPoolDragOver"
           @dragleave="onPoolDragLeave"
+          @drop="onPoolDrop"
         >
           <AgentTile
             v-for="a in pool"
@@ -169,7 +190,7 @@ async function addIntervention() {
             tone="pool"
             draggable
           />
-          <div v-if="!pool.length" class="z__empty">Tous les agents sont assignés.</div>
+          <EmptySlotState v-if="!pool.length" message="Tout le monde est en service." />
         </div>
       </section>
 
@@ -233,7 +254,7 @@ async function addIntervention() {
     minmax(0, 1.15fr)
     minmax(0, 1fr)
     minmax(220px, 260px);
-  grid-template-rows: 120px minmax(140px, 1fr) 112px 112px;
+  grid-template-rows: 160px minmax(170px, 1fr) 112px 112px;
   grid-template-areas:
     'centrale hopital hors radio'
     'inter hopital hors radio'
@@ -290,7 +311,14 @@ async function addIntervention() {
 .z--centrale .z__rail :deep(.iv) {
   width: 100%;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-height: 126px;
+  height: auto;
+}
+
+.z--centrale .z__rail {
+  flex: 0 0 auto;
 }
 
 .z--inter .z__rail {
@@ -298,13 +326,15 @@ async function addIntervention() {
   align-items: stretch;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .z--inter .z__rail :deep(.iv) {
   width: 100%;
   min-width: 0;
-  flex: 0 0 160px;
-  height: 160px;
+  flex: 0 0 auto;
+  min-height: 126px;
+  height: auto;
 }
 
 .z--inter .z__rail :deep(.z__addcard) {
@@ -479,18 +509,6 @@ async function addIntervention() {
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-}
-
-.z__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
-  color: var(--dp-text-dim);
-  font-size: 10px;
-  font-style: italic;
-  text-align: center;
 }
 
 .pool {

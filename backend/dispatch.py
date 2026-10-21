@@ -175,7 +175,6 @@ async def create_slot(
     slot = DispatchSlot(
         kind=payload.kind,
         title=payload.kind.capitalize(),
-        status="⚠️ A PRENDRE ⚠️",
         order=order,
     )
     db.add(slot)
@@ -254,13 +253,21 @@ async def assign_user(
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
 
-    # Remove existing assignment of this user to this slot (idempotent)
-    for a in list(slot.assignments):
-        if a.user_id == user.id:
-            await db.delete(a)
-    # Add new
-    order = len(slot.assignments)
-    db.add(DispatchAssignment(slot_id=slot_id, user_id=user.id, order=order))
+    # A user can only occupy one dispatch slot at a time.
+    result = await db.execute(
+        select(DispatchAssignment).where(DispatchAssignment.user_id == user.id)
+    )
+    for assignment in result.scalars().all():
+        if assignment.slot_id == slot.id:
+            slot.assignments.remove(assignment)
+        await db.delete(assignment)
+
+    assignment = DispatchAssignment(
+        slot_id=slot_id,
+        user_id=user.id,
+        order=len(slot.assignments),
+    )
+    slot.assignments.append(assignment)
     await db.commit()
     await db.refresh(slot)
     await push_snapshot(db)

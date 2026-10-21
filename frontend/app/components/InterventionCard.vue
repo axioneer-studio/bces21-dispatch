@@ -6,7 +6,9 @@ import { assignUser, deleteSlot, unassignUser, updateSlot } from '~/composables/
 const props = defineProps<{
   slot: DispatchSlot
   agents: Agent[]
+  hospitalSlotId?: number
   fixed?: boolean
+  compact?: boolean
   label?: string
 }>()
 
@@ -14,11 +16,12 @@ const emit = defineEmits<{
   removed: [slotId: number]
 }>()
 
-const toast = useToast()
+const toast = useAppToast()
 const dropOver = ref<boolean>(false)
+const removing = ref<boolean>(false)
 
 function setStatus(statusId: string | null) {
-  updateSlot(props.slot.id, { status: statusId ?? 'a_prendre' }).catch(() => {
+  updateSlot(props.slot.id, { status: statusId, location: null }).catch(() => {
     toast.error('Mise à jour impossible.')
   })
 }
@@ -29,11 +32,29 @@ function setZip(zip: string | null) {
   })
 }
 
-function remove() {
-  if (props.fixed) return
-  deleteSlot(props.slot.id)
-    .then(() => emit('removed', props.slot.id))
-    .catch(() => toast.error('Suppression impossible.'))
+async function remove() {
+  if (props.fixed || removing.value) return
+
+  const assignedUserIds = props.slot.assignments.map((assignment) => assignment.user_id)
+  if (assignedUserIds.length && props.hospitalSlotId === undefined) {
+    toast.error('Suppression impossible : l’hôpital est indisponible.')
+    return
+  }
+
+  removing.value = true
+  try {
+    if (props.hospitalSlotId !== undefined) {
+      for (const userId of assignedUserIds) {
+        await assignUser(props.hospitalSlotId, userId)
+      }
+    }
+    await deleteSlot(props.slot.id)
+    emit('removed', props.slot.id)
+  } catch {
+    toast.error('Suppression impossible. Les agents restants sont toujours assignés.')
+  } finally {
+    removing.value = false
+  }
 }
 
 const assigned = computed(() =>
@@ -80,6 +101,10 @@ function unassign(agentId: number) {
 <template>
   <div
     class="iv"
+    :class="{
+      'iv--compact': compact || !fixed,
+      'iv--unassigned': !fixed && !assigned.length && !dropOver
+    }"
     :data-drop-over="dropOver ? '1' : '0'"
     @dragover="onDragOver"
     @dragleave="onDragLeave"
@@ -89,14 +114,17 @@ function unassign(agentId: number) {
       <span class="iv__label">{{ label ?? slot.title ?? 'Intervention' }}</span>
       <ZipPicker
         :model-value="slot.zip_code"
-        placeholder="ZIP"
         @update:model-value="setZip"
       />
-      <StatusPicker :model-value="slot.status" @update:model-value="setStatus" />
+      <StatusPicker
+        :model-value="slot.status ?? slot.location"
+        @update:model-value="setStatus"
+      />
       <button
         v-if="!fixed"
         type="button"
         class="iv__x"
+        :disabled="removing"
         aria-label="Supprimer"
         title="Supprimer"
         @click="remove"
@@ -112,12 +140,16 @@ function unassign(agentId: number) {
         :agent="a"
         :agents="agents"
         tone="assigned"
+        draggable
         :removable="!fixed"
         @remove="unassign(a.id)"
       />
-      <div v-if="!assigned.length" class="iv__hint">
+      <div v-if="!assigned.length && !fixed" class="iv__hint iv__hint--unassigned">
+        À PRENDRE
+      </div>
+      <div v-else-if="!assigned.length" class="iv__hint">
         <Icon name="lucide:mouse-pointer-click" size="11" />
-        Glisse des agents ici
+        Glissez votre tuile ici
       </div>
     </div>
   </div>
@@ -146,17 +178,27 @@ function unassign(agentId: number) {
   border-left-color: var(--dp-accent);
 }
 
+.iv--unassigned {
+  border-color: var(--dp-danger-line);
+  border-left-color: var(--dp-danger);
+}
+
+.iv--unassigned .iv__label {
+  color: var(--dp-danger);
+}
+
 .iv__bar {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 3px;
+  gap: 4px;
   padding: 3px;
   border-bottom: 1px solid var(--dp-line);
   flex-shrink: 0;
 }
 
 .iv__label {
+  min-height: 14px;
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -168,6 +210,8 @@ function unassign(agentId: number) {
 }
 
 .iv__bar > :deep(*) {
+  box-sizing: border-box;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -193,6 +237,31 @@ function unassign(agentId: number) {
   position: relative;
 }
 
+.iv--compact {
+  flex-direction: column;
+  min-height: 126px;
+  height: auto;
+}
+
+.iv--compact .iv__bar {
+  flex: 0 0 auto;
+  gap: 2px;
+  border-right: 0;
+  border-bottom: 1px solid var(--dp-line);
+}
+
+.iv--compact .iv__label {
+  min-height: 12px;
+  padding-right: 14px;
+}
+
+.iv--compact .iv__bar :deep(.zp__input),
+.iv--compact .iv__bar :deep(.sp__select) {
+  height: 18px;
+  padding: 1px 3px;
+  font-size: 9px;
+}
+
 .iv__x:hover {
   background: var(--dp-danger-soft);
   border-color: var(--dp-danger-line);
@@ -200,17 +269,31 @@ function unassign(agentId: number) {
 }
 
 .iv__drop {
-  flex: 1;
+  flex: 0 0 64px;
+  height: 64px;
   min-height: 0;
-  overflow-y: auto;
+  min-width: 0;
+  overflow: auto;
   padding: 3px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 3px;
 }
 
+.iv--compact .iv__drop {
+  flex: 0 0 64px;
+  align-content: flex-start;
+}
+
 .iv__hint {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -222,4 +305,18 @@ function unassign(agentId: number) {
   font-style: italic;
   text-align: center;
 }
+
+.iv__hint--unassigned {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--dp-danger-soft);
+  border: 1px dashed var(--dp-danger-line);
+  color: var(--dp-danger);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
 </style>

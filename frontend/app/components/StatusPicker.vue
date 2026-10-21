@@ -1,131 +1,70 @@
 <script setup lang="ts">
-import { DEFAULT_STATUS_ID, INTERVENTION_STATUSES } from '~/utils/statuses'
+import { INTERVENTION_STATUSES } from '~/utils/statuses'
+import { INTERVENTION_LOCATIONS } from '~/utils/locations'
 
 const props = defineProps<{
   modelValue: string | null
-  compact?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string | null]
 }>()
 
-const open = ref<boolean>(false)
-
-const current = computed(() => {
-  if (!props.modelValue) {
-    const def = INTERVENTION_STATUSES.find((s) => s.default)
-    return def ?? null
-  }
-  return INTERVENTION_STATUSES.find((s) => s.id === props.modelValue) ?? null
-})
-
-function pick(id: string) {
-  emit('update:modelValue', id)
-  open.value = false
+function onChange(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  emit('update:modelValue', value || null)
 }
 </script>
 
 <template>
-  <div class="sp" @click.stop>
-    <button
-      type="button"
-      class="sp__btn"
-      :class="`sp__btn--${current?.id ?? 'a_prendre'}`"
-      @click="open = !open"
-    >
-      <span class="sp__emoji">{{ current?.emoji ?? '⚠️' }}</span>
-      <span class="sp__label">{{ current?.label ?? 'A PRENDRE' }}</span>
-      <Icon name="lucide:chevron-down" size="12" />
-    </button>
-    <div v-if="open" class="sp__menu">
-      <button
-        v-for="s in INTERVENTION_STATUSES"
-        :key="s.id"
-        type="button"
-        class="sp__menu-item"
-        :class="{ 'sp__menu-item--active': s.id === (modelValue ?? DEFAULT_STATUS_ID) }"
-        @click="pick(s.id)"
-      >
-        <span class="sp__emoji">{{ s.emoji }}</span>
-        <span class="sp__label">{{ s.label }}</span>
-      </button>
-    </div>
-  </div>
+  <label class="sp">
+    <span class="sp__label">Statut</span>
+    <span class="sp__separator" aria-hidden="true">|</span>
+    <select class="sp__select" :value="modelValue ?? ''" @change="onChange">
+      <option value=""></option>
+      <option v-for="status in INTERVENTION_STATUSES" :key="status.id" :value="status.id">
+        {{ status.emoji }} {{ status.label }}
+      </option>
+      <option v-for="location in INTERVENTION_LOCATIONS" :key="location.id" :value="location.id">
+        {{ location.emoji }} {{ location.label }}
+      </option>
+    </select>
+  </label>
 </template>
 
 <style scoped>
 .sp {
-  position: relative;
-  display: inline-block;
-}
-
-.sp__btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: rgba(70, 153, 109, 0.10);
-  border: 1px solid rgba(70, 153, 109, 0.40);
-  color: var(--bces-text);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.sp__btn:hover {
-  background: rgba(70, 153, 109, 0.18);
-}
-
-.sp__emoji {
-  font-size: 13px;
+  gap: 4px;
 }
 
 .sp__label {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 33px;
+  color: var(--dp-text-2);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.sp__menu {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  z-index: 30;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  padding: 4px;
-  background: var(--bces-bg-elevated);
-  border: 1px solid var(--bces-border-strong);
-  min-width: 360px;
-  max-width: 480px;
-  max-height: 320px;
-  overflow-y: auto;
+.sp__separator {
+  color: var(--dp-line-strong);
+  font-size: 10px;
 }
 
-.sp__menu-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  background: transparent;
-  color: var(--bces-text);
-  font-size: 11px;
+.sp__select {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 26px;
+  padding: 3px 6px;
+  background: var(--dp-panel-2);
+  border: 1px solid var(--dp-line-strong);
+  border-radius: 2px;
+  color: var(--dp-text);
+  font-size: 10px;
   font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.sp__menu-item:hover {
-  background: var(--bces-accent-soft);
-  color: var(--bces-accent);
-}
-
-.sp__menu-item--active {
-  background: var(--bces-accent-soft);
-  color: var(--bces-accent);
 }
 </style>

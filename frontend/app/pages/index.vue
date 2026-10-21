@@ -2,7 +2,7 @@
 useHead({ title: 'BCES Connexion' })
 
 const config = useRuntimeConfig()
-const toast = useToast()
+const toast = useAppToast()
 
 onMounted(() => {
   const query = new URLSearchParams(window.location.search)

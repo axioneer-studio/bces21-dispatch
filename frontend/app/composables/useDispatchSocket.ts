@@ -17,16 +17,18 @@ export const useDispatchSocket = () => {
   /**bloque toute reconnexion après un refus d'authentification. */
   let authBlocked = false
 
-  /**
-   * On passe par le même origine que la page (proxy Nitro `/api/ws/**`) afin que
-   * le cookie `bces_session` parte dans la requête d'upgrade. Utiliser
-   * directement `apiBase` (ex. http://localhost:8000) poserait des problems de
-   * cookie inter-ports selon le navigateur.
-   */
+  /** Le backend expose le WebSocket hors du préfixe REST `/api`. */
   function buildUrl(): string {
     if (typeof window === 'undefined') return ''
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${proto}//${window.location.host}/api/ws/dispatch`
+    const apiUrl = new URL(
+      String(config.public.apiBase || window.location.origin),
+      window.location.origin
+    )
+    apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+    apiUrl.pathname = '/ws/dispatch'
+    apiUrl.search = ''
+    apiUrl.hash = ''
+    return apiUrl.toString()
   }
 
   function clearTimers() {
