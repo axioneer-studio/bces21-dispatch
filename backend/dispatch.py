@@ -288,6 +288,9 @@ async def unassign_user(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    slot = await db.get(DispatchSlot, slot_id)
+    if not slot:
+        raise HTTPException(status_code=404, detail="Slot introuvable")
     result = await db.execute(
         select(DispatchAssignment)
         .where(

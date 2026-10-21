@@ -25,11 +25,10 @@ interface ToastEntry {
 }
 
 const ENTRIES = new Map<number, ToastEntry>()
+let nextId = 1
 
 export const useToastStore = () => {
   const toasts = useState<Toast[]>('toasts', () => [])
-
-  let nextId = 1
 
   function push(input: ToastInput): number {
     const id = nextId++
@@ -42,7 +41,13 @@ export const useToastStore = () => {
       createdAt: Date.now(),
       paused: false
     }
-    toasts.value = [...toasts.value, toast].slice(-MAX_TOASTS)
+    const evicted = toasts.value.slice(0, Math.max(0, toasts.value.length - MAX_TOASTS + 1))
+    for (const stale of evicted) {
+      const entry = ENTRIES.get(stale.id)
+      if (entry?.timerId !== null && entry?.timerId !== undefined) clearTimeout(entry.timerId)
+      ENTRIES.delete(stale.id)
+    }
+    toasts.value = [...toasts.value.slice(-MAX_TOASTS + 1), toast]
 
     if (import.meta.client && toast.duration > 0) {
       const entry: ToastEntry = {
