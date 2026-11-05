@@ -48,7 +48,7 @@ async function editSerial(radio: DispatchRadio) {
 
 const doctorMenu = ref<number | null>(null)
 const doctorOf = (radio: DispatchRadio) =>
-  props.agents.find((a) => a.id === radio.doctor_id) ?? null
+  props.agents.find((a) => a.id === radio.employee_id) ?? null
 
 const doctorName = (radio: DispatchRadio) => {
   const d = doctorOf(radio)
@@ -63,7 +63,7 @@ const doctorNum = (radio: DispatchRadio) => {
 async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   doctorMenu.value = null
   try {
-    await updateRadio(radio.id, { doctor_id: agentId })
+    await updateRadio(radio.id, { employee_id: agentId })
   } catch {
     toast.error('Mise à jour impossible.')
   }
@@ -104,7 +104,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
               <button
                 v-for="a in agents" :key="a.id" type="button"
                 class="rp__doctor-item"
-                :class="{ 'rp__doctor-item--active': a.id === r.doctor_id }"
+                :class="{ 'rp__doctor-item--active': a.id === r.employee_id }"
                 @click="setDoctor(r, a.id)"
               >
                 <span>{{ agentDisplayName(a, agents) }}</span>
@@ -159,7 +159,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
               <button
                 v-for="a in agents" :key="a.id" type="button"
                 class="rp__doctor-item"
-                :class="{ 'rp__doctor-item--active': a.id === r.doctor_id }"
+                :class="{ 'rp__doctor-item--active': a.id === r.employee_id }"
                 @click="setDoctor(r, a.id)"
               >
                 <span>{{ agentDisplayName(a, agents) }}</span>

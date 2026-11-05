@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { fetchSnapshot } from '~/composables/useDispatchApi'
-import type { Agent } from '~/utils/agent'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Tableau de bord BCES' })
@@ -9,7 +7,10 @@ const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : unde
 
 const { data: me } = await useAsyncData('me-dashboard', async () => {
   try {
-    return await $fetch('/api/me', { credentials: 'include', headers: requestHeaders })
+    return await $fetch<{ is_super_admin: boolean; page_access: string[] }>('/api/me', {
+      credentials: 'include',
+      headers: requestHeaders
+    })
   } catch {
     return null
   }
@@ -17,34 +18,18 @@ const { data: me } = await useAsyncData('me-dashboard', async () => {
 
 if (!me.value) await navigateTo('/')
 
-const [{ data: snapshot }, { data: agents }] = await Promise.all([
-  useAsyncData('dashboard-snapshot', () => fetchSnapshot().catch(() => null)),
-  useAsyncData('dashboard-agents', async () => {
-    try {
-      const response = await $fetch<{ agents: Agent[] }>('/api/users', {
-        credentials: 'include',
-        headers: requestHeaders
-      })
-      return response.agents
-    } catch {
-      return []
-    }
-  })
-])
-
-const activeSlots = computed(() =>
-  (snapshot.value?.slots ?? []).filter((slot) =>
-    ['centrale', 'hopital', 'intervention', 'consultation'].includes(slot.kind)
-  )
-)
-const assignedCount = computed(() =>
-  new Set((snapshot.value?.slots ?? []).flatMap((slot) => slot.assignments.map((item) => item.user_id))).size
-)
-const interventionsCount = computed(() =>
-  (snapshot.value?.slots ?? []).filter((slot) => ['intervention', 'consultation'].includes(slot.kind)).length
-)
-const availableCount = computed(() => Math.max(0, (agents.value?.length ?? 0) - assignedCount.value))
-const onlineRadios = computed(() => (snapshot.value?.radios ?? []).filter((radio) => radio.is_on).length)
+const { data: summary } = await useAsyncData('dashboard-summary', async () => {
+  try {
+    return await $fetch<{
+      assigned_employees: number
+      available_employees: number
+      interventions: number
+      online_radios: number
+    }>('/api/dashboard/summary', { credentials: 'include', headers: requestHeaders })
+  } catch {
+    return null
+  }
+})
 </script>
 
 <template>
@@ -55,24 +40,24 @@ const onlineRadios = computed(() => (snapshot.value?.radios ?? []).filter((radio
         <h1>Tableau de bord</h1>
         <p>Vue d’ensemble des effectifs et de l’activité en cours.</p>
       </div>
-      <NuxtLink class="dashboard__dispatch-link" to="/dispatch">
+      <NuxtLink v-if="me?.is_super_admin || me?.page_access.includes('dispatch')" class="dashboard__dispatch-link" to="/dispatch">
         Ouvrir le dispatch <Icon name="lucide:arrow-right" size="16" />
       </NuxtLink>
     </header>
 
     <section class="dashboard__stats" aria-label="Indicateurs">
-      <article class="dashboard__stat"><Icon name="lucide:users" size="20" /><strong>{{ assignedCount }}</strong><span>agents assignés</span></article>
-      <article class="dashboard__stat"><Icon name="lucide:user-round-check" size="20" /><strong>{{ availableCount }}</strong><span>agents disponibles</span></article>
-      <article class="dashboard__stat"><Icon name="lucide:siren" size="20" /><strong>{{ interventionsCount }}</strong><span>interventions</span></article>
-      <article class="dashboard__stat"><Icon name="lucide:radio" size="20" /><strong>{{ onlineRadios }}</strong><span>radios actives</span></article>
+      <article class="dashboard__stat"><Icon name="lucide:users" size="20" /><strong>{{ summary?.assigned_employees ?? '—' }}</strong><span>agents assignés</span></article>
+      <article class="dashboard__stat"><Icon name="lucide:user-round-check" size="20" /><strong>{{ summary?.available_employees ?? '—' }}</strong><span>agents disponibles</span></article>
+      <article class="dashboard__stat"><Icon name="lucide:siren" size="20" /><strong>{{ summary?.interventions ?? '—' }}</strong><span>interventions</span></article>
+      <article class="dashboard__stat"><Icon name="lucide:radio" size="20" /><strong>{{ summary?.online_radios ?? '—' }}</strong><span>radios actives</span></article>
     </section>
 
     <section class="dashboard__panel">
       <div>
         <h2>Service en cours</h2>
-        <p>{{ activeSlots.length }} postes opérationnels sont configurés.</p>
+        <p>Consultez les indicateurs de l’activité en cours.</p>
       </div>
-      <NuxtLink to="/dispatch" class="dashboard__action">Gérer les postes</NuxtLink>
+      <NuxtLink v-if="me?.is_super_admin || me?.page_access.includes('dispatch')" to="/dispatch" class="dashboard__action">Gérer les postes</NuxtLink>
     </section>
   </main>
 </template>

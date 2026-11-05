@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Agent, DispatchRadio } from '~/utils/agent'
+import type { DispatchRadio } from '~/composables/useDispatchStore'
+import type { Agent } from '~/utils/agent'
 import { agentAvatarUrl, agentDisplayName, agentFirstName } from '~/utils/agent'
 import { updateRadio } from '~/composables/useDispatchApi'
 
@@ -54,14 +55,14 @@ async function editSerial() {
 
 async function setDoctor(agentId: number | null) {
   try {
-    await updateRadio(props.radio.id, { doctor_id: agentId })
+    await updateRadio(props.radio.id, { employee_id: agentId })
   } catch {
     toast.error('Mise à jour impossible.')
   }
 }
 
 const doctor = computed(() =>
-  props.agents.find((a) => a.id === props.radio.doctor_id) ?? null
+  props.agents.find((a) => a.id === props.radio.employee_id) ?? null
 )
 
 const doctorMenu = ref<boolean>(false)
@@ -124,7 +125,7 @@ function toggleDoctor() {
           :key="a.id"
           type="button"
           class="rc__doctor-item"
-          :class="{ 'rc__doctor-item--active': a.id === radio.doctor_id }"
+          :class="{ 'rc__doctor-item--active': a.id === radio.employee_id }"
           @click="setDoctor(a.id)"
         >
           <img

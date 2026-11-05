@@ -1,23 +1,50 @@
 export interface Agent {
   id: number
-  discord_id: string
-  discord_username: string
-  discord_avatar: string | null
-  prenom_rp: string | null
-  nom_rp: string | null
+  first_name: string
+  last_name: string
   phone: string | null
-  status: string
+  email: string | null
+  arrival_date: string | null
   competencies: string[]
+  is_active: boolean
+  account_user_id: number | null
+  account_username: string | null
+  grade_id: number | null
+  grade_name: string | null
+  grade_level: number | null
+  grade_color: string | null
+  grade_permissions: string[]
+  discord_id?: string | null
+  discord_avatar?: string | null
+}
+
+export function sortAgentsByGradeAndArrival(agents: Agent[]): Agent[] {
+  return [...agents].sort((a, b) => {
+    const gradeOrder =
+      (a.grade_level ?? Number.MAX_SAFE_INTEGER) -
+      (b.grade_level ?? Number.MAX_SAFE_INTEGER)
+    if (gradeOrder !== 0) return gradeOrder
+
+    const arrivalOrder =
+      (a.arrival_date ?? '9999-12-31').localeCompare(b.arrival_date ?? '9999-12-31')
+    if (arrivalOrder !== 0) return arrivalOrder
+
+    return (
+      a.first_name.localeCompare(b.first_name, 'fr') ||
+      a.last_name.localeCompare(b.last_name, 'fr') ||
+      a.id - b.id
+    )
+  })
 }
 
 export function agentFirstName(a: Agent): string {
-  return a.prenom_rp || a.discord_username
+  return a.first_name || a.account_username || 'Employé'
 }
 
 /** Prénom + initiale du nom uniquement s'il y a un homonyme. */
 export function agentDisplayName(a: Agent, allAgents?: Agent[]): string {
   const first = agentFirstName(a)
-  const last = a.nom_rp || ''
+  const last = a.last_name || ''
   if (!last || !allAgents) return first
   const sameFirst = allAgents.filter(
     (x) => agentFirstName(x).toLowerCase() === first.toLowerCase()
@@ -42,6 +69,6 @@ export function agentCallsign(a: Agent): string {
 }
 
 export function agentAvatarUrl(a: Agent): string | null {
-  if (!a.discord_avatar) return null
+  if (!a.discord_avatar || !a.discord_id) return null
   return `https://cdn.discordapp.com/avatars/${a.discord_id}/${a.discord_avatar}.png?size=80`
 }

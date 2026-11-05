@@ -20,10 +20,9 @@ from auth.session import (
 )
 from config import get_settings
 from database import get_db
-from deps import get_current_user
-from models import User
+from deps import get_current_user, require_admin
+from models import ApplicationSetting, User
 from schemas import (
-    MessageResponse,
     PendingListResponse,
     PendingUserItem,
     ProfileUpdateRequest,
@@ -144,7 +143,21 @@ async def _handle_callback(
         select(User).where(User.discord_id == discord_id)
     )
     user = existing.scalar_one_or_none()
+    is_new_user = user is None
     now = datetime.now(timezone.utc)
+
+    if user is None:
+        registration_setting = await db.get(ApplicationSetting, "registration_open")
+        if registration_setting is not None and registration_setting.value == "false":
+            return RedirectResponse(
+                _frontend_redirect("/", error="registration_closed"),
+                status_code=302,
+            )
+    elif user.status in {"disabled", "rejected"}:
+        return RedirectResponse(
+            _frontend_redirect("/", error="account_unavailable"),
+            status_code=302,
+        )
 
     if user is None:
         deadline = now + timedelta(
@@ -164,6 +177,7 @@ async def _handle_callback(
             discord_avatar=me.get("avatar"),
             rp_name_deadline=deadline,
             status="active",
+            is_super_admin=is_first_user,
         )
         db.add(user)
         if is_first_user:
@@ -249,7 +263,7 @@ async def logout(response: Response) -> dict:
 @router.get("/pending", response_model=PendingListResponse)
 async def list_pending(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> PendingListResponse:
     rows = (
         (await db.execute(select(User).where(User.status == "pending").order_by(User.created_at.desc())))
@@ -260,17 +274,3 @@ async def list_pending(
         users=[PendingUserItem.model_validate(u) for u in rows],
         count=len(rows),
     )
-
-
-@router.post("/validate/{user_id}", response_model=MessageResponse)
-async def validate_user(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
-) -> MessageResponse:
-    target = await db.get(User, user_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-    target.status = "active"
-    await db.commit()
-    return MessageResponse(message=f"{target.discord_username} validé")

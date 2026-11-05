@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { DispatchSlot } from '~/composables/useDispatchStore'
 import type { Agent } from '~/utils/agent'
-import { assignUser, deleteSlot, unassignUser, updateSlot } from '~/composables/useDispatchApi'
+import { sortAgentsByGradeAndArrival } from '~/utils/agent'
+import { assignUser, deleteSlot, updateSlot } from '~/composables/useDispatchApi'
 
 const props = defineProps<{
   slot: DispatchSlot
@@ -14,6 +15,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   removed: [slotId: number]
+  'employee-drop': [employeeId: number, slotId: number]
+  'employee-remove': [employeeId: number, slotId: number]
 }>()
 
 const toast = useAppToast()
@@ -35,8 +38,8 @@ function setZip(zip: string | null) {
 async function remove() {
   if (props.fixed || removing.value) return
 
-  const assignedUserIds = props.slot.assignments.map((assignment) => assignment.user_id)
-  if (assignedUserIds.length && props.hospitalSlotId === undefined) {
+  const assignedEmployeeIds = props.slot.assignments.map((assignment) => assignment.employee_id)
+  if (assignedEmployeeIds.length && props.hospitalSlotId === undefined) {
     toast.error('Suppression impossible : l’hôpital est indisponible.')
     return
   }
@@ -44,8 +47,8 @@ async function remove() {
   removing.value = true
   try {
     if (props.hospitalSlotId !== undefined) {
-      for (const userId of assignedUserIds) {
-        await assignUser(props.hospitalSlotId, userId)
+      for (const employeeId of assignedEmployeeIds) {
+        await assignUser(props.hospitalSlotId, employeeId)
       }
     }
     await deleteSlot(props.slot.id)
@@ -58,10 +61,11 @@ async function remove() {
 }
 
 const assigned = computed(() =>
-  [...props.slot.assignments]
-    .sort((a, b) => a.order - b.order)
-    .map((a) => props.agents.find((x) => x.id === a.user_id))
-    .filter((a): a is Agent => Boolean(a))
+  sortAgentsByGradeAndArrival(
+    props.slot.assignments
+      .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
+      .filter((agent): agent is Agent => Boolean(agent))
+  )
 )
 
 function onDragOver(e: DragEvent) {
@@ -76,25 +80,29 @@ function onDragLeave() {
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
+  e.stopPropagation()
   dropOver.value = false
+  const transfer = e.dataTransfer
+  if (!transfer) return
+  let employeeId: number | null = null
   try {
-    const raw = e.dataTransfer?.getData('application/json')
-    if (!raw) return
-    const payload = JSON.parse(raw) as { userId?: number }
-    if (typeof payload.userId === 'number') {
-      assignUser(props.slot.id, payload.userId).catch(() =>
-        toast.error('Assignation impossible.')
-      )
+    const raw = transfer.getData('application/json')
+    if (raw) {
+      const payload = JSON.parse(raw) as { employeeId?: number }
+      if (typeof payload.employeeId === 'number') employeeId = payload.employeeId
     }
   } catch {
-    /* ignore */
+    employeeId = null
   }
+  if (employeeId === null) {
+    const plainTextId = Number(transfer.getData('text/plain'))
+    if (Number.isInteger(plainTextId) && plainTextId > 0) employeeId = plainTextId
+  }
+  if (employeeId !== null) emit('employee-drop', employeeId, props.slot.id)
 }
 
 function unassign(agentId: number) {
-  unassignUser(props.slot.id, agentId).catch(() =>
-    toast.error('Désassignation impossible.')
-  )
+  emit('employee-remove', agentId, props.slot.id)
 }
 </script>
 

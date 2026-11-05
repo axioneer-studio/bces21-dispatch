@@ -1,28 +1,33 @@
 <script setup lang="ts">
 import type { DispatchSlot } from '~/composables/useDispatchStore'
 import type { Agent } from '~/utils/agent'
-import { assignUser, unassignUser } from '~/composables/useDispatchApi'
+import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
 const props = defineProps<{
-  slot: DispatchSlot
+  slot?: DispatchSlot
+  pool?: Agent[]
   agents: Agent[]
   accent?: string
   removable?: boolean
 }>()
 
 const emit = defineEmits<{
-  changed: []
+  'employee-drop': [employeeId: number, slotId: number | null]
+  'employee-remove': [employeeId: number, slotId: number]
 }>()
 
-const toast = useAppToast()
-
 const assigned = computed(() =>
-  [...props.slot.assignments]
-    .sort((a, b) => a.order - b.order)
-    .map((a) => props.agents.find((x) => x.id === a.user_id))
-    .filter((a): a is Agent => Boolean(a))
+  sortAgentsByGradeAndArrival(
+    (props.slot?.assignments ?? [])
+      .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
+      .filter((agent): agent is Agent => Boolean(agent))
+  )
 )
 
+const isPool = computed(() => props.pool !== undefined)
+const displayedAgents = computed(() =>
+  sortAgentsByGradeAndArrival(props.pool ?? assigned.value)
+)
 const emptyMessage = computed(() => {
   const messages: Record<string, string> = {
     hopital: "Personne n'est à l’hôpital.",
@@ -33,7 +38,7 @@ const emptyMessage = computed(() => {
     pause: "Personne n'est en pause."
   }
 
-  return messages[props.slot.kind] ?? 'Aucun agent assigné.'
+  return props.slot ? messages[props.slot.kind] ?? 'Aucun agent assigné.' : 'Aucun employé hors service.'
 })
 
 const dropOver = ref<boolean>(false)
@@ -50,31 +55,38 @@ function onDragLeave() {
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
+  e.stopPropagation()
   dropOver.value = false
+  const transfer = e.dataTransfer
+  if (!transfer) return
+  let employeeId: number | null = null
   try {
-    const raw = e.dataTransfer?.getData('application/json')
-    if (!raw) return
-    const payload = JSON.parse(raw) as { userId?: number }
-    if (typeof payload.userId === 'number') {
-      assignUser(props.slot.id, payload.userId)
-        .then(() => emit('changed'))
-        .catch(() => toast.error('Assignation impossible.'))
+    const raw = transfer.getData('application/json')
+    if (raw) {
+      const payload = JSON.parse(raw) as { employeeId?: number }
+      if (typeof payload.employeeId === 'number') employeeId = payload.employeeId
     }
   } catch {
-    /* ignore */
+    employeeId = null
   }
+  if (employeeId === null) {
+    const plainTextId = Number(transfer.getData('text/plain'))
+    if (Number.isInteger(plainTextId) && plainTextId > 0) employeeId = plainTextId
+  }
+  if (employeeId === null) return
+  emit('employee-drop', employeeId, props.slot?.id ?? null)
 }
 
 function unassign(agentId: number) {
-  unassignUser(props.slot.id, agentId)
-    .then(() => emit('changed'))
-    .catch(() => toast.error('Désassignation impossible.'))
+  if (!props.slot) return
+  emit('employee-remove', agentId, props.slot.id)
 }
 </script>
 
 <template>
   <div
     class="sp"
+    :class="{ 'sp--pool': isPool }"
     :style="{ '--sp-accent': accent ?? 'var(--dp-accent)' }"
     :data-drop-over="dropOver ? '1' : '0'"
     @dragover="onDragOver"
@@ -82,16 +94,19 @@ function unassign(agentId: number) {
     @drop="onDrop"
   >
     <AgentTile
-      v-for="a in assigned"
+      v-for="a in displayedAgents"
       :key="a.id"
       :agent="a"
       :agents="agents"
       tone="assigned"
       draggable
-      :removable="removable !== false"
+      :removable="!isPool && removable !== false"
       @remove="unassign(a.id)"
     />
-    <EmptySlotState v-if="!assigned.length" :message="emptyMessage" />
+    <EmptySlotState
+      v-if="!displayedAgents.length"
+      :message="isPool ? 'Tout le monde est en service.' : emptyMessage"
+    />
   </div>
 </template>
 
@@ -114,6 +129,15 @@ function unassign(agentId: number) {
   background: var(--dp-accent-soft);
   outline: 2px dashed var(--sp-accent);
   outline-offset: -4px;
+}
+
+.sp--pool[data-drop-over='1'] {
+  background: var(--dp-warn-soft);
+  outline-color: var(--dp-warn-line);
+}
+
+.sp--pool {
+  overflow: auto;
 }
 
 </style>

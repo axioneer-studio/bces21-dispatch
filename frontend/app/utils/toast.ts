@@ -8,7 +8,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Tu dois être connecté pour accéder à cette page.',
   invalid_token: 'Session invalide.',
   expired_token: 'Session expirée.',
-  account_pending: 'Compte en attente de validation par un membre actif.'
+  account_pending: 'Compte en attente de validation par un membre actif.',
+  registration_closed: 'Les inscriptions sont actuellement fermées.',
+  account_unavailable: 'Ce compte est désactivé ou son accès a été refusé.'
 }
 
 export function useErrorMessage(code: string | null | undefined): string | null {

@@ -1,3 +1,4 @@
+import { $fetch } from 'ofetch'
 import type { DispatchRadio, DispatchSlot, DispatchState } from './useDispatchStore'
 
 const config = () => useRuntimeConfig()
@@ -9,12 +10,16 @@ function base(): string {
 
 async function req<T>(
   path: string,
-  options: { method?: string; body?: unknown; credentials?: 'include' } = {}
+  options: {
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    body?: Record<string, unknown>
+    credentials?: 'include'
+  } = {}
 ): Promise<T> {
   const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
   return await $fetch<T>(`${base()}${path}`, {
     method: options.method ?? 'GET',
-    body: options.body as Record<string, unknown> | undefined,
+    body: options.body,
     credentials: 'include',
     headers
   })
@@ -53,22 +58,22 @@ export async function deleteSlot(id: number) {
   return await req<{ message: string }>(`/api/dispatch/slots/${id}`, { method: 'DELETE' })
 }
 
-export async function assignUser(slotId: number, userId: number) {
+export async function assignUser(slotId: number, employeeId: number) {
   return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign`, {
     method: 'POST',
-    body: { user_id: userId }
+    body: { employee_id: employeeId }
   })
 }
 
-export async function unassignUser(slotId: number, userId: number) {
-  return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign/${userId}`, {
+export async function unassignUser(slotId: number, employeeId: number) {
+  return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign/${employeeId}`, {
     method: 'DELETE'
   })
 }
 
 export async function updateRadio(
   id: number,
-  patch: Partial<Pick<DispatchRadio, 'serial' | 'doctor_id' | 'is_on' | 'is_loading'>>
+  patch: Partial<Pick<DispatchRadio, 'serial' | 'employee_id' | 'is_on' | 'is_loading'>>
 ) {
   return await req<DispatchRadio>(`/api/dispatch/radios/${id}`, {
     method: 'PATCH',

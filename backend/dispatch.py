@@ -10,9 +10,11 @@ from sqlalchemy.orm import selectinload
 from auth.session import decode_token, get_session_cookie_name
 from config import get_settings
 from database import SessionLocal, get_db
-from deps import get_current_user
+from deps import require_page_access, user_has_page_access
+from grade_permissions import require_grade_permission
 from models import (
     DispatchAssignment,
+    Employee,
     DispatchRadio,
     DispatchSlot,
     DispatchState,
@@ -63,6 +65,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+snapshot_lock = asyncio.Lock()
 
 
 async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
@@ -93,8 +96,9 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
 
 
 async def push_snapshot(db: AsyncSession) -> None:
-    snap = await build_snapshot(db)
-    await manager.broadcast({"type": "snapshot", "data": snap})
+    async with snapshot_lock:
+        snap = await build_snapshot(db)
+        await manager.broadcast({"type": "snapshot", "data": snap})
 
 
 # --- WebSocket endpoint ---
@@ -117,16 +121,16 @@ async def dispatch_ws(ws: WebSocket) -> None:
 
     async with SessionLocal() as db:
         user = await db.get(User, user_id)
-        if not user or (user.status or "active") == "pending":
+        if not user or (user.status or "active") != "active" or not user_has_page_access(user, "dispatch"):
             await ws.close(code=1008, reason="Compte non autorisé")
             return
 
     await manager.connect(ws)
     try:
-        # Snapshot initial
-        async with SessionLocal() as db:
-            snap = await build_snapshot(db)
-        await ws.send_json({"type": "snapshot", "data": snap})
+        async with snapshot_lock:
+            async with SessionLocal() as db:
+                snap = await build_snapshot(db)
+            await ws.send_json({"type": "snapshot", "data": snap})
         while True:
             # Keep-alive : le client envoie un ping texte, on l'ignore.
             # Toute modification passe par REST puis est broadcastée ici.
@@ -146,7 +150,7 @@ async def dispatch_ws(ws: WebSocket) -> None:
 @router.get("/api/dispatch/snapshot", response_model=DispatchSnapshot)
 async def get_snapshot(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
 ):
     return await build_snapshot(db)
 
@@ -166,7 +170,8 @@ FIXED_SLOT_KINDS = {
 async def create_slot(
     payload: SlotCreateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_slots")),
 ):
     # next order
     result = await db.execute(select(DispatchSlot).order_by(DispatchSlot.order.desc()).limit(1))
@@ -196,7 +201,8 @@ async def update_slot(
     slot_id: int,
     payload: SlotUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_slots")),
 ):
     result = await db.execute(
         select(DispatchSlot)
@@ -220,7 +226,8 @@ async def update_slot(
 async def delete_slot(
     slot_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_slots")),
 ):
     slot = await db.get(DispatchSlot, slot_id)
     if not slot:
@@ -238,7 +245,8 @@ async def assign_user(
     slot_id: int,
     payload: AssignRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_assignments")),
 ):
     slot_q = await db.execute(
         select(DispatchSlot)
@@ -249,13 +257,14 @@ async def assign_user(
     if not slot:
         raise HTTPException(status_code=404, detail="Slot introuvable")
 
-    user = await db.get(User, payload.user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    employee = await db.get(Employee, payload.employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+    if not employee.is_active:
+        raise HTTPException(status_code=409, detail="Cet employé est inactif.")
 
-    # A user can only occupy one dispatch slot at a time.
     result = await db.execute(
-        select(DispatchAssignment).where(DispatchAssignment.user_id == user.id)
+        select(DispatchAssignment).where(DispatchAssignment.employee_id == employee.id)
     )
     for assignment in result.scalars().all():
         if assignment.slot_id == slot.id:
@@ -264,7 +273,7 @@ async def assign_user(
 
     assignment = DispatchAssignment(
         slot_id=slot_id,
-        user_id=user.id,
+        employee_id=employee.id,
         order=len(slot.assignments),
     )
     slot.assignments.append(assignment)
@@ -281,12 +290,13 @@ async def assign_user(
     return SlotOut.model_validate(slot)
 
 
-@router.delete("/api/dispatch/slots/{slot_id}/assign/{user_id}", response_model=SlotOut)
+@router.delete("/api/dispatch/slots/{slot_id}/assign/{employee_id}", response_model=SlotOut)
 async def unassign_user(
     slot_id: int,
-    user_id: int,
+    employee_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_assignments")),
 ):
     slot = await db.get(DispatchSlot, slot_id)
     if not slot:
@@ -295,7 +305,7 @@ async def unassign_user(
         select(DispatchAssignment)
         .where(
             DispatchAssignment.slot_id == slot_id,
-            DispatchAssignment.user_id == user_id,
+            DispatchAssignment.employee_id == employee_id,
         )
     )
     a = result.scalar_one_or_none()
@@ -317,12 +327,19 @@ async def update_radio(
     radio_id: int,
     payload: RadioUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_radios")),
 ):
     radio = await db.get(DispatchRadio, radio_id)
     if not radio:
         raise HTTPException(status_code=404, detail="Radio introuvable")
     data = payload.model_dump(exclude_unset=True)
+    if data.get("employee_id") is not None:
+        employee = await db.get(Employee, data["employee_id"])
+        if employee is None or not employee.is_active:
+            raise HTTPException(status_code=404, detail="Employé actif introuvable.")
+    if "employee_id" in data:
+        radio.doctor_id = None
     for k, v in data.items():
         setattr(radio, k, v)
     await db.commit()
@@ -335,7 +352,8 @@ async def update_radio(
 async def update_state(
     payload: StateUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_state")),
 ):
     state = await db.get(DispatchState, 1)
     if not state:

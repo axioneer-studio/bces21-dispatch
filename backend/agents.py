@@ -5,7 +5,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from deps import get_current_user
+from deps import require_page_access
 from models import User
 from schemas import AgentListResponse, AgentSummary
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["agents"])
 @router.get("/users", response_model=AgentListResponse)
 async def list_users(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page_access("dispatch")),
 ) -> AgentListResponse:
     rows = (
         await db.execute(
