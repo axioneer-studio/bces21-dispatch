@@ -25,8 +25,26 @@ const emit = defineEmits<{
   remove: []
 }>()
 
+const gradeTextColor = computed(() => {
+  const hex = props.agent.grade_color
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return '#ffffff'
+
+  const linearize = (index: number) => {
+    const channel = parseInt(hex.slice(index, index + 2), 16) / 255
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  }
+  const luminance =
+    linearize(1) * 0.2126 + linearize(3) * 0.7152 + linearize(5) * 0.0722
+
+  return luminance > 0.179 ? '#111111' : '#ffffff'
+})
+
 function onDragStart(e: DragEvent) {
-  e.dataTransfer?.setData('application/json', JSON.stringify({ userId: props.agent.id }))
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('application/json', JSON.stringify({ employeeId: props.agent.id }))
+    e.dataTransfer.setData('text/plain', String(props.agent.id))
+  }
   emit('dragstart')
 }
 
@@ -39,7 +57,10 @@ function onRemove(e: MouseEvent) {
 <template>
   <div
     class="at"
-    :class="[`at--${tone}`, { 'at--compact': compact }]"
+    :class="[`at--${tone}`, { 'at--compact': compact, 'at--graded': agent.grade_color }]"
+    :style="agent.grade_color
+      ? { '--at-grade-color': agent.grade_color, '--at-grade-text': gradeTextColor }
+      : undefined"
     :draggable="draggable"
     :title="`${agentDisplayName(agent, agents)} — ${agent.phone || 'sans numéro'}`"
     @dragstart="onDragStart"
@@ -51,9 +72,8 @@ function onRemove(e: MouseEvent) {
       v-if="removable"
       type="button"
       class="at__x"
+      draggable="true"
       aria-label="Retirer"
-      @mousedown.stop
-      @dragstart.stop.prevent
       @click="onRemove"
     >
       <Icon name="lucide:x" size="9" />
@@ -65,8 +85,9 @@ function onRemove(e: MouseEvent) {
 .at {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto;
-  align-content: center;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  align-content: stretch;
+  align-items: center;
   justify-items: center;
   gap: 0;
   width: 96px;
@@ -103,6 +124,11 @@ function onRemove(e: MouseEvent) {
   border-color: var(--dp-tile-border-active);
 }
 
+.at--graded {
+  background: color-mix(in srgb, var(--at-grade-color) 20%, var(--dp-tile-bg));
+  border-color: color-mix(in srgb, var(--at-grade-color) 45%, var(--dp-tile-border));
+}
+
 .at__name {
   font-size: 10.5px;
   font-weight: 700;
@@ -119,6 +145,8 @@ function onRemove(e: MouseEvent) {
   line-height: 1.15;
   letter-spacing: -0.5px;
   min-height: 12px;
+  color: inherit;
+  text-align: center;
   filter: saturate(1.1);
 }
 
@@ -127,7 +155,8 @@ function onRemove(e: MouseEvent) {
   font-size: 9.5px;
   font-weight: 600;
   line-height: 1.15;
-  color: var(--dp-text-dim);
+  color: #fff;
+  text-align: center;
 }
 
 .at__x {

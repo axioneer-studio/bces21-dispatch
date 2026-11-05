@@ -1,8 +1,8 @@
 import re
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import date, datetime, timezone
+from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 _NAME_PATTERN = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' \-]+$")
@@ -53,6 +53,12 @@ class UserResponse(BaseModel):
     competencies: list[str]
     rp_name_deadline: Optional[datetime]
     created_at: datetime
+    role_id: Optional[int] = None
+    role_name: Optional[str] = None
+    is_super_admin: bool = False
+    page_access: list[str] = Field(default_factory=list)
+    app_permissions: list[str] = Field(default_factory=list)
+    grade_permissions: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -122,6 +128,268 @@ class AgentListResponse(BaseModel):
     generated_at: datetime
 
 
+class EmployeeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    phone: Optional[str]
+    email: Optional[str] = None
+    arrival_date: Optional[date] = None
+    competencies: list[str]
+    is_active: bool
+    account_user_id: Optional[int]
+    account_username: Optional[str] = None
+    grade_id: Optional[int] = None
+    grade_name: Optional[str] = None
+    grade_level: Optional[int] = None
+    grade_color: Optional[str] = None
+    grade_permissions: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("competencies", mode="before")
+    @classmethod
+    def _parse_employee_competencies(cls, value):
+        if isinstance(value, str):
+            import json
+
+            try:
+                parsed = json.loads(value)
+                return parsed if isinstance(parsed, list) else []
+            except (TypeError, ValueError):
+                return []
+        return value if isinstance(value, list) else []
+
+
+class EmployeeCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str = Field(min_length=1, max_length=64)
+    last_name: str = Field(default="", max_length=64)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    email: Optional[str] = Field(default=None, max_length=254)
+    arrival_date: Optional[date] = None
+    competencies: list[str] = Field(default_factory=list, max_length=20)
+    grade_id: Optional[int] = None
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _trim_employee_name(cls, value: str, info: ValidationInfo) -> str:
+        trimmed = value.strip()
+        if not trimmed and info.field_name == "first_name":
+            raise ValueError("Le prénom est obligatoire.")
+        return trimmed
+
+    @field_validator("competencies")
+    @classmethod
+    def _clean_competencies(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value if item.strip()]
+        if any(len(item) > 40 for item in cleaned):
+            raise ValueError("Chaque compétence doit faire 40 caractères maximum.")
+        return list(dict.fromkeys(cleaned))
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_employee_phone(cls, value: str | None) -> str | None:
+        trimmed = value.strip() if value else ""
+        if trimmed and not _PHONE_PATTERN.match(trimmed):
+            raise ValueError("Numéro de téléphone invalide.")
+        return trimmed or None
+
+    @field_validator("email")
+    @classmethod
+    def _validate_employee_email(cls, value: str | None) -> str | None:
+        trimmed = value.strip() if value else ""
+        if not trimmed:
+            return None
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", trimmed):
+            raise ValueError("Adresse e-mail invalide.")
+        return trimmed
+
+
+class EmployeeUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    last_name: Optional[str] = Field(default=None, max_length=64)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    email: Optional[str] = Field(default=None, max_length=254)
+    arrival_date: Optional[date] = None
+    competencies: Optional[list[str]] = Field(default=None, max_length=20)
+    is_active: Optional[bool] = None
+    grade_id: Optional[int] = None
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _trim_updated_employee_name(
+        cls, value: str | None, info: ValidationInfo
+    ) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed and info.field_name == "first_name":
+            raise ValueError("Le prénom ne peut pas être vide.")
+        return trimmed
+
+    @field_validator("competencies")
+    @classmethod
+    def _clean_updated_competencies(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned = [item.strip() for item in value if item.strip()]
+        if any(len(item) > 40 for item in cleaned):
+            raise ValueError("Chaque compétence doit faire 40 caractères maximum.")
+        return list(dict.fromkeys(cleaned))
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_updated_employee_phone(cls, value: str | None) -> str | None:
+        trimmed = value.strip() if value else ""
+        if trimmed and not _PHONE_PATTERN.match(trimmed):
+            raise ValueError("Numéro de téléphone invalide.")
+        return trimmed or None
+
+    @field_validator("email")
+    @classmethod
+    def _validate_updated_employee_email(cls, value: str | None) -> str | None:
+        trimmed = value.strip() if value else ""
+        if not trimmed:
+            return None
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", trimmed):
+            raise ValueError("Adresse e-mail invalide.")
+        return trimmed
+
+
+class EmployeeAccountLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_user_id: Optional[int]
+
+
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    pages: list[str]
+    permissions: list[str]
+    users_count: int
+
+
+class RoleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    pages: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def _trim_role_name(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Le nom du rôle est obligatoire.")
+        return trimmed
+
+
+class RoleUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    pages: Optional[list[str]] = None
+    permissions: Optional[list[str]] = None
+
+    @field_validator("name")
+    @classmethod
+    def _trim_updated_role_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Le nom du rôle est obligatoire.")
+        return trimmed
+
+
+class GradeOut(BaseModel):
+    id: int
+    name: str
+    level: int
+    color: str
+    permissions: list[str]
+    employees_count: int
+
+
+class GradeOption(BaseModel):
+    id: int
+    name: str
+    level: int
+    color: str
+
+
+class GradeCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    level: int = Field(ge=1)
+    color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
+    permissions: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("name")
+    @classmethod
+    def _trim_grade_name(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Le nom du grade est obligatoire.")
+        return trimmed
+
+
+class GradeUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    level: Optional[int] = Field(default=None, ge=1)
+    color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
+    permissions: Optional[list[str]] = Field(default=None, max_length=32)
+
+    @field_validator("name")
+    @classmethod
+    def _trim_updated_grade_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Le nom du grade est obligatoire.")
+        return trimmed
+
+
+class UserRoleUpdateRequest(BaseModel):
+    role_id: Optional[int] = None
+
+
+class SuperAdminUpdateRequest(BaseModel):
+    is_super_admin: bool
+
+
+class AdminUserOut(BaseModel):
+    id: int
+    discord_username: str
+    first_name: Optional[str]
+    last_name: Optional[str]
+    status: str
+    role_id: Optional[int]
+    role_name: Optional[str]
+    is_super_admin: bool
+    created_at: datetime
+
+
+class AdminUserRoleUpdateRequest(BaseModel):
+    role_id: Optional[int] = None
+
+
+class AdminUserStatusUpdateRequest(BaseModel):
+    is_active: bool
+
+
+class ApplicationSettingsOut(BaseModel):
+    registration_open: bool
+
+
+class ApplicationSettingsUpdateRequest(BaseModel):
+    registration_open: bool
+
+
 class PendingUserItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -154,7 +422,7 @@ class AssignmentOut(BaseModel):
 
     id: int
     slot_id: int
-    user_id: int
+    employee_id: int
     order: int
     created_at: datetime
 
@@ -202,7 +470,7 @@ class SlotUpdateRequest(BaseModel):
 
 
 class AssignRequest(BaseModel):
-    user_id: int
+    employee_id: int
 
 
 class RadioOut(BaseModel):
@@ -210,7 +478,7 @@ class RadioOut(BaseModel):
 
     id: int
     serial: str
-    doctor_id: Optional[int]
+    employee_id: Optional[int]
     is_on: bool
     is_loading: bool
     frequency: str
@@ -229,7 +497,7 @@ class RadioOut(BaseModel):
 
 class RadioUpdateRequest(BaseModel):
     serial: Optional[str] = Field(default=None, max_length=16)
-    doctor_id: Optional[int] = None
+    employee_id: Optional[int] = None
     is_on: Optional[bool] = None
     is_loading: Optional[bool] = None
 
@@ -267,3 +535,29 @@ class DispatchSnapshot(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class AgendaEventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    starts_at: datetime
+    ends_at: Optional[datetime] = None
+    description: Optional[str] = Field(default=None, max_length=2000)
+    color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+class AgendaEventUpdate(AgendaEventCreate):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    starts_at: Optional[datetime] = None
+    color: Optional[str] = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+class AgendaEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    starts_at: datetime
+    ends_at: Optional[datetime]
+    description: Optional[str]
+    color: str
+    created_at: datetime
+    updated_at: datetime

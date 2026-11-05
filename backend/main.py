@@ -1,18 +1,27 @@
+import json
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents import router as agents_router
+from agenda import router as agenda_router
+from administration import router as administration_router
+from app_permissions import parse_app_permissions
 from auth.router import router as auth_router
 from cleanup import cleanup_loop
 from config import get_settings
-from database import init_db
+from database import get_db, init_db
 from deps import get_current_user
 from dispatch import router as dispatch_router
-from models import User
+from direction import router as direction_router
+from human_resources import router as human_resources_router
+from grade_permissions import parse_grade_permissions
+from models import Employee, Grade, User
 from schemas import HealthResponse, UserResponse
 from status_sync import status_sync_loop
 
@@ -82,10 +91,37 @@ def healthcheck() -> HealthResponse:
 
 
 @app.get("/api/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)) -> User:
-    return user
+async def me(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    response = UserResponse.model_validate(user)
+    try:
+        pages = json.loads(user.role.pages) if user.role else []
+    except (TypeError, ValueError):
+        pages = []
+    grade_permissions = await db.scalar(
+        select(Grade.permissions)
+        .join(Employee, Employee.grade_id == Grade.id)
+        .where(Employee.account_user_id == user.id)
+    )
+    return response.model_copy(
+        update={
+            "role_name": user.role.name if user.role else None,
+            "is_super_admin": user.is_super_admin,
+            "page_access": pages if isinstance(pages, list) else [],
+            "app_permissions": parse_app_permissions(
+                user.role.permissions if user.role else None
+            ),
+            "grade_permissions": parse_grade_permissions(grade_permissions),
+        }
+    )
 
 
 app.include_router(auth_router)
+app.include_router(administration_router)
+app.include_router(direction_router)
 app.include_router(agents_router)
+app.include_router(agenda_router)
 app.include_router(dispatch_router)
+app.include_router(human_resources_router)

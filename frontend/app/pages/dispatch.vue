@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { createSlot, fetchSnapshot, unassignUser } from '~/composables/useDispatchApi'
+import { assignUser, createSlot, fetchSnapshot, unassignUser } from '~/composables/useDispatchApi'
 import type { Agent } from '~/utils/agent'
+import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Dispatch BCES' })
@@ -18,14 +19,13 @@ if (!meData.value) {
   await navigateTo('/')
 }
 
-const { data: agentsData } = await useAsyncData<Agent[]>('dispatch-agents', async () => {
+const { data: agentsData } = await useAsyncData<Agent[]>('dispatch-employees', async () => {
   try {
     const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-    const r = await $fetch<{ agents: Agent[] }>('/api/users', {
+    return await $fetch<Agent[]>('/api/employees', {
       credentials: 'include',
       headers
     })
-    return r.agents
   } catch {
     return []
   }
@@ -33,10 +33,21 @@ const { data: agentsData } = await useAsyncData<Agent[]>('dispatch-agents', asyn
 
 const agents = computed<Agent[]>(() => agentsData.value ?? [])
 
-const { slots, interventions, centrale, hopital, snapshot, connected, applySnapshot } =
-  useDispatchStore()
+const {
+  slots,
+  interventions,
+  centrale,
+  hopital,
+  snapshot,
+  connected,
+  applySnapshot,
+  beginEmployeeMove,
+  completeEmployeeMove,
+  cancelEmployeeMove
+} = useDispatchStore()
 const { connect, disconnect } = useDispatchSocket()
 const toast = useAppToast()
+const movingEmployees = new Set<number>()
 
 const { data: initialSnapshot } = await useAsyncData('dispatch-snapshot-initial', async () => {
   try {
@@ -67,34 +78,37 @@ const pause = computed(() => byKind('pause'))
 // Agents pas encore assignés → pool "Hors service BCES"
 const pool = computed(() => {
   const taken = new Set<number>()
-  for (const s of slots.value) for (const a of s.assignments) taken.add(a.user_id)
-  return agents.value.filter((a) => !taken.has(a.id))
+  for (const s of slots.value) for (const a of s.assignments) taken.add(a.employee_id)
+  return sortAgentsByGradeAndArrival(
+    agents.value.filter((agent) => agent.is_active && !taken.has(agent.id))
+  )
 })
 
-const poolDrop = ref<boolean>(false)
-function onPoolDragOver(e: DragEvent) {
-  e.preventDefault()
-  poolDrop.value = true
-}
-function onPoolDragLeave() {
-  poolDrop.value = false
-}
+async function onEmployeeDrop(employeeId: number, targetSlotId: number | null) {
+  if (movingEmployees.has(employeeId)) return
+  const sourceSlot = slots.value.find((slot) =>
+    slot.assignments.some((assignment) => assignment.employee_id === employeeId)
+  )
+  if (sourceSlot?.id === targetSlotId || (targetSlotId === null && !sourceSlot)) return
 
-async function onPoolDrop(e: DragEvent) {
-  e.preventDefault()
-  poolDrop.value = false
+  movingEmployees.add(employeeId)
+  beginEmployeeMove(employeeId, targetSlotId)
   try {
-    const raw = e.dataTransfer?.getData('application/json')
-    if (!raw) return
-    const payload = JSON.parse(raw) as { userId?: number }
-    if (typeof payload.userId !== 'number') return
-
-    const assignment = slots.value
-      .flatMap((slot) => slot.assignments.map((item) => ({ slot, item })))
-      .find(({ item }) => item.user_id === payload.userId)
-    if (assignment) await unassignUser(assignment.slot.id, payload.userId)
+    const updatedSlot =
+      targetSlotId === null
+        ? await unassignUser(sourceSlot!.id, employeeId)
+        : await assignUser(targetSlotId, employeeId)
+    completeEmployeeMove(employeeId, updatedSlot)
   } catch {
-    toast.error('Désassignation impossible.')
+    toast.error(targetSlotId === null ? 'Désassignation impossible.' : 'Assignation impossible.')
+    cancelEmployeeMove(employeeId)
+    try {
+      applySnapshot(await fetchSnapshot())
+    } catch {
+      toast.error('Synchronisation du Dispatch impossible.')
+    }
+  } finally {
+    movingEmployees.delete(employeeId)
   }
 }
 
@@ -129,6 +143,8 @@ async function addIntervention() {
             :fixed="true"
             compact
             label="Centrale"
+            @employee-drop="onEmployeeDrop"
+            @employee-remove="onEmployeeDrop"
           />
         </div>
       </section>
@@ -156,6 +172,8 @@ async function addIntervention() {
             :agents="agents"
             :hospital-slot-id="hopital?.id"
             :label="slot.kind === 'consultation' ? 'Consultation' : `Int. ${i + 1}`"
+            @employee-drop="onEmployeeDrop"
+            @employee-remove="onEmployeeDrop"
           />
           <button
             type="button"
@@ -170,28 +188,18 @@ async function addIntervention() {
         </div>
       </section>
 
-      <section class="z z--hors" :data-drop-over="poolDrop ? '1' : '0'">
+      <section class="z z--hors">
         <header class="z__head z__head--hors">
           <Icon name="lucide:user-x" size="12" />
           <span>Hors service BCES</span>
           <span class="z__count">{{ pool.length }}</span>
         </header>
-        <div
-          class="z__body z__body--pool"
-          @dragover="onPoolDragOver"
-          @dragleave="onPoolDragLeave"
-          @drop="onPoolDrop"
-        >
-          <AgentTile
-            v-for="a in pool"
-            :key="a.id"
-            :agent="a"
-            :agents="agents"
-            tone="pool"
-            draggable
-          />
-          <EmptySlotState v-if="!pool.length" message="Tout le monde est en service." />
-        </div>
+        <SlotPanel
+          :pool="pool"
+          :agents="agents"
+          @employee-drop="onEmployeeDrop"
+          @employee-remove="onEmployeeDrop"
+        />
       </section>
 
       <aside class="z z--radio">
@@ -204,34 +212,65 @@ async function addIntervention() {
           <span>Hôpital</span>
           <span class="z__hint">en service, hors intervention</span>
         </header>
-        <SlotPanel :slot="hopital" :agents="agents" accent="#ec8a86" />
+        <SlotPanel
+          :slot="hopital"
+          :agents="agents"
+          accent="#ec8a86"
+          @employee-drop="onEmployeeDrop"
+          @employee-remove="onEmployeeDrop"
+        />
       </section>
 
       <div class="dp__lower">
         <section v-if="astreinte" class="z z--astreinte">
           <header class="z__head"><Icon name="lucide:shield-alert" size="12" /><span>Astreinte</span></header>
-          <SlotPanel :slot="astreinte" :agents="agents" />
+          <SlotPanel
+            :slot="astreinte"
+            :agents="agents"
+            @employee-drop="onEmployeeDrop"
+            @employee-remove="onEmployeeDrop"
+          />
         </section>
 
         <section v-if="conges" class="z z--conges">
           <header class="z__head"><Icon name="lucide:umbrella" size="12" /><span>Congés</span></header>
-          <SlotPanel :slot="conges" :agents="agents" />
+          <SlotPanel
+            :slot="conges"
+            :agents="agents"
+            @employee-drop="onEmployeeDrop"
+            @employee-remove="onEmployeeDrop"
+          />
         </section>
 
         <div class="dp__lower-bottom">
           <section v-if="ipt" class="z z--ipt">
             <header class="z__head"><Icon name="lucide:id-card" size="12" /><span>IPT</span></header>
-            <SlotPanel :slot="ipt" :agents="agents" />
+            <SlotPanel
+              :slot="ipt"
+              :agents="agents"
+              @employee-drop="onEmployeeDrop"
+              @employee-remove="onEmployeeDrop"
+            />
           </section>
 
           <section v-if="astreinteFin" class="z z--fin">
             <header class="z__head"><Icon name="lucide:moon-star" size="12" /><span>Astreinte fin de service</span></header>
-            <SlotPanel :slot="astreinteFin" :agents="agents" />
+            <SlotPanel
+              :slot="astreinteFin"
+              :agents="agents"
+              @employee-drop="onEmployeeDrop"
+              @employee-remove="onEmployeeDrop"
+            />
           </section>
 
           <section v-if="pause" class="z z--pause">
             <header class="z__head"><Icon name="lucide:coffee" size="12" /><span>Pause</span></header>
-            <SlotPanel :slot="pause" :agents="agents" />
+            <SlotPanel
+              :slot="pause"
+              :agents="agents"
+              @employee-drop="onEmployeeDrop"
+              @employee-remove="onEmployeeDrop"
+            />
           </section>
         </div>
       </div>
@@ -479,20 +518,8 @@ async function addIntervention() {
   cursor: not-allowed;
 }
 
-.z__body--pool {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 4px;
+.z--hors > :deep(.sp) {
   overflow-y: auto;
-  padding: 5px;
-  background: var(--dp-panel-2);
-}
-
-.z--hors[data-drop-over='1'] .z__body--pool {
-  background: var(--dp-warn-soft);
-  outline: 2px dashed var(--dp-warn-line);
-  outline-offset: -4px;
 }
 
 .z__addline {

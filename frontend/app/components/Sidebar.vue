@@ -7,12 +7,28 @@ const hovering = ref(false)
 const settingsOpen = ref(false)
 const modeWrap = ref<HTMLElement | null>(null)
 let hoverTimer: ReturnType<typeof setTimeout> | null = null
+const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
+const { data: currentUser } = await useAsyncData('sidebar-current-user', async () => {
+  try {
+    return await $fetch<{
+      is_super_admin: boolean
+      page_access: string[]
+    }>('/api/me', { credentials: 'include', headers: requestHeaders })
+  } catch {
+    return null
+  }
+})
 
 const modeOptions: ReadonlyArray<{ value: SidebarMode; label: string; icon: string }> = [
   { value: 'collapsed', label: 'Réduite', icon: 'lucide:panel-left-close' },
   { value: 'expanded', label: 'Étendue', icon: 'lucide:panel-left-open' },
   { value: 'hover', label: 'Au survol', icon: 'lucide:mouse-pointer-2' }
 ]
+const fallbackMode: { value: SidebarMode; label: string; icon: string } = {
+  value: 'hover',
+  label: 'Au survol',
+  icon: 'lucide:mouse-pointer-2'
+}
 
 const expanded = computed(() => mode.value === 'expanded' || (mode.value === 'hover' && hovering.value))
 
@@ -20,12 +36,21 @@ interface NavItem {
   to: string
   label: string
   icon: string
+  page: string
 }
 
 const items: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: 'lucide:layout-dashboard' },
-  { to: '/dispatch', label: 'Dispatch', icon: 'lucide:radio' }
+  { to: '/dashboard', label: 'Accueil', icon: 'lucide:layout-dashboard', page: 'dashboard' },
+  { to: '/dispatch', label: 'Dispatch', icon: 'lucide:radio', page: 'dispatch' },
+  { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
+  { to: '/ressources-humaines', label: 'Ressources humaines', icon: 'lucide:users-round', page: 'human-resources' },
+  { to: '/direction', label: 'Direction', icon: 'lucide:shield', page: 'direction' },
+  { to: '/administration', label: 'Administration', icon: 'lucide:settings-2', page: 'administration' }
 ]
+
+const visibleItems = computed(() => items.filter((item) =>
+  currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
+))
 
 function setMode(next: SidebarMode) {
   mode.value = next
@@ -58,7 +83,7 @@ onBeforeUnmount(() => {
   if (import.meta.client) document.removeEventListener('pointerdown', onDocumentPointerDown)
 })
 
-const currentMode = computed(() => modeOptions.find((option) => option.value === mode.value) ?? modeOptions[2])
+const currentMode = computed(() => modeOptions.find((option) => option.value === mode.value) ?? fallbackMode)
 
 function toggleSettings() {
   settingsOpen.value = !settingsOpen.value
@@ -96,7 +121,7 @@ async function logout() {
 
     <nav class="sidebar__nav">
       <NuxtLink
-        v-for="item in items"
+        v-for="item in visibleItems"
         :key="item.to"
         :to="item.to"
         class="sidebar__link"

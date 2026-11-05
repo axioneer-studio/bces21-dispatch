@@ -38,6 +38,8 @@ interventions et des radios, avec authentification Discord OAuth2.
 - Statut d'intervention (27 statuts + 12 lieux, avec emoji) et code postal par carte.
 - Panneau **Radios** : marche/arrêt, numéro de série éditable, agent associé,
   fréquences 147 / 570 MHz, état « attente » (chargement 2,5 s).
+- Les tuiles d'employés viennent du registre RH et ne nécessitent pas de compte
+  Discord ; les affectations persistent par employé.
 - En-tête d'état : fréquences radio, statut Hôpital (ouvert / fermé / nuit),
   puces **LSES** et **SAFD** en lecture seule (synchronisées depuis un Google Sheet).
 - Mises à jour temps réel via WebSocket, sans rafraîchissement de page.
@@ -47,17 +49,42 @@ interventions et des radios, avec authentification Discord OAuth2.
 - KPI : agents affectés, agents disponibles, interventions, radios actives.
 - Panneau « service en cours » avec accès rapide au dispatch.
 
+### Ressources humaines (`/ressources-humaines`)
+
+- Création et gestion des employés, de leurs compétences et du lien facultatif
+  à un compte utilisateur ; les tuiles sont créées dans RH, puis liées
+  séparément aux comptes avec la permission de rôle applicatif dédiée,
+  configurée dans Administration. Attribution d’un
+  grade centralisé par la Direction.
+
+### Direction (`/direction`)
+
+- Création, modification et suppression des grades et de leur niveau
+  hiérarchique numérique.
+- Configuration des permissions opérationnelles rattachées à chaque grade.
+
+### Administration (`/administration`)
+
+- Gestion des utilisateurs, des demandes d’inscription et de l’activation des
+  comptes.
+- Création des rôles applicatifs, attribution des rôles et configuration de
+  l’accès aux pages et des permissions applicatives, dont la liaison d’un
+  compte à une tuile employé.
+- Paramètres généraux, dont l’ouverture des inscriptions.
+- Le premier compte de l'application est le super-admin initial.
+
 ### Comptes
 
 - Connexion Discord OAuth2 (création de compte automatique à la première connexion).
 - Complétion du profil (prénom RP / nom RP / téléphone) obligatoire, avec délai de 24 h.
 - Brouillon de profil sauvegardé en `localStorage` (`bces:profile-draft`).
-- Comptes en attente de validation : liste et approbation par un membre validé.
+- Comptes en attente de validation : traitement par un administrateur.
 
 ### Interface
 
 - Thème sombre, palette `--bces-*` (écrans d'auth) et `--dp-*` (dispatch).
 - Notifications (toasts) avec pause au survol, icônes Lucide servies en local.
+- Navigation par rôle ; les API appliquent aussi les permissions côté serveur.
 - Barre latérale à 3 modes d'affichage (réduite / étendue / au survol), mémorisés
   dans `localStorage` (`bces:sidebar-mode`).
 - Affichage des dates/heures dans le fuseau horaire du navigateur.
@@ -76,6 +103,7 @@ bces21-dispatch/
 │   ├── schemas.py      # schémas Pydantic (entrées / sorties)
 │   ├── deps.py         # dépendances FastAPI (auth)
 │   ├── agents.py       # routes /api/users
+│   ├── human_resources.py # employés, rôles, permissions, résumé du dashboard
 │   ├── dispatch.py     # routes /api/dispatch/* + WebSocket
 │   ├── cleanup.py      # purge des comptes incomplets
 │   ├── status_sync.py  # synchronisation Google Sheet (LSES / SAFD)
@@ -89,7 +117,8 @@ bces21-dispatch/
 │   ├── server/routes/favicon.ico.ts
 │   ├── public/         # logo, fond, robots.txt
 │   └── app/
-│       ├── pages/      # /, /dashboard, /dispatch, /complete-profile
+│       ├── pages/      # /, /dashboard, /dispatch, /agenda, RH, profil
+│       ├── middleware/ # contrôle global des accès aux pages
 │       ├── layouts/    # default, dispatch
 │       ├── components/ # 14 composants auto-importés
 │       ├── composables/# useDispatchApi, useDispatchStore, useDispatchSocket, …
@@ -125,6 +154,17 @@ Le front appelle le back via deux chemins :
 ---
 
 ## Installation
+
+### Démarrage en un clic (Windows)
+
+Double-cliquez sur `dev.cmd` à la racine du projet. Le script prépare les
+dépendances si nécessaire, puis lance le backend et le frontend dans deux
+fenêtres séparées :
+
+- Application : <http://localhost:3000>
+- API : <http://localhost:8000/docs>
+
+Vous pouvez aussi le lancer depuis PowerShell avec `.\dev.ps1`.
 
 ### Backend
 
@@ -246,15 +286,17 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 4. La **session** est un JWT HS256 (`sub`, `iat`, `exp`, `type`) stocké dans un
    cookie `HttpOnly` `bces_session` (`SameSite=Lax`, `Path=/`).
 
-> Le premier compte créé est automatiquement validé (compte « fondateur »).
+> Le premier compte créé est automatiquement validé et reçoit les droits
+> super-admin. Les bases existantes sans super-admin attribuent ce rôle au
+> compte le plus ancien lors de la migration.
 
 ---
 
 ## API REST
 
-Toutes les routes sauf `/`, `/health`, `/api/auth/discord/start`,
-`/api/auth/discord/callback` et `/api/auth/logout` exigent une session valide.
-Un compte en attente de validation reçoit un `403`.
+Les routes authentifiées exigent une session valide. Les pages et API du
+Dispatch, de l'agenda et des ressources humaines vérifient également leur
+permission ; un compte en attente reçoit un `403`.
 
 ### Authentification & comptes
 
@@ -268,8 +310,33 @@ Un compte en attente de validation reçoit un `403`.
 | `POST` | `/api/auth/profile` | Enregistre prénom RP / nom RP / téléphone |
 | `POST` | `/api/auth/logout` | Détruit la session |
 | `GET` | `/api/auth/pending` | Liste des comptes en attente de validation |
-| `POST` | `/api/auth/validate/{user_id}` | Valide un compte en attente |
-| `GET` | `/api/users` | Liste des agents (Roster) |
+| `GET` | `/api/users` | Liste des comptes utilisateurs |
+
+### Administration, Direction et RH
+
+| Méthode | Chemin | Description |
+|---|---|---|
+| `GET` | `/api/admin/users` | Liste les utilisateurs et leur état (Administration) |
+| `PATCH` | `/api/admin/users/{id}/role` | Attribue un rôle applicatif |
+| `PATCH` | `/api/admin/users/{id}/activation` | Active ou désactive un compte |
+| `DELETE` | `/api/admin/users/{id}` | Supprime un compte en conservant sa tuile RH |
+| `POST` | `/api/admin/registrations/{id}/approve` | Valide une inscription |
+| `POST` | `/api/admin/registrations/{id}/reject` | Refuse une inscription |
+| `GET` / `POST` | `/api/admin/roles` | Liste ou crée des rôles applicatifs |
+| `PATCH` / `DELETE` | `/api/admin/roles/{id}` | Modifie ou supprime un rôle applicatif |
+| `GET` | `/api/admin/permissions` | Liste les permissions applicatives configurables |
+| `GET` / `PUT` | `/api/admin/settings` | Lit ou modifie les paramètres généraux |
+| `GET` | `/api/direction/grades` | Liste les grades et leurs permissions |
+| `GET` | `/api/direction/permissions` | Liste les capacités opérationnelles configurables |
+| `POST` / `PATCH` / `DELETE` | `/api/direction/grades[/{id}]` | Gère les grades (Direction) |
+| `GET` | `/api/employees` | Liste les employés (Dispatch ou RH) |
+| `POST` | `/api/employees` | Crée une tuile sans compte lié (RH + `manage_employees`) |
+| `PATCH` | `/api/employees/{id}` | Modifie la fiche (RH + `manage_employees`) |
+| `PATCH` | `/api/employees/{id}/account` | Lie ou délie un compte (RH + `link_accounts`) |
+| `DELETE` | `/api/employees/{id}` | Supprime un employé (RH + `manage_employees`) |
+| `GET` | `/api/employee-accounts` | Liste les comptes actifs (RH + `link_accounts`) |
+| `GET` | `/api/employee-grades` | Grades disponibles pour l’attribution RH |
+| `GET` | `/api/dashboard/summary` | Indicateurs agrégés du tableau de bord |
 
 ### Dispatch
 
@@ -279,8 +346,8 @@ Un compte en attente de validation reçoit un `403`.
 | `POST` | `/api/dispatch/slots` | Crée un slot (`kind`: `intervention` \| `consultation`) |
 | `PATCH` | `/api/dispatch/slots/{id}` | Modifie un slot (titre, statut, code postal, lieu, type) |
 | `DELETE` | `/api/dispatch/slots/{id}` | Supprime un slot (et ses affectations) |
-| `POST` | `/api/dispatch/slots/{id}/assign` | Affecte un agent (`user_id`) |
-| `DELETE` | `/api/dispatch/slots/{id}/assign/{user_id}` | Désaffecte un agent |
+| `POST` | `/api/dispatch/slots/{id}/assign` | Affecte un employé (`employee_id`) |
+| `DELETE` | `/api/dispatch/slots/{id}/assign/{employee_id}` | Désaffecte un employé |
 | `PATCH` | `/api/dispatch/radios/{id}` | Modifie une radio (série, agent, marche, chargement) |
 | `PATCH` | `/api/dispatch/state` | Statut Hôpital (`ouvert` \| `ferme` \| `nuit`) et codes radio |
 
@@ -293,8 +360,8 @@ Un compte en attente de validation reçoit un `403`.
 
 - **Endpoint** : `ws://<apiBase>/ws/dispatch` (chemin hors `/api`, donc **non**
   proxifié par Nitro — le client cible l'origine du backend directement).
-- **Authentification** : le cookie de session est vérifié avant l'`accept()`.
-  En cas d'échec, la connexion est close avec le code `1008` (le client arrête
+- **Authentification** : le cookie et l'accès Dispatch sont vérifiés avant
+  l'`accept()`. En cas d'échec, la connexion est close avec le code `1008` (le client arrête
   alors de se reconnecter).
 - **Messages serveur** : `{"type": "snapshot", "data": {slots, radios, state}}`
   envoyé à la connexion puis à chaque mutation REST ou changement de statut.
@@ -332,17 +399,22 @@ allongent l'attente suivante en cas de `429` / `503`.
 
 SQLite via SQLAlchemy 2 async. Le schéma est créé automatiquement au démarrage
 (`init_db()`), sans Alembic : les tables manquantes sont créées, puis des
-`ALTER TABLE` idempotents ajoutent les colonnes `phone`, `status` et
-`competencies` si elles n'existent pas encore.
+`ALTER TABLE` idempotents mettent à niveau les colonnes utilisateur et radio.
+Les affectations et radios existantes sont recopiées vers les identifiants
+d'employés.
 
 ### Tables
 
 | Table | Contenu |
 |---|---|
-| `users` | Comptes Discord : `discord_id`, `discord_username`, `discord_avatar`, `prenom_rp`, `nom_rp`, `phone`, `status` (`active` \| `pending`), `competencies` (JSON texte), `rp_name_deadline`, `last_login_at` |
+| `users` | Comptes Discord et accès : profil, `role_id`, `is_super_admin`, `status`, `last_login_at` |
+| `roles` | Rôles personnalisés et pages autorisées |
+| `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
+| `grades` | Hiérarchie de service et permissions opérationnelles par grade |
+| `application_settings` | Paramètres généraux configurés dans Administration |
 | `dispatch_slots` | Créneaux : `kind`, `title`, `status`, `zip_code`, `location`, `type_label`, `order` |
-| `dispatch_assignments` | Affectations : `slot_id` → `user_id`, `order` (cascade `DELETE`) |
-| `dispatch_radios` | Radios : `serial`, `doctor_id`, `is_on`, `is_loading`, `frequency`, `common_frequency`, `is_direction` |
+| `dispatch_employee_assignments` | Affectations : `slot_id` → `employee_id`, `order` (cascade `DELETE`) |
+| `dispatch_radios` | Radios : `serial`, `employee_id`, `is_on`, `is_loading`, `frequency`, `common_frequency`, `is_direction` |
 | `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_147`, `freq_570`, `radio_codes` |
 
 ### Créneaux amorcés
@@ -372,10 +444,12 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 | `/` | `app/pages/index.vue` | Connexion Discord, gestion des erreurs `?error=` / `?status=pending` |
 | `/dashboard` | `app/pages/dashboard.vue` | KPI du roster et service en cours |
 | `/dispatch` | `app/pages/dispatch.vue` | Plateau de dispatch temps réel |
+| `/agenda` | `app/pages/agenda.vue` | Agenda partagé |
+| `/ressources-humaines` | `app/pages/ressources-humaines.vue` | Employés, rôles et accès (selon les droits) |
 | `/complete-profile` | `app/pages/complete-profile.vue` | Formulaire prénom RP / nom RP / téléphone avec compte à rebours |
 
-La protection des pages est faite dans chaque page via `useAsyncData('/api/me')`
-puis `navigateTo('/')` — il n'y a pas de middleware global.
+Le middleware global vérifie `/api/me` avant l'accès aux pages privées. Les
+permissions sont aussi contrôlées par les dépendances FastAPI.
 
 ### Composables
 
@@ -392,7 +466,7 @@ puis `navigateTo('/')` — il n'y a pas de middleware global.
 
 | Composant | Description |
 |---|---|
-| `Sidebar.vue` | Navigation latérale (Dashboard / Dispatch), sélecteur de mode d'affichage, déconnexion |
+| `Sidebar.vue` | Navigation latérale selon les permissions, sélecteur de mode, déconnexion |
 | `DispatchHeader.vue` | Fréquences, statut Hôpital, puces LSES / SAFD |
 | `SlotPanel.vue` | Zone de dépôt d'agents pour un créneau de service |
 | `InterventionCard.vue` | Carte d'intervention (statut, code postal, agents) |
@@ -439,9 +513,9 @@ Points à vérifier avant une mise en production :
 - **OAuth `state`** stocké en mémoire : l'API doit tourner avec **un seul
   worker** (`uvicorn main:app` sans `--workers > 1`), sinon le `state` peut
   résider sur un autre processus.
-- **Modèle de rôles absent** : tout utilisateur authentifié et validé peut
-  lister (`/api/auth/pending`) et approuver (`/api/auth/validate/{id}`) des
-  comptes. À restreindre si l'usage grandit.
+- **Permissions par page** : les rôles applicatifs sont configurés dans
+  Administration ; les permissions opérationnelles dépendent du grade et sont
+  vérifiées par l’API. Le premier compte est le super-admin initial.
 - **Cookie** : `SESSION_COOKIE_NAME` n'est honoré qu'à l'écriture ; la
   dépendance REST lit en dur le nom `bces_session`.
 - **Dépendances** : `backend/requirements.txt` n'épingle pas les versions
