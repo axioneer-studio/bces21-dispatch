@@ -172,6 +172,31 @@ fenêtres séparées :
 
 Vous pouvez aussi le lancer depuis PowerShell avec `.\dev.ps1`.
 
+### Déploiement Docker avec Coolify
+
+Le dépôt inclut un `docker-compose.yml` ainsi qu'un Dockerfile pour chaque
+application. Dans Coolify, créez une ressource **Docker Compose** depuis le
+dépôt et définissez ces variables dans son environnement (voir `.env.example`) :
+
+- Les réglages du backend (base de données, sessions, OAuth, tâches de fond,
+  etc.) sont transmis au conteneur par `docker-compose.yml`. Renseignez leurs
+  valeurs dans l'environnement Coolify ; le fichier local `backend/.env` n'est
+  pas copié dans l'image et n'est pas chargé automatiquement.
+- `FRONTEND_URL` : domaine HTTPS du service `frontend`.
+- `API_URL` : domaine HTTPS du service `backend`.
+- `DISCORD_REDIRECT_URI` : `${API_URL}/api/auth/discord/callback`, à déclarer
+  aussi dans les Redirect URI de l'application Discord.
+- `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET` : identifiants Discord.
+- `SESSION_SECRET` : secret aléatoire, par exemple généré avec
+  `openssl rand -hex 32`.
+
+Associez chaque domaine au service correspondant dans Coolify, sur les ports
+`3000` (frontend) et `8000` (backend). L'API doit être joignable par le
+navigateur depuis son domaine HTTPS ; `FRONTEND_URL` est également utilisé pour
+la politique CORS. Le backend et le frontend communiquent aussi sur le réseau
+interne Compose. La base SQLite est conservée dans le volume `dispatch-data`.
+Ne définissez pas plusieurs réplicas du backend avec cette base SQLite.
+
 ### Backend
 
 ```bash
@@ -366,8 +391,12 @@ permission ; un compte en attente reçoit un `403`.
 
 ## WebSocket
 
-- **Endpoint** : `ws://<apiBase>/ws/dispatch` (chemin hors `/api`, donc **non**
-  proxifié par Nitro — le client cible l'origine du backend directement).
+- **Endpoint** : `ws://<apiBase>/ws/dispatch` (et `wss://` en HTTPS ; chemin
+  hors `/api`, donc **non** proxifié par Nitro — le client cible l'origine du
+  backend directement).
+- En production, `NUXT_PUBLIC_API_BASE` doit être l'URL HTTPS publique du
+  backend (`API_URL` dans la configuration Docker/Coolify), pour les requêtes
+  API directes et le WebSocket.
 - **Authentification** : le cookie et l'accès Dispatch sont vérifiés avant
   l'`accept()`. En cas d'échec, la connexion est close avec le code `1008` (le client arrête
   alors de se reconnecter).

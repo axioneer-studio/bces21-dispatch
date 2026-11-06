@@ -1,6 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import tailwindcss from '@tailwindcss/vite'
 
+const publicApiBase = process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000'
+const apiProxyBase = (
+  process.env.API_INTERNAL_BASE
+  || process.env.NUXT_PUBLIC_API_BASE
+  || 'http://localhost:8000'
+).replace(/\/$/, '')
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -46,14 +53,14 @@ export default defineNuxtConfig({
   nitro: {
     routeRules: {
       '/api/**': {
-        proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000') + '/api/**'
+        proxy: apiProxyBase + '/api/**'
       }
     }
   },
 
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000',
+      apiBase: publicApiBase,
       discordAuthUrl: process.env.NUXT_PUBLIC_DISCORD_AUTH_URL || '/api/auth/discord/start',
       timezone: process.env.NUXT_PUBLIC_TIMEZONE || 'Europe/Paris'
     }
