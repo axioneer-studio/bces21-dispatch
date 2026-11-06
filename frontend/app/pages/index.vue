@@ -8,7 +8,7 @@ onMounted(() => {
   const query = new URLSearchParams(window.location.search)
   const code = query.get('error')
   if (code) {
-    const message = useErrorMessage(code)
+    const message = query.get('error_description') || useErrorMessage(code)
     toast.error(message ?? 'La connexion a échoué.')
     window.history.replaceState({}, '', window.location.pathname)
   }
