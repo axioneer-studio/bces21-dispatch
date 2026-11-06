@@ -176,22 +176,28 @@ Vous pouvez aussi le lancer depuis PowerShell avec `.\dev.ps1`.
 
 Le dépôt inclut un `docker-compose.yml` ainsi qu'un Dockerfile pour chaque
 application. Dans Coolify, créez une ressource **Docker Compose** depuis le
-dépôt et renseignez uniquement les identifiants Discord (voir `.env.example`) :
+dépôt et renseignez les paramètres de base de données et les identifiants
+Discord (voir `.env.example`) :
 
 - Les valeurs par défaut du backend (base de données, sessions, tâches de fond,
-  etc.) sont définies directement dans `docker-compose.yml`. Le fichier local
+  etc.) sont définies directement dans `docker-compose.yml`, à l'exception de
+  `DATABASE_URL`, qui doit être configurée explicitement dans Coolify. Le fichier local
   `backend/.env` n'est pas copié dans l'image ni chargé automatiquement.
-- Les domaines publics sont générés par Coolify à partir des entrées
-  `SERVICE_URL_FRONTEND_3000` et `SERVICE_URL_BACKEND_8000` du Compose. Ils
-  alimentent automatiquement le frontend, le CORS et l'URL de callback.
+- Les domaines publics sont configurés dans Coolify pour les services
+  `frontend` et `backend`. Le Compose utilise leurs noms d'hôte
+  (`SERVICE_FQDN_FRONTEND_3000` et `SERVICE_FQDN_BACKEND_8000`) avec HTTPS, sans
+  exposer les ports internes `3000` / `8000` dans les URLs du navigateur.
 - Ajoutez `https://<domaine-api>/api/auth/discord/callback` aux Redirect URI
   de l'application Discord, en remplaçant le domaine par celui généré ou
   configuré dans Coolify.
 - `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET` : identifiants Discord.
 
 Coolify génère et conserve automatiquement `SESSION_SECRET` via sa variable
-`SERVICE_REALBASE64_64_SESSION`. Les seuls champs à saisir manuellement sont
-donc `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET`.
+`SERVICE_REALBASE64_64_SESSION`. Les champs à saisir manuellement sont
+`DATABASE_URL`, `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET`. Pour conserver
+SQLite dans le volume `dispatch-data`, utilisez
+`sqlite+aiosqlite:////app/data/BCES.db` ; pour une base externe, utilisez une
+URL SQLAlchemy async correspondante.
 
 Associez chaque domaine au service correspondant dans Coolify, sur les ports
 `3000` (frontend) et `8000` (backend). L'API doit être joignable par le
