@@ -65,6 +65,10 @@ def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=get_session_cookie_name(),
         path="/",
+        domain=get_settings().session_cookie_domain,
+        secure=get_settings().session_cookie_secure,
+        httponly=True,
+        samesite="lax",
     )
 
 
