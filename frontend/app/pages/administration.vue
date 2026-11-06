@@ -77,9 +77,56 @@ const users = ref<AppUser[]>(initialUsers.value ?? [])
 const roles = ref<AppRole[]>(initialRoles.value ?? [])
 const registrations = ref<Registration[]>(initialRequests.value?.users ?? [])
 const settings = reactive<AppSettings>(initialSettings.value ?? { registration_open: true })
+const persistedRegistrationOpen = ref(settings.registration_open)
 const roleForm = reactive({ name: '', pages: [] as string[], permissions: [] as string[] })
 const error = ref('')
 const savingSettings = ref(false)
+const userSearch = ref('')
+const registrationSearch = ref('')
+const processingRegistrationIds = ref<number[]>([])
+const workingUserIds = ref<number[]>([])
+const savingRole = ref(false)
+const savingRoleIds = ref<number[]>([])
+const deletingRoleIds = ref<number[]>([])
+const activeAdminSection = ref<'registrations' | 'users' | 'roles' | 'settings'>(
+  registrations.value.length ? 'registrations' : 'users'
+)
+const adminSections = ['registrations', 'users', 'roles', 'settings'] as const
+
+const filteredUsers = computed(() => {
+  const query = userSearch.value.trim().toLocaleLowerCase('fr')
+  if (!query) return users.value
+  return users.value.filter((user) =>
+    [user.first_name, user.last_name, user.discord_username, user.role_name, statusLabel(user.status)]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase('fr')
+      .includes(query)
+  )
+})
+
+const filteredRegistrations = computed(() => {
+  const query = registrationSearch.value.trim().toLocaleLowerCase('fr')
+  if (!query) return registrations.value
+  return registrations.value.filter((registration) =>
+    [registration.prenom_rp, registration.nom_rp, registration.discord_username, registration.phone]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase('fr')
+      .includes(query)
+  )
+})
+
+const activeUserCount = computed(() => users.value.filter((user) => user.status === 'active').length)
+
+function moveAdminTab(direction: -1 | 1) {
+  const currentIndex = adminSections.indexOf(activeAdminSection.value)
+  const nextIndex = (currentIndex + direction + adminSections.length) % adminSections.length
+  const nextSection = adminSections[nextIndex]
+  if (!nextSection) return
+  activeAdminSection.value = nextSection
+  nextTick(() => document.querySelector<HTMLElement>(`#admin-tab-${activeAdminSection.value}`)?.focus())
+}
 
 function messageFromError(cause: unknown, fallback: string) {
   if (typeof cause === 'object' && cause !== null && 'data' in cause) {
@@ -92,7 +139,9 @@ function messageFromError(cause: unknown, fallback: string) {
 }
 
 async function createRole() {
+  if (savingRole.value || !roleForm.name.trim()) return
   error.value = ''
+  savingRole.value = true
   try {
     const role = await $fetch<AppRole>('/api/admin/roles', {
       method: 'POST',
@@ -105,11 +154,15 @@ async function createRole() {
     roleForm.permissions = []
   } catch (cause) {
     error.value = messageFromError(cause, 'Création du rôle impossible.')
+  } finally {
+    savingRole.value = false
   }
 }
 
 async function saveRole(role: AppRole) {
+  if (savingRoleIds.value.includes(role.id)) return
   error.value = ''
+  savingRoleIds.value.push(role.id)
   try {
     const updated = await $fetch<AppRole>(`/api/admin/roles/${role.id}`, {
       method: 'PATCH',
@@ -120,6 +173,8 @@ async function saveRole(role: AppRole) {
     await refreshRoles()
   } catch (cause) {
     error.value = messageFromError(cause, 'Modification du rôle impossible.')
+  } finally {
+    savingRoleIds.value = savingRoleIds.value.filter((id) => id !== role.id)
   }
 }
 
@@ -128,20 +183,26 @@ async function refreshRoles() {
 }
 
 async function deleteRole(role: AppRole) {
+  if (deletingRoleIds.value.includes(role.id)) return
   if (!window.confirm(`Supprimer le rôle « ${role.name} » ?`)) return
   error.value = ''
+  deletingRoleIds.value.push(role.id)
   try {
     await $fetch(`/api/admin/roles/${role.id}`, { method: 'DELETE', credentials: 'include' })
     roles.value = roles.value.filter((item) => item.id !== role.id)
   } catch (cause) {
     error.value = messageFromError(cause, 'Suppression du rôle impossible.')
+  } finally {
+    deletingRoleIds.value = deletingRoleIds.value.filter((id) => id !== role.id)
   }
 }
 
 async function assignRole(user: AppUser, event: Event) {
+  if (workingUserIds.value.includes(user.id)) return
   const rawId = (event.target as HTMLSelectElement).value
   const roleId = rawId ? Number(rawId) : null
   error.value = ''
+  workingUserIds.value.push(user.id)
   try {
     await $fetch(`/api/admin/users/${user.id}/role`, {
       method: 'PATCH',
@@ -153,6 +214,8 @@ async function assignRole(user: AppUser, event: Event) {
   } catch (cause) {
     error.value = messageFromError(cause, 'Attribution du rôle impossible.')
     await refreshUsers()
+  } finally {
+    workingUserIds.value = workingUserIds.value.filter((id) => id !== user.id)
   }
 }
 
@@ -161,8 +224,10 @@ async function refreshUsers() {
 }
 
 async function setActivation(user: AppUser) {
+  if (workingUserIds.value.includes(user.id)) return
   const isActive = user.status !== 'active'
   error.value = ''
+  workingUserIds.value.push(user.id)
   try {
     await $fetch(`/api/admin/users/${user.id}/activation`, {
       method: 'PATCH',
@@ -172,13 +237,17 @@ async function setActivation(user: AppUser) {
     user.status = isActive ? 'active' : 'disabled'
   } catch (cause) {
     error.value = messageFromError(cause, 'Modification du compte impossible.')
+  } finally {
+    workingUserIds.value = workingUserIds.value.filter((id) => id !== user.id)
   }
 }
 
 async function deleteUser(user: AppUser) {
+  if (workingUserIds.value.includes(user.id)) return
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.discord_username
   if (!window.confirm(`Supprimer définitivement le compte de ${displayName} ? Sa tuile employé sera conservée sans compte lié.`)) return
   error.value = ''
+  workingUserIds.value.push(user.id)
   try {
     await $fetch(`/api/admin/users/${user.id}`, {
       method: 'DELETE',
@@ -188,11 +257,15 @@ async function deleteUser(user: AppUser) {
     registrations.value = registrations.value.filter((item) => item.id !== user.id)
   } catch (cause) {
     error.value = messageFromError(cause, 'Suppression du compte impossible.')
+  } finally {
+    workingUserIds.value = workingUserIds.value.filter((id) => id !== user.id)
   }
 }
 
 async function resolveRegistration(registration: Registration, action: 'approve' | 'reject') {
+  if (processingRegistrationIds.value.includes(registration.id)) return
   error.value = ''
+  processingRegistrationIds.value.push(registration.id)
   try {
     await $fetch(`/api/admin/registrations/${registration.id}/${action}`, {
       method: 'POST',
@@ -204,6 +277,8 @@ async function resolveRegistration(registration: Registration, action: 'approve'
     else await refreshUsers()
   } catch (cause) {
     error.value = messageFromError(cause, 'Traitement de la demande impossible.')
+  } finally {
+    processingRegistrationIds.value = processingRegistrationIds.value.filter((id) => id !== registration.id)
   }
 }
 
@@ -217,7 +292,9 @@ async function saveSettings() {
       credentials: 'include'
     })
     settings.registration_open = saved.registration_open
+    persistedRegistrationOpen.value = saved.registration_open
   } catch (cause) {
+    settings.registration_open = persistedRegistrationOpen.value
     error.value = messageFromError(cause, 'Enregistrement des paramètres impossible.')
   } finally {
     savingSettings.value = false
@@ -240,7 +317,11 @@ function statusLabel(status: string) {
         <h1>Administration</h1>
         <p>Gérez les comptes, les rôles applicatifs et les paramètres de l’application.</p>
       </div>
-      <div class="admin-count"><Icon name="lucide:users" size="18" /><strong>{{ users.length }}</strong><span>comptes</span></div>
+      <div class="admin-overview" aria-label="Résumé des comptes">
+        <div class="admin-count"><Icon name="lucide:users" size="17" /><strong>{{ users.length }}</strong><span>comptes</span></div>
+        <div class="admin-count admin-count--muted"><Icon name="lucide:user-round-check" size="17" /><strong>{{ activeUserCount }}</strong><span>actifs</span></div>
+        <div class="admin-count admin-count--warning"><Icon name="lucide:inbox" size="17" /><strong>{{ registrations.length }}</strong><span>à valider</span></div>
+      </div>
     </header>
 
     <div v-if="error" class="admin-error" role="alert">
@@ -248,39 +329,66 @@ function statusLabel(status: string) {
       <button type="button" aria-label="Fermer" @click="error = ''"><Icon name="lucide:x" size="15" /></button>
     </div>
 
-    <section class="admin-section">
+    <nav class="admin-nav" role="tablist" aria-label="Sections d’administration" @keydown.left.prevent="moveAdminTab(-1)" @keydown.right.prevent="moveAdminTab(1)">
+      <button id="admin-tab-registrations" type="button" role="tab" :aria-selected="activeAdminSection === 'registrations'" aria-controls="admin-registrations" :class="{ 'is-active': activeAdminSection === 'registrations' }" @click="activeAdminSection = 'registrations'">
+        <Icon name="lucide:inbox" size="16" /> Inscriptions <span>{{ registrations.length }}</span>
+      </button>
+      <button id="admin-tab-users" type="button" role="tab" :aria-selected="activeAdminSection === 'users'" aria-controls="admin-users" :class="{ 'is-active': activeAdminSection === 'users' }" @click="activeAdminSection = 'users'">
+        <Icon name="lucide:users-round" size="16" /> Comptes <span>{{ users.length }}</span>
+      </button>
+      <button id="admin-tab-roles" type="button" role="tab" :aria-selected="activeAdminSection === 'roles'" aria-controls="admin-roles" :class="{ 'is-active': activeAdminSection === 'roles' }" @click="activeAdminSection = 'roles'">
+        <Icon name="lucide:shield-check" size="16" /> Rôles <span>{{ roles.length }}</span>
+      </button>
+      <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="activeAdminSection = 'settings'">
+        <Icon name="lucide:settings-2" size="16" /> Paramètres
+      </button>
+    </nav>
+
+    <section id="admin-registrations" v-show="activeAdminSection === 'registrations'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-registrations" tabindex="0">
       <div class="admin-section__heading">
-        <div><h2>Demandes d’inscription</h2><p>{{ registrations.length }} demande{{ registrations.length > 1 ? 's' : '' }} en attente de validation.</p></div>
+        <div class="admin-section__intro"><span class="admin-section__icon admin-section__icon--warning"><Icon name="lucide:inbox" size="18" /></span><div><h2>Demandes d’inscription</h2><p>{{ registrations.length }} demande{{ registrations.length > 1 ? 's' : '' }} en attente de validation.</p></div></div>
+        <label class="admin-search">
+          <Icon name="lucide:search" size="15" />
+          <input v-model="registrationSearch" type="search" aria-label="Rechercher une demande" placeholder="Nom ou compte Discord">
+        </label>
       </div>
-      <article v-for="registration in registrations" :key="registration.id" class="admin-row">
+      <article v-for="registration in filteredRegistrations" :key="registration.id" class="admin-row">
         <div class="admin-row__identity">
-          <strong>{{ registration.prenom_rp }} {{ registration.nom_rp }}</strong>
+          <strong>{{ [registration.prenom_rp, registration.nom_rp].filter(Boolean).join(' ') || registration.discord_username }}</strong>
           <small>{{ registration.discord_username }}<span v-if="registration.phone"> · {{ registration.phone }}</span></small>
         </div>
         <div class="admin-row__actions">
-          <button type="button" class="admin-button admin-button--allow" @click="resolveRegistration(registration, 'approve')">
-            <Icon name="lucide:check" size="14" /> Valider
+          <button type="button" class="admin-button admin-button--allow" :disabled="processingRegistrationIds.includes(registration.id)" @click="resolveRegistration(registration, 'approve')">
+            <Icon name="lucide:check" size="14" /> {{ processingRegistrationIds.includes(registration.id) ? 'Traitement…' : 'Valider' }}
           </button>
-          <button type="button" class="admin-button admin-button--danger" @click="resolveRegistration(registration, 'reject')">
+          <button type="button" class="admin-button admin-button--danger" :disabled="processingRegistrationIds.includes(registration.id)" @click="resolveRegistration(registration, 'reject')">
             <Icon name="lucide:x" size="14" /> Refuser
           </button>
         </div>
       </article>
-      <div v-if="!registrations.length" class="admin-empty">Aucune demande en attente.</div>
+      <div v-if="!filteredRegistrations.length" class="admin-empty">
+        <Icon :name="registrationSearch ? 'lucide:search-x' : 'lucide:inbox'" size="21" />
+        <p>{{ registrationSearch ? 'Aucune demande ne correspond à cette recherche.' : 'Aucune demande en attente.' }}</p>
+        <button v-if="registrationSearch" type="button" class="admin-button" @click="registrationSearch = ''">Effacer la recherche</button>
+      </div>
     </section>
 
-    <section class="admin-section">
+    <section id="admin-users" v-show="activeAdminSection === 'users'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-users" tabindex="0">
       <div class="admin-section__heading">
-        <div><h2>Utilisateurs</h2><p>Attribuez les rôles applicatifs et gérez l’état des comptes.</p></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:users-round" size="18" /></span><div><h2>Comptes utilisateurs</h2><p>{{ activeUserCount }} actif{{ activeUserCount > 1 ? 's' : '' }} sur {{ users.length }} compte{{ users.length > 1 ? 's' : '' }}. Attribuez les rôles et gérez les accès.</p></div></div>
+        <label class="admin-search">
+          <Icon name="lucide:search" size="15" />
+          <input v-model="userSearch" type="search" aria-label="Rechercher un utilisateur" placeholder="Nom, Discord, rôle…">
+        </label>
       </div>
-      <article v-for="user in users" :key="user.id" class="admin-row">
+      <article v-for="user in filteredUsers" :key="user.id" class="admin-row">
         <div class="admin-row__identity">
           <strong>{{ user.first_name || user.discord_username }} {{ user.last_name || '' }}</strong>
-          <small>{{ user.discord_username }} · {{ statusLabel(user.status) }}<span v-if="user.is_super_admin"> · Super-admin</span></small>
+          <small>{{ user.discord_username }} <span class="admin-status" :class="`admin-status--${user.status}`">{{ statusLabel(user.status) }}</span><span v-if="user.is_super_admin" class="admin-super-admin"><Icon name="lucide:shield-check" size="12" /> Super-admin</span></small>
         </div>
         <label class="admin-role">
           <span class="sr-only">Rôle applicatif de {{ user.discord_username }}</span>
-          <select :value="user.role_id ?? ''" @change="assignRole(user, $event)">
+          <select :value="user.role_id ?? ''" :disabled="workingUserIds.includes(user.id)" @change="assignRole(user, $event)">
             <option value="">Aucun rôle</option>
             <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
           </select>
@@ -290,6 +398,7 @@ function statusLabel(status: string) {
           type="button"
           class="admin-button"
           :class="user.status === 'active' ? 'admin-button--danger' : 'admin-button--allow'"
+          :disabled="workingUserIds.includes(user.id)"
           @click="setActivation(user)"
         >
           <Icon :name="user.status === 'active' ? 'lucide:user-round-x' : 'lucide:user-round-check'" size="14" />
@@ -299,17 +408,22 @@ function statusLabel(status: string) {
           type="button"
           class="admin-button admin-button--danger"
           :aria-label="`Supprimer le compte de ${user.discord_username}`"
+          :disabled="workingUserIds.includes(user.id)"
           @click="deleteUser(user)"
         >
           <Icon name="lucide:trash-2" size="14" /> Supprimer
         </button>
       </article>
-      <div v-if="!users.length" class="admin-empty">Aucun utilisateur à afficher.</div>
+      <div v-if="!filteredUsers.length" class="admin-empty">
+        <Icon :name="userSearch ? 'lucide:search-x' : 'lucide:users-round'" size="21" />
+        <p>{{ userSearch ? 'Aucun utilisateur ne correspond à cette recherche.' : 'Aucun utilisateur à afficher.' }}</p>
+        <button v-if="userSearch" type="button" class="admin-button" @click="userSearch = ''">Effacer la recherche</button>
+      </div>
     </section>
 
-    <section class="admin-section">
+    <section id="admin-roles" v-show="activeAdminSection === 'roles'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-roles" tabindex="0">
       <div class="admin-section__heading">
-        <div><h2>Rôles applicatifs</h2><p>Définissez les pages accessibles et les actions autorisées pour chaque rôle.</p></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:shield-check" size="18" /></span><div><h2>Rôles applicatifs</h2><p>Définissez les pages accessibles et les actions autorisées pour chaque rôle.</p></div></div>
       </div>
       <form class="admin-role-create" @submit.prevent="createRole">
         <label><span>Nom du rôle</span><input v-model="roleForm.name" required maxlength="64" placeholder="Ex. RH"></label>
@@ -325,77 +439,124 @@ function statusLabel(status: string) {
             <input v-model="roleForm.permissions" type="checkbox" :value="permission.key">{{ permission.label }}
           </label>
         </fieldset>
-        <button class="admin-button admin-button--primary" type="submit" :disabled="!roleForm.name.trim()">
-          <Icon name="lucide:plus" size="14" /> Créer le rôle
+        <button class="admin-button admin-button--primary" type="submit" :disabled="savingRole || !roleForm.name.trim()">
+          <Icon :name="savingRole ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingRole }" /> {{ savingRole ? 'Création…' : 'Ajouter ce rôle' }}
         </button>
       </form>
-      <article v-for="role in roles" :key="role.id" class="admin-role-card">
-        <div class="admin-role-card__top">
-          <label><span>Nom du rôle</span><input v-model="role.name" maxlength="64"></label>
-          <small>{{ role.users_count }} utilisateur{{ role.users_count > 1 ? 's' : '' }}</small>
+      <details v-for="role in roles" :key="role.id" class="admin-role-card">
+        <summary class="admin-role-card__summary">
+          <span class="admin-role-card__badge"><Icon name="lucide:shield" size="16" /></span>
+          <span class="admin-role-card__summary-name">{{ role.name }}</span>
+          <small>{{ role.pages.length }} page{{ role.pages.length > 1 ? 's' : '' }} · {{ role.users_count }} compte{{ role.users_count > 1 ? 's' : '' }}</small>
+          <Icon class="admin-role-card__chevron" name="lucide:chevron-down" size="16" />
+        </summary>
+        <div class="admin-role-card__content">
+          <div class="admin-role-card__top">
+            <label><span>Nom du rôle</span><input v-model="role.name" maxlength="64"></label>
+            <span class="admin-role-card__usage"><Icon name="lucide:users-round" size="14" /> {{ role.users_count }} compte{{ role.users_count > 1 ? 's' : '' }} lié{{ role.users_count > 1 ? 's' : '' }}</span>
+          </div>
+          <fieldset>
+            <legend>Pages accessibles</legend>
+            <label v-for="page in pageOptions" :key="page.key">
+              <input v-model="role.pages" type="checkbox" :value="page.key">{{ page.label }}
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Permissions applicatives</legend>
+            <label v-for="permission in permissionOptions" :key="permission.key">
+              <input v-model="role.permissions" type="checkbox" :value="permission.key">{{ permission.label }}
+            </label>
+          </fieldset>
+          <div class="admin-row__actions">
+            <button type="button" class="admin-button admin-button--primary" :disabled="savingRoleIds.includes(role.id)" @click="saveRole(role)">
+              <Icon :name="savingRoleIds.includes(role.id) ? 'lucide:loader-circle' : 'lucide:save'" size="14" :class="{ 'admin-spin': savingRoleIds.includes(role.id) }" />
+              {{ savingRoleIds.includes(role.id) ? 'Enregistrement…' : 'Enregistrer les changements' }}
+            </button>
+              <button type="button" class="admin-button admin-button--danger" :disabled="deletingRoleIds.includes(role.id)" @click="deleteRole(role)">
+                <Icon name="lucide:trash-2" size="14" /> {{ deletingRoleIds.includes(role.id) ? 'Suppression…' : 'Supprimer le rôle' }}
+            </button>
+          </div>
         </div>
-        <fieldset>
-          <legend>Pages accessibles</legend>
-          <label v-for="page in pageOptions" :key="page.key">
-            <input v-model="role.pages" type="checkbox" :value="page.key">{{ page.label }}
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>Permissions applicatives</legend>
-          <label v-for="permission in permissionOptions" :key="permission.key">
-            <input v-model="role.permissions" type="checkbox" :value="permission.key">{{ permission.label }}
-          </label>
-        </fieldset>
-        <div class="admin-row__actions">
-          <button type="button" class="admin-button" @click="saveRole(role)"><Icon name="lucide:save" size="14" /> Enregistrer</button>
-          <button type="button" class="admin-button admin-button--danger" @click="deleteRole(role)"><Icon name="lucide:trash-2" size="14" /> Supprimer</button>
-        </div>
-      </article>
+      </details>
       <div v-if="!roles.length" class="admin-empty">Aucun rôle applicatif créé.</div>
     </section>
 
-    <section class="admin-section admin-setting">
+    <section id="admin-settings" v-show="activeAdminSection === 'settings'" class="admin-section admin-setting" role="tabpanel" aria-labelledby="admin-tab-settings" tabindex="0">
       <div class="admin-section__heading">
-        <div><h2>Paramètres généraux</h2><p>Contrôlez l’ouverture des nouvelles inscriptions.</p></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:settings-2" size="18" /></span><div><h2>Paramètres généraux</h2><p>Contrôlez l’ouverture des nouvelles inscriptions.</p></div></div>
       </div>
       <label class="admin-toggle">
         <span><strong>Inscriptions ouvertes</strong><small>Autoriser la création de nouveaux comptes via Discord.</small></span>
-        <input v-model="settings.registration_open" type="checkbox" @change="saveSettings">
+        <input v-model="settings.registration_open" type="checkbox" :disabled="savingSettings" @change="saveSettings">
       </label>
       <span v-if="savingSettings" class="admin-muted">Enregistrement…</span>
+      <span v-else class="admin-saved"><Icon name="lucide:check" size="13" /> Paramètre synchronisé</span>
     </section>
   </main>
 </template>
 
 <style scoped>
-.admin-page { flex: 1; min-height: 0; overflow: auto; padding: clamp(18px, 3vw, 36px); background: var(--dp-bg); }
-.admin-header, .admin-section, .admin-error { width: min(1120px, 100%); margin-right: auto; margin-left: auto; }
-.admin-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
-.admin-eyebrow { margin-bottom: 6px; color: var(--dp-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
-.admin-header h1 { margin: 0; font-size: clamp(24px, 3vw, 34px); }
-.admin-header p, .admin-section__heading p { margin: 7px 0 0; color: var(--dp-text-2); font-size: 12px; }
-.admin-count { display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 9px; padding: 12px 15px; border: 1px solid var(--dp-line); background: var(--dp-panel); color: var(--dp-accent); }
-.admin-count strong { color: var(--dp-text); font-size: 18px; }.admin-count span { grid-column: 2; color: var(--dp-text-2); font-size: 10px; }
-.admin-section { margin-bottom: 16px; padding: 19px; border: 1px solid var(--dp-line); background: var(--dp-panel); }
-.admin-section__heading { margin-bottom: 15px; }.admin-section h2 { margin: 0; font-size: 16px; }
-.admin-row { display: flex; align-items: center; gap: 14px; min-height: 58px; padding: 9px 10px; border: 1px solid var(--dp-line); background: #151a1f; }
-.admin-row + .admin-row, .admin-role-card + .admin-role-card { margin-top: 7px; }
+.admin-page { flex: 1; min-height: 0; overflow: auto; padding: clamp(22px, 4vw, 48px); background: radial-gradient(ellipse at 86% 0, rgba(70, 153, 109, .11), transparent 40%), var(--dp-bg); }
+.admin-header, .admin-section, .admin-error { width: min(1180px, 100%); margin-right: auto; margin-left: auto; }
+.admin-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 22px; padding: clamp(22px, 3vw, 34px); border: 1px solid var(--dp-line); border-radius: 22px; background: linear-gradient(110deg, rgba(70, 153, 109, .12), transparent 72%), var(--dp-panel); box-shadow: 0 18px 48px rgba(0, 0, 0, .16); }
+.admin-eyebrow { margin-bottom: 9px; color: var(--dp-accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.admin-header h1 { margin: 0; font-size: clamp(28px, 3.2vw, 38px); letter-spacing: -.04em; }
+.admin-header p, .admin-section__heading p { margin: 9px 0 0; color: var(--dp-text-2); font-size: 13px; line-height: 1.6; }
+.admin-count { display: grid; min-width: 112px; grid-template-columns: auto auto; align-items: center; gap: 3px 9px; padding: 13px 15px; border: 1px solid var(--dp-line); border-radius: 13px; background: rgba(15, 18, 22, .45); color: var(--dp-accent); }
+.admin-count strong { color: var(--dp-text); font-size: 20px; font-variant-numeric: tabular-nums; }.admin-count span { grid-column: 2; color: var(--dp-text-2); font-size: 10px; }
+.admin-overview { display: flex; gap: 9px; }.admin-count--muted { color: var(--dp-text-dim); }.admin-count--warning { color: var(--dp-warn); }
+.admin-nav { display: flex; gap: 6px; width: min(1180px, 100%); margin: 0 auto 16px; padding: 7px; overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel); }
+.admin-nav button { position: relative; display: inline-flex; min-height: 42px; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid transparent; border-radius: 9px; color: var(--dp-text-2); background: transparent; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; }
+.admin-nav button:hover { color: var(--dp-text); background: var(--dp-panel-2); }
+.admin-nav button.is-active { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
+.admin-nav button:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: -2px; }
+.admin-nav button span { display: grid; min-width: 20px; height: 20px; place-items: center; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text); background: var(--dp-panel-3); font-size: 9px; font-variant-numeric: tabular-nums; }
+.admin-nav button.is-active span { border-color: var(--dp-accent-line); color: var(--dp-accent); background: rgba(70, 153, 109, .13); }
+.admin-section { min-height: 300px; margin: 0 auto 16px; padding: clamp(18px, 3vw, 28px); border: 1px solid var(--dp-line); border-radius: 18px; background: linear-gradient(140deg, rgba(255,255,255,.025), transparent 55%), var(--dp-panel); box-shadow: 0 16px 40px rgba(0, 0, 0, .14); }
+.admin-section__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }.admin-section h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.admin-section__intro { display: flex; align-items: center; gap: 12px; }
+.admin-section__icon { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border: 1px solid var(--dp-accent-line); border-radius: 13px; color: var(--dp-accent); background: var(--dp-accent-soft); }
+.admin-section__icon--warning { border-color: var(--dp-warn-line); color: var(--dp-warn); background: var(--dp-warn-soft); }
+.admin-search { display: flex; min-width: min(280px, 100%); min-height: 42px; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-dim); background: var(--dp-bg); }
+.admin-search:focus-within { border-color: var(--dp-accent-line); }
+.admin-search input { width: 100%; min-width: 0; min-height: 38px; border: 0; outline: 0; color: var(--dp-text); background: transparent; font: inherit; font-size: 12px; }
+.admin-row { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 12px 14px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); }
+.admin-row:hover { border-color: var(--dp-line-strong); }
+.admin-row + .admin-row, .admin-role-card + .admin-role-card { margin-top: 9px; }
 .admin-row__identity { display: grid; flex: 1; min-width: 150px; gap: 4px; }.admin-row__identity strong { font-size: 12px; }.admin-row__identity small, .admin-muted { color: var(--dp-text-dim); font-size: 10px; }
+.admin-status { display: inline-flex; align-items: center; margin-left: 5px; padding: 2px 7px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-2); font-size: 9px; }
+.admin-status--active { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
+.admin-status--pending { border-color: var(--dp-warn-line); color: var(--dp-warn); background: var(--dp-warn-soft); }
+.admin-status--disabled, .admin-status--rejected { color: var(--dp-text-dim); background: var(--dp-panel-3); }
+.admin-super-admin { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; color: var(--dp-accent); }
 .admin-role, .admin-role-card__top > label { display: grid; min-width: 150px; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
-.admin-role select, .admin-role-create input:not([type='checkbox']), .admin-role-card input:not([type='checkbox']) { width: 100%; min-height: 34px; border: 1px solid var(--dp-line); border-radius: 4px; padding: 0 9px; color: var(--dp-text); background: #101419; font: inherit; font-size: 11px; }
+.admin-role select, .admin-role-create input:not([type='checkbox']), .admin-role-card input:not([type='checkbox']) { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
 .admin-row__actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.admin-button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--dp-line); border-radius: 4px; color: var(--dp-text-2); background: transparent; font-size: 10px; font-weight: 650; cursor: pointer; }
+.admin-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text-2); background: transparent; font-size: 10px; font-weight: 650; cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
 .admin-button--allow { color: var(--dp-accent); background: var(--dp-accent-soft); }.admin-button--danger { color: var(--dp-danger); background: var(--dp-danger-soft); }.admin-button--primary { color: #0c1710; border-color: transparent; background: var(--dp-accent); }
 .admin-button:disabled { opacity: .5; cursor: not-allowed; }
-.admin-role-create, .admin-role-card { display: grid; gap: 12px; padding: 13px; border: 1px solid var(--dp-line); background: var(--dp-panel-2); }
+.admin-role-create, .admin-role-card { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel-2); }
 .admin-role-create { grid-template-columns: minmax(160px, .7fr) minmax(0, 2fr) auto; align-items: end; margin-bottom: 8px; }
 .admin-role-create > label { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
-.admin-role-create fieldset, .admin-role-card fieldset { display: flex; flex-wrap: wrap; gap: 8px 13px; min-width: 0; margin: 0; padding: 8px; border: 1px solid var(--dp-line); }
+.admin-role-create fieldset, .admin-role-card fieldset { display: flex; flex-wrap: wrap; gap: 9px 14px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--dp-line); border-radius: 10px; }
 .admin-role-create legend, .admin-role-card legend { padding: 0 5px; color: var(--dp-text-dim); font-size: 9px; }
 .admin-role-create fieldset label, .admin-role-card fieldset label { display: inline-flex; align-items: center; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
+.admin-role-card { display: block; padding: 0; overflow: hidden; transition: border-color .15s ease, background .15s ease; }.admin-role-card:hover { border-color: var(--dp-line-strong); background: #202730; }
+.admin-role-card__summary { display: flex; min-height: 68px; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; list-style: none; }
+.admin-role-card__summary::-webkit-details-marker { display: none; }
+.admin-role-card__badge { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid var(--dp-accent-line); border-radius: 11px; color: var(--dp-accent); background: var(--dp-accent-soft); }
+.admin-role-card__summary-name { flex: 1; min-width: 0; overflow: hidden; color: var(--dp-text); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.admin-role-card__summary > small { color: var(--dp-text-dim); font-size: 10px; white-space: nowrap; }
+.admin-role-card__chevron { color: var(--dp-text-dim); transition: transform .15s ease; }.admin-role-card[open] .admin-role-card__chevron { transform: rotate(180deg); }
+.admin-role-card__content { display: grid; gap: 16px; padding: 18px; border-top: 1px solid var(--dp-line); }
 .admin-role-card__top { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }.admin-role-card__top small { color: var(--dp-text-dim); font-size: 10px; }
-.admin-empty { padding: 17px; color: var(--dp-text-dim); text-align: center; font-size: 11px; }
+.admin-role-card__usage { display: inline-flex; align-items: center; gap: 5px; color: var(--dp-text-dim); font-size: 10px; white-space: nowrap; }
+.admin-role-card__summary:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: -2px; }
+.admin-empty { display: grid; min-height: 170px; justify-items: center; align-content: center; gap: 10px; padding: 24px; border: 1px dashed var(--dp-line-strong); border-radius: 14px; color: var(--dp-text-dim); text-align: center; font-size: 12px; }.admin-empty p { margin: 0; }
 .admin-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }.admin-toggle span { display: grid; gap: 4px; }.admin-toggle strong { font-size: 12px; }.admin-toggle small { color: var(--dp-text-dim); font-size: 10px; }
-.admin-error { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--dp-danger-line); color: #f0a29d; background: var(--dp-danger-soft); font-size: 11px; }.admin-error span { flex: 1; }.admin-error button { color: inherit; }
-@media (max-width: 800px) { .admin-row { align-items: flex-start; flex-wrap: wrap; }.admin-role-create { grid-template-columns: 1fr; }.admin-role-create .admin-button { justify-self: start; } }
+.admin-saved { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--dp-accent); font-size: 10px; }
+.admin-error { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }.admin-error span { flex: 1; }.admin-error button { color: inherit; }
+.admin-spin { animation: admin-spin 1s linear infinite; }@keyframes admin-spin { to { transform: rotate(360deg); } }
+@media (max-width: 800px) { .admin-header { align-items: flex-start; flex-direction: column; }.admin-overview { width: 100%; }.admin-count { flex: 1; }.admin-row { align-items: flex-start; flex-wrap: wrap; }.admin-role-create { grid-template-columns: 1fr; }.admin-role-create .admin-button { justify-self: start; }.admin-section__heading { align-items: flex-start; flex-direction: column; }.admin-search { width: 100%; } }
+@media (max-width: 520px) { .admin-page { padding: 18px 14px; }.admin-header { padding: 20px 17px; }.admin-overview { gap: 6px; }.admin-count { min-width: 0; padding: 10px; }.admin-count span { font-size: 9px; }.admin-nav { gap: 3px; }.admin-nav button { gap: 6px; padding: 0 10px; }.admin-section { min-height: 250px; padding: 15px; }.admin-section__heading { gap: 12px; }.admin-row__identity { min-width: 100%; }.admin-role { flex: 1; }.admin-toggle { align-items: flex-start; }.admin-role-card__summary { gap: 8px; padding: 10px; }.admin-role-card__summary > small { max-width: 105px; overflow: hidden; text-overflow: ellipsis; }.admin-role-card__content { padding: 13px; }.admin-role-card__top { align-items: flex-start; flex-direction: column; } }
 </style>
