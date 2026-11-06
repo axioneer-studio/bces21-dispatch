@@ -30,7 +30,7 @@ services:
       SESSION_SECRET: ${SERVICE_REALBASE64_64_SESSION}
       SESSION_COOKIE_NAME: "bces_session"
       SESSION_COOKIE_SECURE: "true"
-      SESSION_COOKIE_DOMAIN: ".bces.axioneer.com"
+      SESSION_COOKIE_DOMAIN: ".${SERVICE_FQDN_FRONTEND}"
       SESSION_TTL_SECONDS: "1209600"
 
       # Profile management

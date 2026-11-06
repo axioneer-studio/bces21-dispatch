@@ -127,6 +127,8 @@ async function logout() {
         :key="item.to"
         :to="item.to"
         class="sidebar__link"
+        :aria-label="item.label"
+        :title="item.label"
         active-class="sidebar__link--active"
       >
         <Icon :name="item.icon" size="20" />
