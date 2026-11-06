@@ -228,6 +228,7 @@ async def init_db() -> None:
         DispatchRadio,
         DispatchSlot,
         DispatchState,
+        DispatchNote,
         Employee,
         Grade,
         ApplicationSetting,
@@ -263,6 +264,9 @@ async def init_db() -> None:
         if state:
             state.freq_147 = _frequency_value(state.freq_147)
             state.freq_570 = _frequency_value(state.freq_570)
+
+        if await session.get(DispatchNote, 1) is None:
+            session.add(DispatchNote(id=1, content=""))
 
         # Ensure default dispatch slots exist (idempotent bootstrap).
         # Layout mirrors the legacy Google Sheets dispatch.

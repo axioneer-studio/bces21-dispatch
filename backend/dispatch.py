@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,17 +11,20 @@ from auth.session import decode_token, get_session_cookie_name
 from config import get_settings
 from database import SessionLocal, get_db
 from deps import require_page_access, user_has_page_access
-from grade_permissions import require_grade_permission
+from grade_permissions import require_grade_permission, user_has_grade_permission
 from models import (
     DispatchAssignment,
     Employee,
     DispatchRadio,
     DispatchSlot,
     DispatchState,
+    DispatchNote,
     User,
 )
 from schemas import (
     AssignRequest,
+    DispatchNoteUpdateRequest,
+    DispatchResetRequest,
     DispatchSnapshot,
     MessageResponse,
     RadioOut,
@@ -87,11 +90,13 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
         state = DispatchState(id=1)
         db.add(state)
         await db.commit()
+    note = await db.get(DispatchNote, 1)
 
     return {
         "slots": [SlotOut.model_validate(s).model_dump(mode="json") for s in slots],
         "radios": [RadioOut.model_validate(r).model_dump(mode="json") for r in radios],
         "state": StateOut.model_validate(state).model_dump(mode="json"),
+        "note": note.content if note else "",
     }
 
 
@@ -153,6 +158,61 @@ async def get_snapshot(
     _: User = Depends(require_page_access("dispatch")),
 ):
     return await build_snapshot(db)
+
+
+@router.put("/api/dispatch/note", response_model=DispatchSnapshot)
+async def update_dispatch_note(
+    payload: DispatchNoteUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("dispatch")),
+):
+    note = await db.get(DispatchNote, 1)
+    if note is None:
+        note = DispatchNote(id=1, content=payload.content)
+        db.add(note)
+    else:
+        note.content = payload.content
+    await db.commit()
+    snapshot = await build_snapshot(db)
+    await manager.broadcast({"type": "snapshot", "data": snapshot})
+    return snapshot
+
+
+@router.post("/api/dispatch/assignments/reset", response_model=DispatchSnapshot)
+async def reset_assignments(
+    payload: DispatchResetRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page_access("dispatch")),
+):
+    if not await user_has_grade_permission(current_user, db, "dispatch.manage_assignments"):
+        raise HTTPException(
+            status_code=403,
+            detail="Votre grade ne vous autorise pas à gérer les affectations.",
+        )
+    if payload.delete_interventions and not await user_has_grade_permission(
+        current_user, db, "dispatch.manage_slots"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Votre grade ne vous autorise pas à supprimer les interventions.",
+        )
+
+    await db.execute(delete(DispatchAssignment))
+    if payload.delete_interventions:
+        await db.execute(
+            delete(DispatchSlot).where(
+                DispatchSlot.kind.in_(("intervention", "consultation"))
+            )
+        )
+    state = await db.get(DispatchState, 1)
+    if state is None:
+        state = DispatchState(id=1)
+        db.add(state)
+    state.hospital_status = "ferme"
+    await db.commit()
+    snapshot = await build_snapshot(db)
+    await manager.broadcast({"type": "assignments_reset", "data": snapshot})
+    return snapshot
 
 
 FIXED_SLOT_KINDS = {

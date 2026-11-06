@@ -49,7 +49,9 @@ const items: NavItem[] = [
 ]
 
 const visibleItems = computed(() => items.filter((item) =>
-  currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
+  item.page === 'agenda'
+    ? Boolean(currentUser.value)
+    : currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
 ))
 
 function setMode(next: SidebarMode) {

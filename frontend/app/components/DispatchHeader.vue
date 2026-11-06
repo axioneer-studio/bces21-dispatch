@@ -1,11 +1,30 @@
 <script setup lang="ts">
-import { updateState } from '~/composables/useDispatchApi'
+import { resetAssignments, updateState } from '~/composables/useDispatchApi'
 
-const { state } = useDispatchStore()
+const props = defineProps<{
+  canResetAssignments: boolean
+  canDeleteInterventions: boolean
+}>()
+
+const { state, snapshot, applyResetSnapshot } = useDispatchStore()
 const toast = useAppToast()
 
 const hospitalOpen = ref<boolean>(true)
 const hospitalMenu = ref<boolean>(false)
+const resettingAssignments = ref(false)
+const resetDialogOpen = ref(false)
+const deleteInterventions = ref(false)
+const dynamicInterventions = computed(() =>
+  snapshot.value.slots.filter(
+    (slot) => slot.kind === 'intervention' || slot.kind === 'consultation'
+  )
+)
+const hasAssignments = computed(() => snapshot.value.slots.some((slot) => slot.assignments.length > 0))
+const canResetDispatch = computed(() =>
+  hasAssignments.value ||
+  state.value.hospital_status !== 'ferme' ||
+  (props.canDeleteInterventions && dynamicInterventions.value.length > 0)
+)
 
 watch(
   () => state.value.hospital_status,
@@ -21,6 +40,27 @@ async function setHospital(s: 'ouvert' | 'ferme' | 'nuit') {
     hospitalMenu.value = false
   } catch {
     toast.error('Mise à jour impossible.')
+  }
+}
+
+async function resetDispatchAssignments() {
+  if (resettingAssignments.value || !canResetDispatch.value) return
+
+  resettingAssignments.value = true
+  try {
+    const updatedSnapshot = await resetAssignments(deleteInterventions.value)
+    applyResetSnapshot(updatedSnapshot)
+    toast.success(
+      deleteInterventions.value
+        ? 'Dispatch réinitialisé : hôpital fermé, affectations retirées et interventions supprimées.'
+        : 'Dispatch réinitialisé : hôpital fermé et employés remis hors service BCES.'
+    )
+    resetDialogOpen.value = false
+    deleteInterventions.value = false
+  } catch {
+    toast.error('Réinitialisation du Dispatch impossible.')
+  } finally {
+    resettingAssignments.value = false
   }
 }
 
@@ -117,7 +157,57 @@ const safdLabel = computed(() =>
       </span>
     </div>
 
+    <div v-if="props.canResetAssignments" class="dh__group dh__reset">
+      <button
+        type="button"
+        class="dh__reset-button"
+        :disabled="resettingAssignments || !canResetDispatch"
+        @click="resetDialogOpen = true"
+      >
+        <Icon :name="resettingAssignments ? 'lucide:loader-circle' : 'lucide:rotate-ccw'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
+        {{ resettingAssignments ? 'Réinitialisation…' : 'Tempête' }}
+      </button>
+    </div>
+
   </header>
+  <Teleport to="body">
+    <div
+      v-if="resetDialogOpen"
+      class="dh-modal"
+      role="presentation"
+      @click.self="resetDialogOpen = false"
+      @keydown.esc="resetDialogOpen = false"
+    >
+      <section
+        class="dh-modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dh-reset-title"
+        aria-describedby="dh-reset-description"
+      >
+        <h2 id="dh-reset-title">Réinitialiser le Dispatch ?</h2>
+        <p id="dh-reset-description">
+          Les employés affectés seront remis dans « Hors service BCES » et l’hôpital sera fermé.
+        </p>
+        <label v-if="props.canDeleteInterventions" class="dh-modal__option">
+          <input v-model="deleteInterventions" type="checkbox">
+          <span>
+            <strong>Supprimer aussi toutes les interventions et consultations</strong>
+            <small>{{ dynamicInterventions.length }} case{{ dynamicInterventions.length > 1 ? 's' : '' }} concernée{{ dynamicInterventions.length > 1 ? 's' : '' }}</small>
+          </span>
+        </label>
+        <div class="dh-modal__actions">
+          <button type="button" class="dh-modal__cancel" :disabled="resettingAssignments" @click="resetDialogOpen = false">
+            Annuler
+          </button>
+          <button type="button" class="dh-modal__confirm" :disabled="resettingAssignments" @click="resetDispatchAssignments">
+            <Icon :name="resettingAssignments ? 'lucide:loader-circle' : 'lucide:rotate-ccw'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
+            {{ resettingAssignments ? 'Réinitialisation…' : 'Confirmer' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -270,5 +360,133 @@ const safdLabel = computed(() =>
   flex-wrap: wrap;
   margin-left: 6px;
   margin-right: 8px;
+}
+
+.dh__reset {
+  margin-left: auto;
+}
+
+.dh__reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid rgba(210, 85, 79, 0.45);
+  border-radius: 0;
+  color: #ec8a86;
+  background: rgba(210, 85, 79, 0.12);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dh__reset-button:hover:not(:disabled) {
+  background: rgba(210, 85, 79, 0.2);
+}
+
+.dh__reset-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dh__spin {
+  animation: dh-spin 1s linear infinite;
+}
+
+@keyframes dh-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dh-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.dh-modal__panel {
+  width: min(440px, 100%);
+  padding: 20px;
+  border: 1px solid var(--dp-line-strong);
+  background: var(--dp-panel);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+}
+
+.dh-modal__panel h2 {
+  margin: 0;
+  color: var(--dp-text);
+  font-size: 16px;
+}
+
+.dh-modal__panel > p {
+  margin: 10px 0 16px;
+  color: var(--dp-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dh-modal__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--dp-line);
+  color: var(--dp-text);
+  background: var(--dp-panel-2);
+  cursor: pointer;
+}
+
+.dh-modal__option input {
+  margin-top: 2px;
+  accent-color: var(--dp-danger);
+}
+
+.dh-modal__option span {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.dh-modal__option small {
+  color: var(--dp-text-dim);
+  font-size: 10px;
+}
+
+.dh-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dh-modal__actions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--dp-line);
+  color: var(--dp-text-2);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dh-modal__actions .dh-modal__confirm {
+  border-color: var(--dp-danger);
+  color: #fff;
+  background: var(--dp-danger);
+}
+
+.dh-modal__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 </style>

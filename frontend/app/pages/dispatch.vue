@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { assignUser, createSlot, fetchSnapshot, unassignUser } from '~/composables/useDispatchApi'
+import { assignUser, createSlot, fetchSnapshot, saveDispatchNote, unassignUser } from '~/composables/useDispatchApi'
 import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Dispatch BCES' })
 
-const { data: meData } = await useAsyncData('me-dispatch', async () => {
+interface DispatchUser {
+  is_super_admin: boolean
+  grade_permissions: string[]
+}
+
+const { data: meData } = await useAsyncData<DispatchUser | null>('me-dispatch', async () => {
   try {
     const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-    return await $fetch('/api/me', { credentials: 'include', headers })
+    return await $fetch<DispatchUser>('/api/me', { credentials: 'include', headers })
   } catch {
     return null
   }
@@ -48,6 +53,11 @@ const {
 const { connect, disconnect } = useDispatchSocket()
 const toast = useAppToast()
 const movingEmployees = new Set<number>()
+const noteDraft = ref('')
+const noteDirty = ref(false)
+const savingNote = ref(false)
+const editingNote = ref(false)
+const noteEditor = ref<HTMLTextAreaElement | null>(null)
 
 const { data: initialSnapshot } = await useAsyncData('dispatch-snapshot-initial', async () => {
   try {
@@ -59,10 +69,18 @@ const { data: initialSnapshot } = await useAsyncData('dispatch-snapshot-initial'
 
 if (initialSnapshot.value) {
   applySnapshot(initialSnapshot.value)
+  noteDraft.value = initialSnapshot.value.note ?? ''
 }
 
 onMounted(() => connect())
 onBeforeUnmount(() => disconnect())
+
+watch(
+  () => snapshot.value.note,
+  (note) => {
+    if (!editingNote.value && !noteDirty.value) noteDraft.value = note ?? ''
+  }
+)
 
 watch(connected, (v) => {
   if (v) toast.success('Synchronisation en direct.')
@@ -124,10 +142,42 @@ async function addIntervention() {
     adding.value = false
   }
 }
+
+async function saveNote() {
+  if (savingNote.value || !noteDirty.value) return
+  savingNote.value = true
+  try {
+    const updatedSnapshot = await saveDispatchNote(noteDraft.value)
+    applySnapshot(updatedSnapshot)
+    noteDirty.value = false
+  } catch {
+    toast.error('Mise à jour du bloc-notes impossible.')
+  } finally {
+    savingNote.value = false
+  }
+}
+
+async function editNote() {
+  if (editingNote.value || savingNote.value) return
+  if (!noteDirty.value) noteDraft.value = snapshot.value.note ?? ''
+  editingNote.value = true
+  await nextTick()
+  noteEditor.value?.focus()
+  const end = noteEditor.value?.value.length ?? 0
+  noteEditor.value?.setSelectionRange(end, end)
+}
+
+async function finishNoteEdit() {
+  editingNote.value = false
+  await saveNote()
+}
 </script>
 
 <template>
-  <DispatchHeader />
+  <DispatchHeader
+    :can-reset-assignments="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_assignments'))"
+    :can-delete-interventions="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_slots'))"
+  />
 
   <main class="dp">
     <div class="dp__board">
@@ -274,6 +324,47 @@ async function addIntervention() {
           </section>
         </div>
       </div>
+
+      <div class="dp__tools">
+        <section class="z z--fleet">
+          <header class="z__head">
+            <Icon name="lucide:car-front" size="12" />
+            <span>Flotte de véhicules</span>
+          </header>
+          <div class="dp__placeholder">
+            <Icon name="lucide:construction" size="18" />
+            <span>Gestion de la flotte à venir</span>
+          </div>
+        </section>
+
+        <section class="z z--notes">
+          <header class="z__head">
+            <Icon name="lucide:notebook-pen" size="12" />
+            <span>Prise de note centrale</span>
+            <span v-if="savingNote" class="dp__note-status">Mise à jour…</span>
+          </header>
+          <textarea
+            v-if="editingNote"
+            ref="noteEditor"
+            v-model="noteDraft"
+            class="dp__note-input"
+            maxlength="10000"
+            placeholder="Notes partagées du Dispatch…"
+            aria-label="Bloc-notes partagé du Dispatch"
+            @input="noteDirty = true"
+            @blur="finishNoteEdit"
+          />
+          <button
+            v-else
+            type="button"
+            class="dp__note-display"
+            :class="{ 'is-empty': !snapshot.note }"
+            aria-label="Double-cliquer pour modifier la prise de note centrale"
+            title="Double-cliquer pour modifier"
+            @dblclick="editNote"
+          >{{ snapshot.note || 'Double-cliquez pour ajouter une note…' }}</button>
+        </section>
+      </div>
     </div>
   </main>
 </template>
@@ -293,12 +384,13 @@ async function addIntervention() {
     minmax(0, 1.15fr)
     minmax(0, 1fr)
     minmax(220px, 260px);
-  grid-template-rows: 160px minmax(170px, 1fr) 112px 112px;
+  grid-template-rows: minmax(160px, max-content) minmax(170px, 1fr) 112px 112px 150px;
   grid-template-areas:
     'centrale hopital hors radio'
     'inter hopital hors radio'
     'inter lower lower radio'
-    'inter lower lower radio';
+    'inter lower lower radio'
+    'inter tools tools radio';
   gap: 4px;
   height: 100%;
   min-height: 0;
@@ -326,6 +418,91 @@ async function addIntervention() {
   min-width: 0;
   min-height: 0;
 }
+
+.dp__tools {
+  grid-area: tools;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dp__placeholder {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  color: var(--dp-text-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
+.dp__note-status {
+  color: var(--dp-text-dim);
+  font-size: 9px;
+}
+
+.z--notes .z__head {
+  justify-content: center;
+}
+
+.dp__note-input {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  padding: 8px;
+  color: var(--dp-text);
+  background: var(--dp-panel-2);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.dp__note-display {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  padding: 8px;
+  color: var(--dp-text);
+  background: var(--dp-panel-2);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.dp__note-display.is-empty {
+  color: var(--dp-text-dim);
+  font-style: italic;
+}
+
+.dp__note-input:focus,
+.dp__note-display:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--dp-accent-line);
+}
+
+.dp__spin {
+  animation: dp-spin 1s linear infinite;
+}
+
+@keyframes dp-spin {
+  to { transform: rotate(360deg); }
+}
 .z {
   display: flex;
   flex-direction: column;
@@ -346,18 +523,21 @@ async function addIntervention() {
 .z--ipt      { grid-area: ipt; }
 .z--fin      { grid-area: fin; }
 .z--pause    { grid-area: pause; }
+.z--fleet,
+.z--notes { min-height: 0; }
 
 .z--centrale .z__rail :deep(.iv) {
   width: 100%;
   min-width: 0;
   flex: 0 0 auto;
   align-self: flex-start;
-  min-height: 126px;
+  min-height: 0;
   height: auto;
 }
 
 .z--centrale .z__rail {
   flex: 0 0 auto;
+  overflow-y: auto;
 }
 
 .z--inter .z__rail {
@@ -603,7 +783,7 @@ async function addIntervention() {
 }
 
 @media (max-width: 900px) {
-  .dp { overflow: auto; }
+  .dp { overflow: hidden; }
   .dp__board {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
@@ -612,9 +792,12 @@ async function addIntervention() {
       'hopital hopital'
       'hors hors'
       'lower lower'
+      'tools tools'
       'radio radio';
-    grid-template-rows: 120px 280px minmax(220px, auto) 220px 230px 400px;
+    grid-template-rows: minmax(120px, max-content) 280px minmax(220px, auto) 220px 230px 180px 400px;
     height: auto;
+    min-height: 100%;
+    overflow-y: auto;
   }
 }
 </style>

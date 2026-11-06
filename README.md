@@ -42,6 +42,12 @@ interventions et des radios, avec authentification Discord OAuth2.
   Discord ; les affectations persistent par employé.
 - En-tête d'état : fréquences radio, statut Hôpital (ouvert / fermé / nuit),
   puces **LSES** et **SAFD** en lecture seule (synchronisées depuis un Google Sheet).
+- Panneau de flotte de véhicules (emplacement préparé) et bloc-notes Dispatch
+  partagé, modifiable au double-clic puis sauvegardé automatiquement à la
+  sortie de l’édition.
+- Événements de l’Agenda du jour visibles sous les radios ; tous les comptes
+  actifs peuvent consulter l’agenda, tandis que sa gestion reste réservée aux
+  grades autorisés.
 - Mises à jour temps réel via WebSocket, sans rafraîchissement de page.
 
 ### Tableau de bord (`/dashboard`)
@@ -343,6 +349,8 @@ permission ; un compte en attente reçoit un `403`.
 | Méthode | Chemin | Description |
 |---|---|---|
 | `GET` | `/api/dispatch/snapshot` | Slots + radios + état courant |
+| `PUT` | `/api/dispatch/note` | Met à jour le bloc-notes partagé du Dispatch |
+| `POST` | `/api/dispatch/assignments/reset` | Ferme l’hôpital, remet les employés hors service et peut supprimer les interventions |
 | `POST` | `/api/dispatch/slots` | Crée un slot (`kind`: `intervention` \| `consultation`) |
 | `PATCH` | `/api/dispatch/slots/{id}` | Modifie un slot (titre, statut, code postal, lieu, type) |
 | `DELETE` | `/api/dispatch/slots/{id}` | Supprime un slot (et ses affectations) |
