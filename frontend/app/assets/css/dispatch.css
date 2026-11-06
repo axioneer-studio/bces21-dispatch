@@ -43,7 +43,7 @@
   --dp-tile-border-active: rgba(70, 153, 109, 0.45);
 }
 
-/* Le body porte background.png pour les écrans d'authentification.
+/* Le body porte son image de fond pour les écrans d'authentification.
    Sur le layout dispatch on le neutralise pour un fond plat + palette dédiée. */
 body[data-layout='dispatch'] {
   background-image: none !important;
