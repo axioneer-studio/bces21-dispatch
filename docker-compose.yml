@@ -4,25 +4,39 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+
     environment:
-      APP_NAME: BCES Dispatch API
-      APP_VERSION: 0.1.0
+      APP_NAME: "BCES Dispatch API"
+      APP_VERSION: "0.1.0"
       DEBUG: "false"
-      APP_TIMEZONE: Europe/Paris
+      APP_TIMEZONE: "Europe/Paris"
+
+      # Database
       DATABASE_URL: sqlite+aiosqlite:////app/data/BCES.db
+
+      # Coolify generates these URLs from the domains configured for each service.
       SERVICE_URL_BACKEND_8000: /
       FRONTEND_BASE_URL: ${SERVICE_URL_FRONTEND_3000}
       CORS_ALLOW_ORIGINS: ${SERVICE_URL_FRONTEND_3000}
+
+      # Discord OAuth2
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in the Coolify environment}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in the Coolify environment}
       DISCORD_REDIRECT_URI: ${SERVICE_URL_BACKEND_8000}/api/auth/discord/callback
-      DISCORD_SCOPES: identify
-      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in the Coolify environment}
-      SESSION_COOKIE_NAME: bces_session
+      DISCORD_SCOPES: "identify"
+
+      # Sessions
+      SERVICE_REALBASE64_64_SESSION: /
+      SESSION_SECRET: ${SERVICE_REALBASE64_64_SESSION}
+      SESSION_COOKIE_NAME: "bces_session"
       SESSION_COOKIE_SECURE: "true"
       SESSION_TTL_SECONDS: "1209600"
+
+      # Profile management
       PROFILE_DEADLINE_SECONDS: "86400"
       CLEANUP_INTERVAL_SECONDS: "1800"
+
+      # Google Sheets
       STATUS_SHEET_CSV_URL: https://docs.google.com/spreadsheets/d/1A1gxOho_roNwxTtcbiEpLGSWbD8JUasMDu4NL-zdcbw/export?format=csv&gid=0
       STATUS_SYNC_INTERVAL_SECONDS: "30"
     expose:
@@ -47,11 +61,12 @@ services:
       args:
         API_INTERNAL_BASE: http://backend:8000
     restart: unless-stopped
+
     environment:
       SERVICE_URL_FRONTEND_3000: /
       NUXT_PUBLIC_API_BASE: ${SERVICE_URL_BACKEND_8000}
-      NUXT_PUBLIC_DISCORD_AUTH_URL: /api/auth/discord/start
-      NUXT_PUBLIC_TIMEZONE: Europe/Paris
+      NUXT_PUBLIC_DISCORD_AUTH_URL: ${SERVICE_URL_BACKEND_8000}/api/auth/discord/start
+      NUXT_PUBLIC_TIMEZONE: "Europe/Paris"
     depends_on:
       backend:
         condition: service_healthy

@@ -176,12 +176,11 @@ Vous pouvez aussi le lancer depuis PowerShell avec `.\dev.ps1`.
 
 Le dépôt inclut un `docker-compose.yml` ainsi qu'un Dockerfile pour chaque
 application. Dans Coolify, créez une ressource **Docker Compose** depuis le
-dépôt et définissez ces variables dans son environnement (voir `.env.example`) :
+dépôt et renseignez uniquement les identifiants Discord (voir `.env.example`) :
 
-- Les réglages du backend (base de données, sessions, OAuth, tâches de fond,
-  etc.) sont transmis au conteneur par `docker-compose.yml`. Renseignez leurs
-  valeurs dans l'environnement Coolify ; le fichier local `backend/.env` n'est
-  pas copié dans l'image et n'est pas chargé automatiquement.
+- Les valeurs par défaut du backend (base de données, sessions, tâches de fond,
+  etc.) sont définies directement dans `docker-compose.yml`. Le fichier local
+  `backend/.env` n'est pas copié dans l'image ni chargé automatiquement.
 - Les domaines publics sont générés par Coolify à partir des entrées
   `SERVICE_URL_FRONTEND_3000` et `SERVICE_URL_BACKEND_8000` du Compose. Ils
   alimentent automatiquement le frontend, le CORS et l'URL de callback.
@@ -189,18 +188,17 @@ dépôt et définissez ces variables dans son environnement (voir `.env.example`
   de l'application Discord, en remplaçant le domaine par celui généré ou
   configuré dans Coolify.
 - `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET` : identifiants Discord.
-- `SESSION_SECRET` : secret aléatoire, par exemple généré avec
-  `openssl rand -hex 32`.
 
-Ce sont les seules variables à renseigner manuellement dans Coolify ; les
-domaines sont générés et les autres paramètres utilisent leurs valeurs par
-défaut directement dans le Compose.
+Coolify génère et conserve automatiquement `SESSION_SECRET` via sa variable
+`SERVICE_REALBASE64_64_SESSION`. Les seuls champs à saisir manuellement sont
+donc `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET`.
 
 Associez chaque domaine au service correspondant dans Coolify, sur les ports
 `3000` (frontend) et `8000` (backend). L'API doit être joignable par le
-navigateur depuis son domaine HTTPS ; `FRONTEND_URL` est également utilisé pour
-la politique CORS. Le backend et le frontend communiquent aussi sur le réseau
-interne Compose. La base SQLite est conservée dans le volume `dispatch-data`.
+navigateur depuis son domaine HTTPS ; l'origine CORS est dérivée
+automatiquement du domaine frontend. Le backend et le frontend communiquent
+aussi sur le réseau interne Compose. La base SQLite est conservée dans le
+volume `dispatch-data`.
 Ne définissez pas plusieurs réplicas du backend avec cette base SQLite.
 
 ### Backend
