@@ -200,6 +200,9 @@ SQLite dans le volume `dispatch-data`, utilisez
 `sqlite+aiosqlite:////app/data/BCES.db` ; pour une base externe, utilisez une
 URL SQLAlchemy async correspondante.
 
+Le cookie de session utilise le domaine partagé `.bces.axioneer.com` afin
+qu'il soit transmis entre le frontend et l'API sur leurs sous-domaines.
+
 Associez chaque domaine au service correspondant dans Coolify, sur les ports
 `3000` (frontend) et `8000` (backend). L'API doit être joignable par le
 navigateur depuis son domaine HTTPS ; l'origine CORS est dérivée
