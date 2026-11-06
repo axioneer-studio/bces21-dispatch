@@ -182,13 +182,19 @@ dépôt et définissez ces variables dans son environnement (voir `.env.example`
   etc.) sont transmis au conteneur par `docker-compose.yml`. Renseignez leurs
   valeurs dans l'environnement Coolify ; le fichier local `backend/.env` n'est
   pas copié dans l'image et n'est pas chargé automatiquement.
-- `FRONTEND_URL` : domaine HTTPS du service `frontend`.
-- `API_URL` : domaine HTTPS du service `backend`.
-- `DISCORD_REDIRECT_URI` : `${API_URL}/api/auth/discord/callback`, à déclarer
-  aussi dans les Redirect URI de l'application Discord.
+- Les domaines publics sont générés par Coolify à partir des entrées
+  `SERVICE_URL_FRONTEND_3000` et `SERVICE_URL_BACKEND_8000` du Compose. Ils
+  alimentent automatiquement le frontend, le CORS et l'URL de callback.
+- Ajoutez `https://<domaine-api>/api/auth/discord/callback` aux Redirect URI
+  de l'application Discord, en remplaçant le domaine par celui généré ou
+  configuré dans Coolify.
 - `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET` : identifiants Discord.
 - `SESSION_SECRET` : secret aléatoire, par exemple généré avec
   `openssl rand -hex 32`.
+
+Ce sont les seules variables à renseigner manuellement dans Coolify ; les
+domaines sont générés et les autres paramètres utilisent leurs valeurs par
+défaut directement dans le Compose.
 
 Associez chaque domaine au service correspondant dans Coolify, sur les ports
 `3000` (frontend) et `8000` (backend). L'API doit être joignable par le

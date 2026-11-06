@@ -5,26 +5,26 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      APP_NAME: ${APP_NAME:-BCES Dispatch API}
-      APP_VERSION: ${APP_VERSION:-0.1.0}
-      DEBUG: ${DEBUG:-false}
-      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Paris}
-      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/BCES.db}
-      FRONTEND_BASE_URL: ${FRONTEND_URL:?Set FRONTEND_URL in the Coolify environment}
-      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-${FRONTEND_URL:?Set FRONTEND_URL in the Coolify environment}}
+      APP_NAME: BCES Dispatch API
+      APP_VERSION: 0.1.0
+      DEBUG: "false"
+      APP_TIMEZONE: Europe/Paris
+      DATABASE_URL: sqlite+aiosqlite:////app/data/BCES.db
+      SERVICE_URL_BACKEND_8000: /
+      FRONTEND_BASE_URL: ${SERVICE_URL_FRONTEND_3000}
+      CORS_ALLOW_ORIGINS: ${SERVICE_URL_FRONTEND_3000}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in the Coolify environment}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in the Coolify environment}
-      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:?Set DISCORD_REDIRECT_URI in the Coolify environment}
-      DISCORD_SCOPES: ${DISCORD_SCOPES:-identify}
+      DISCORD_REDIRECT_URI: ${SERVICE_URL_BACKEND_8000}/api/auth/discord/callback
+      DISCORD_SCOPES: identify
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in the Coolify environment}
-      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-bces_session}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
-      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
-      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-1209600}
-      PROFILE_DEADLINE_SECONDS: ${PROFILE_DEADLINE_SECONDS:-86400}
-      CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-1800}
-      STATUS_SHEET_CSV_URL: ${STATUS_SHEET_CSV_URL:-https://docs.google.com/spreadsheets/d/1A1gxOho_roNwxTtcbiEpLGSWbD8JUasMDu4NL-zdcbw/export?format=csv&gid=0}
-      STATUS_SYNC_INTERVAL_SECONDS: ${STATUS_SYNC_INTERVAL_SECONDS:-30}
+      SESSION_COOKIE_NAME: bces_session
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_TTL_SECONDS: "1209600"
+      PROFILE_DEADLINE_SECONDS: "86400"
+      CLEANUP_INTERVAL_SECONDS: "1800"
+      STATUS_SHEET_CSV_URL: https://docs.google.com/spreadsheets/d/1A1gxOho_roNwxTtcbiEpLGSWbD8JUasMDu4NL-zdcbw/export?format=csv&gid=0
+      STATUS_SYNC_INTERVAL_SECONDS: "30"
     expose:
       - "8000"
     volumes:
@@ -48,9 +48,10 @@ services:
         API_INTERNAL_BASE: http://backend:8000
     restart: unless-stopped
     environment:
-      NUXT_PUBLIC_API_BASE: ${API_URL:?Set API_URL in the Coolify environment}
-      NUXT_PUBLIC_DISCORD_AUTH_URL: ${NUXT_PUBLIC_DISCORD_AUTH_URL:-/api/auth/discord/start}
-      NUXT_PUBLIC_TIMEZONE: ${APP_TIMEZONE:-Europe/Paris}
+      SERVICE_URL_FRONTEND_3000: /
+      NUXT_PUBLIC_API_BASE: ${SERVICE_URL_BACKEND_8000}
+      NUXT_PUBLIC_DISCORD_AUTH_URL: /api/auth/discord/start
+      NUXT_PUBLIC_TIMEZONE: Europe/Paris
     depends_on:
       backend:
         condition: service_healthy
