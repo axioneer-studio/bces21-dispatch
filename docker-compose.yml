@@ -1,0 +1,71 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_NAME: ${APP_NAME:-BCES Dispatch API}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      DEBUG: ${DEBUG:-false}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Paris}
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/BCES.db}
+      FRONTEND_BASE_URL: ${FRONTEND_URL:?Set FRONTEND_URL in the Coolify environment}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-${FRONTEND_URL:?Set FRONTEND_URL in the Coolify environment}}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in the Coolify environment}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in the Coolify environment}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:?Set DISCORD_REDIRECT_URI in the Coolify environment}
+      DISCORD_SCOPES: ${DISCORD_SCOPES:-identify}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in the Coolify environment}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-bces_session}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-1209600}
+      PROFILE_DEADLINE_SECONDS: ${PROFILE_DEADLINE_SECONDS:-86400}
+      CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-1800}
+      STATUS_SHEET_CSV_URL: ${STATUS_SHEET_CSV_URL:-https://docs.google.com/spreadsheets/d/1A1gxOho_roNwxTtcbiEpLGSWbD8JUasMDu4NL-zdcbw/export?format=csv&gid=0}
+      STATUS_SYNC_INTERVAL_SECONDS: ${STATUS_SYNC_INTERVAL_SECONDS:-30}
+    expose:
+      - "8000"
+    volumes:
+      - dispatch-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_INTERNAL_BASE: http://backend:8000
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: ${API_URL:?Set API_URL in the Coolify environment}
+      NUXT_PUBLIC_DISCORD_AUTH_URL: ${NUXT_PUBLIC_DISCORD_AUTH_URL:-/api/auth/discord/start}
+      NUXT_PUBLIC_TIMEZONE: ${APP_TIMEZONE:-Europe/Paris}
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  dispatch-data:
