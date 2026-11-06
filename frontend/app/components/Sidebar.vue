@@ -117,7 +117,7 @@ async function logout() {
     @mouseleave="onMouseLeave"
   >
     <div class="sidebar__brand">
-      <img src="/images/logo.png" alt="BCES" class="sidebar__logo" />
+      <img src="/images/logo.webp" alt="BCES" class="sidebar__logo" width="28" height="28" />
       <span v-if="expanded" class="sidebar__brand-name">BCES</span>
     </div>
 

@@ -22,7 +22,14 @@ onMounted(() => {
 <template>
   <main class="bces-card bces-card--wide">
     <div class="bces-card__brand">
-      <img src="/images/logo.png" alt="BCES" />
+      <img
+        src="/images/logo-72.webp"
+        srcset="/images/logo-72.webp 1x, /images/logo.webp 2x"
+        alt="BCES"
+        width="72"
+        height="72"
+        fetchpriority="high"
+      />
       <span class="bces-card__brand-name">BCES Dispatch</span>
     </div>
 

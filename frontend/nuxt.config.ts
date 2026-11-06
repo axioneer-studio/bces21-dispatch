@@ -41,7 +41,7 @@ export default defineNuxtConfig({
         { name: 'theme-color', content: '#21252b' }
       ],
       link: [
-        { rel: 'icon', type: 'image/png', href: '/images/logo.png' }
+        { rel: 'icon', type: 'image/png', href: '/images/favicon.png' }
       ]
     }
   },
@@ -51,6 +51,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    compressPublicAssets: true,
     routeRules: {
       '/api/**': {
         proxy: apiProxyBase + '/api/**'
