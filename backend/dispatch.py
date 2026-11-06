@@ -326,17 +326,17 @@ async def assign_user(
     result = await db.execute(
         select(DispatchAssignment).where(DispatchAssignment.employee_id == employee.id)
     )
-    for assignment in result.scalars().all():
-        if assignment.slot_id == slot.id:
-            slot.assignments.remove(assignment)
-        await db.delete(assignment)
+    assignment = result.scalar_one_or_none()
+    if assignment is None:
+        assignment = DispatchAssignment(
+            employee_id=employee.id,
+            order=len(slot.assignments),
+        )
+        slot.assignments.append(assignment)
+    elif assignment.slot_id != slot.id:
+        assignment.order = len(slot.assignments)
+        slot.assignments.append(assignment)
 
-    assignment = DispatchAssignment(
-        slot_id=slot_id,
-        employee_id=employee.id,
-        order=len(slot.assignments),
-    )
-    slot.assignments.append(assignment)
     await db.commit()
     await db.refresh(slot)
     await push_snapshot(db)
