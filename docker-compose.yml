@@ -14,15 +14,15 @@ services:
       # Database
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the Coolify environment}
 
-      # Coolify routes these public hostnames to the internal container ports.
-      SERVICE_URL_BACKEND_8000: /
-      FRONTEND_BASE_URL: https://${SERVICE_FQDN_FRONTEND_3000}
-      CORS_ALLOW_ORIGINS: https://${SERVICE_FQDN_FRONTEND_3000}
+      # Coolify provides public URLs without exposing the internal container ports.
+      SERVICE_URL_BACKEND: /
+      FRONTEND_BASE_URL: ${SERVICE_URL_FRONTEND}
+      CORS_ALLOW_ORIGINS: ${SERVICE_URL_FRONTEND}
 
       # Discord OAuth2
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in the Coolify environment}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in the Coolify environment}
-      DISCORD_REDIRECT_URI: https://${SERVICE_FQDN_BACKEND_8000}/api/auth/discord/callback
+      DISCORD_REDIRECT_URI: ${SERVICE_URL_BACKEND}/api/auth/discord/callback
       DISCORD_SCOPES: "identify"
 
       # Sessions
@@ -63,9 +63,9 @@ services:
     restart: unless-stopped
 
     environment:
-      SERVICE_URL_FRONTEND_3000: /
-      NUXT_PUBLIC_API_BASE: https://${SERVICE_FQDN_BACKEND_8000}
-      NUXT_PUBLIC_DISCORD_AUTH_URL: https://${SERVICE_FQDN_BACKEND_8000}/api/auth/discord/start
+      SERVICE_URL_FRONTEND: /
+      NUXT_PUBLIC_API_BASE: ${SERVICE_URL_BACKEND}
+      NUXT_PUBLIC_DISCORD_AUTH_URL: ${SERVICE_URL_BACKEND}/api/auth/discord/start
       NUXT_PUBLIC_TIMEZONE: "Europe/Paris"
     depends_on:
       backend:

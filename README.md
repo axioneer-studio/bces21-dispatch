@@ -185,8 +185,9 @@ Discord (voir `.env.example`) :
   `backend/.env` n'est pas copié dans l'image ni chargé automatiquement.
 - Les domaines publics sont configurés dans Coolify pour les services
   `frontend` et `backend`. Le Compose utilise leurs noms d'hôte
-  (`SERVICE_FQDN_FRONTEND_3000` et `SERVICE_FQDN_BACKEND_8000`) avec HTTPS, sans
-  exposer les ports internes `3000` / `8000` dans les URLs du navigateur.
+  (`SERVICE_URL_FRONTEND` et `SERVICE_URL_BACKEND`) sans suffixe de port :
+  `3000` et `8000` restent les ports internes des conteneurs et ne figurent pas
+  dans les URLs du navigateur.
 - Ajoutez `https://<domaine-api>/api/auth/discord/callback` aux Redirect URI
   de l'application Discord, en remplaçant le domaine par celui généré ou
   configuré dans Coolify.
