@@ -12,6 +12,18 @@ type EventItem = {
   color: string
 }
 
+const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
+const { data: currentUser } = await useAsyncData('agenda-current-user', async () => {
+  try {
+    return await $fetch<{
+      is_super_admin: boolean
+      grade_permissions: string[]
+    }>('/api/me', { credentials: 'include', headers: requestHeaders })
+  } catch {
+    return null
+  }
+})
+
 const views: { value: View; label: string; icon: string }[] = [
   { value: 'day', label: 'Jour', icon: 'lucide:calendar' },
   { value: 'week', label: 'Semaine', icon: 'lucide:columns-3' },
@@ -28,6 +40,10 @@ const loading = ref(true)
 const loadError = ref('')
 const actionError = ref('')
 const authRequired = ref(false)
+const canManageEvents = computed(() => Boolean(
+  currentUser.value?.is_super_admin ||
+  currentUser.value?.grade_permissions.includes('agenda.manage_events')
+))
 const editorOpen = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
@@ -199,6 +215,7 @@ function toLocalDateTime(value: string) {
 }
 
 function openEditor(date = cursor.value, event?: EventItem) {
+  if (!canManageEvents.value) return
   editingEvent.value = event ?? null
   form.title = event?.title ?? ''
   form.description = event?.description ?? ''
@@ -239,6 +256,7 @@ async function loadEvents() {
 }
 
 async function saveEvent() {
+  if (!canManageEvents.value) return
   actionError.value = ''
   if (!form.title.trim() || !form.starts_at) {
     actionError.value = 'Renseignez un titre et une date de début.'
@@ -283,6 +301,7 @@ async function saveEvent() {
 }
 
 async function removeEvent(event: EventItem) {
+  if (!canManageEvents.value) return
   if (!window.confirm(`Supprimer « ${event.title} » de l’agenda ?`)) return
   actionError.value = ''
   deleting.value = true
@@ -381,7 +400,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
           <span :class="{ 'is-loading': loading, 'is-error': loadError }"></span>
           {{ loading ? 'Synchronisation…' : loadError ? 'Indisponible' : 'À jour' }}
         </span>
-        <button class="agenda-create agenda-create--header" type="button" @click="openEditor()">
+        <button v-if="canManageEvents" class="agenda-create agenda-create--header" type="button" @click="openEditor()">
           <Icon name="lucide:plus" size="17" />
           <span class="agenda-create__label">Créer un événement</span>
         </button>
@@ -390,7 +409,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
     <div class="agenda-workspace">
       <aside class="agenda-sidebar">
-        <button class="agenda-create agenda-create--side" type="button" @click="openEditor()">
+        <button v-if="canManageEvents" class="agenda-create agenda-create--side" type="button" @click="openEditor()">
           <Icon name="lucide:plus" size="19" />
           <span>Créer un événement</span>
         </button>
@@ -521,23 +540,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
                 'is-today': dateKey(date) === todayKey
               }"
             >
-              <button class="month-day__number" type="button" @click="openEditor(date)">
+              <button v-if="canManageEvents" class="month-day__number" type="button" @click="openEditor(date)">
                 <span>{{ date.getDate() }}</span>
                 <Icon name="lucide:plus" size="14" />
               </button>
+              <span v-else class="month-day__number"><span>{{ date.getDate() }}</span></span>
               <div class="month-day__events">
-                <button
+                <component
+                  :is="canManageEvents ? 'button' : 'div'"
                   v-for="event in eventsFor(date).slice(0, 3)"
                   :key="event.id"
                   type="button"
                   class="month-event"
                   :style="{ '--event-color': event.color || '#58ad7b' }"
                   :title="`${formatDay(date)} · ${eventTime(event, date)} · ${event.title} — modifier`"
-                  @click="openEditor(date, event)"
+                  @click="canManageEvents && openEditor(date, event)"
                 >
                   <time>{{ eventTime(event, date) }}</time>
                   <span>{{ event.title }}</span>
-                </button>
+                </component>
                 <span v-if="eventsFor(date).length > 3" class="month-day__more">
                   + {{ eventsFor(date).length - 3 }} autre{{ eventsFor(date).length > 4 ? 's' : '' }}
                 </span>
@@ -589,7 +610,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
             <span><Icon name="lucide:calendar-heart" size="24" /></span>
             <h3>Aucun événement à venir</h3>
             <p>Les prochains rendez-vous apparaîtront ici.</p>
-            <button class="agenda-create" type="button" @click="openEditor()">
+            <button v-if="canManageEvents" class="agenda-create" type="button" @click="openEditor()">
               <Icon name="lucide:plus" size="17" /> Créer un événement
             </button>
           </div>
@@ -606,10 +627,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
                   <h3>{{ event.title }}</h3>
                   <p v-if="event.description">{{ event.description }}</p>
                 </div>
-                <button type="button" :aria-label="`Modifier ${event.title}`" @click="openEditor(group.date, event)">
+                <button v-if="canManageEvents" type="button" :aria-label="`Modifier ${event.title}`" @click="openEditor(group.date, event)">
                   <Icon name="lucide:pencil" size="16" />
                 </button>
-                <button type="button" :aria-label="`Supprimer ${event.title}`" @click="removeEvent(event)">
+                <button v-if="canManageEvents" type="button" :aria-label="`Supprimer ${event.title}`" @click="removeEvent(event)">
                   <Icon name="lucide:trash-2" size="16" />
                 </button>
               </article>
@@ -640,14 +661,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
                   <h3>{{ event.title }}</h3>
                   <p v-if="event.description">{{ event.description }}</p>
                 </div>
-                <button type="button" :aria-label="`Modifier ${event.title}`" @click="openEditor(date, event)">
+                <button v-if="canManageEvents" type="button" :aria-label="`Modifier ${event.title}`" @click="openEditor(date, event)">
                   <Icon name="lucide:pencil" size="15" />
                 </button>
-                <button type="button" :aria-label="`Supprimer ${event.title}`" @click="removeEvent(event)">
+                <button v-if="canManageEvents" type="button" :aria-label="`Supprimer ${event.title}`" @click="removeEvent(event)">
                   <Icon name="lucide:trash-2" size="15" />
                 </button>
               </article>
-              <button v-if="!eventsFor(date).length" type="button" class="week-day__empty" @click="openEditor(date)">
+              <button v-if="canManageEvents && !eventsFor(date).length" type="button" class="week-day__empty" @click="openEditor(date)">
                 <Icon name="lucide:plus" size="15" />
                 Ajouter un événement
               </button>

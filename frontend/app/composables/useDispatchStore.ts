@@ -51,6 +51,7 @@ export interface DispatchSnapshot {
   slots: DispatchSlot[]
   radios: DispatchRadio[]
   state: DispatchState
+  note: string
 }
 
 interface PendingEmployeeMove {
@@ -74,7 +75,8 @@ export const useDispatchStore = () => {
   const snapshot = useState<DispatchSnapshot>('dispatch-snapshot', () => ({
     slots: [],
     radios: [],
-    state: emptyState()
+    state: emptyState(),
+    note: ''
   }))
   const pendingMoves = useState<Record<string, PendingEmployeeMove>>(
     'dispatch-pending-moves',
@@ -118,6 +120,11 @@ export const useDispatchStore = () => {
 
   function applySnapshot(data: DispatchSnapshot) {
     snapshot.value = applyPendingMoves(data)
+  }
+
+  function applyResetSnapshot(data: DispatchSnapshot) {
+    pendingMoves.value = {}
+    snapshot.value = data
   }
 
   function beginEmployeeMove(employeeId: number, slotId: number | null) {
@@ -225,6 +232,7 @@ export const useDispatchStore = () => {
     interventions,
     connected,
     applySnapshot,
+    applyResetSnapshot,
     beginEmployeeMove,
     completeEmployeeMove,
     cancelEmployeeMove,

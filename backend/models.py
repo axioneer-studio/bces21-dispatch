@@ -218,6 +218,16 @@ class DispatchState(Base):
     )
 
 
+class DispatchNote(Base):
+    __tablename__ = "dispatch_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class AgendaEvent(Base):
     """Shared calendar item, deliberately independent from dispatch slots."""
 

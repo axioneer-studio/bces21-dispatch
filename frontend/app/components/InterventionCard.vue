@@ -60,13 +60,26 @@ async function remove() {
   }
 }
 
-const assigned = computed(() =>
-  sortAgentsByGradeAndArrival(
-    props.slot.assignments
+const assigned = computed(() => {
+  const assignments = [...props.slot.assignments]
+  if (props.slot.kind === 'centrale') {
+    assignments.sort(
+      (a, b) =>
+        a.order - b.order ||
+        a.created_at.localeCompare(b.created_at) ||
+        a.id - b.id
+    )
+    return assignments
+      .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
+      .filter((agent): agent is Agent => Boolean(agent))
+  }
+
+  return sortAgentsByGradeAndArrival(
+    assignments
       .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
       .filter((agent): agent is Agent => Boolean(agent))
   )
-)
+})
 
 function onDragOver(e: DragEvent) {
   e.preventDefault()
@@ -277,11 +290,11 @@ function unassign(agentId: number) {
 }
 
 .iv__drop {
-  flex: 0 0 64px;
-  height: 64px;
-  min-height: 0;
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 64px;
   min-width: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 3px;
   display: flex;
   flex-direction: row;
@@ -293,7 +306,9 @@ function unassign(agentId: number) {
 }
 
 .iv--compact .iv__drop {
-  flex: 0 0 64px;
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 64px;
   align-content: flex-start;
 }
 

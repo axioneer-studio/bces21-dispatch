@@ -32,6 +32,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
   if (!user) return navigateTo('/')
 
+  if (page === 'agenda') return
   if (user.is_super_admin || user.page_access.includes(page)) return
 
   const firstAllowedPage = user.page_access.find((key) => key in pageRoutes)

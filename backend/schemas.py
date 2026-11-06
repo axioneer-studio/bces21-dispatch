@@ -527,10 +527,19 @@ class StateUpdateRequest(BaseModel):
     radio_codes: Optional[str] = Field(default=None, max_length=2000)
 
 
+class DispatchNoteUpdateRequest(BaseModel):
+    content: str = Field(max_length=10000)
+
+
 class DispatchSnapshot(BaseModel):
     slots: list[SlotOut]
     radios: list[RadioOut]
     state: StateOut
+    note: str = ""
+
+
+class DispatchResetRequest(BaseModel):
+    delete_interventions: bool = False
 
 
 class MessageResponse(BaseModel):

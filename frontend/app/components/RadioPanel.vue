@@ -10,6 +10,93 @@ const props = defineProps<{
 }>()
 
 const toast = useAppToast()
+type AgendaEvent = {
+  id: number
+  title: string
+  starts_at: string
+  ends_at: string | null
+  description: string | null
+  color: string
+}
+
+const agendaEvents = ref<AgendaEvent[]>([])
+const agendaLoading = ref(false)
+const agendaError = ref('')
+let agendaRefreshTimer: ReturnType<typeof setInterval> | undefined
+const agendaTimeFormatter = new Intl.DateTimeFormat('fr-FR', {
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+function agendaEventTime(event: AgendaEvent) {
+  const startsAt = new Date(event.starts_at)
+  if (!event.ends_at) return agendaTimeFormatter.format(startsAt)
+
+  const endsAt = new Date(event.ends_at)
+  const sameDay = startsAt.getFullYear() === endsAt.getFullYear()
+    && startsAt.getMonth() === endsAt.getMonth()
+    && startsAt.getDate() === endsAt.getDate()
+  if (sameDay) {
+    return `${agendaTimeFormatter.format(startsAt)} – ${agendaTimeFormatter.format(endsAt)}`
+  }
+
+  const nextDayAfterStart = new Date(startsAt)
+  nextDayAfterStart.setHours(0, 0, 0, 0)
+  nextDayAfterStart.setDate(nextDayAfterStart.getDate() + 1)
+  const endDate = new Date(endsAt)
+  endDate.setHours(0, 0, 0, 0)
+  if (endDate.getTime() === nextDayAfterStart.getTime()) {
+    return `${agendaTimeFormatter.format(startsAt)} - ${agendaTimeFormatter.format(endsAt)}`
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (startsAt < today) {
+    return endsAt < tomorrow ? `Fin ${agendaTimeFormatter.format(endsAt)}` : 'En cours'
+  }
+  return agendaTimeFormatter.format(startsAt)
+}
+
+const todayEvents = computed(() => {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+
+  return agendaEvents.value
+    .filter((event) => {
+      const eventStart = new Date(event.starts_at)
+      if (!event.ends_at) return eventStart >= start && eventStart < end
+      return eventStart < end && new Date(event.ends_at) > start
+    })
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+})
+
+async function loadAgendaEvents() {
+  if (agendaLoading.value) return
+  agendaLoading.value = true
+  agendaError.value = ''
+  try {
+    agendaEvents.value = await $fetch<AgendaEvent[]>('/api/agenda/events', {
+      credentials: 'include'
+    })
+  } catch {
+    agendaError.value = 'Événements indisponibles.'
+  } finally {
+    agendaLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadAgendaEvents()
+  agendaRefreshTimer = setInterval(loadAgendaEvents, 5 * 60 * 1000)
+})
+
+onBeforeUnmount(() => {
+  if (agendaRefreshTimer) clearInterval(agendaRefreshTimer)
+})
 
 const direction = computed(() => props.radios.filter((r) => r.is_direction))
 const normal = computed(() => props.radios.filter((r) => !r.is_direction))
@@ -183,6 +270,33 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
         <div v-if="!normal.length" class="rp__empty">Aucune radio</div>
       </div>
     </section>
+
+    <section class="rp__agenda">
+      <header class="rp__head">
+        <Icon name="lucide:calendar-days" size="12" />
+        <NuxtLink to="/agenda" class="rp__agenda-link">Agenda du jour</NuxtLink>
+        <span class="rp__count">{{ todayEvents.length }}</span>
+      </header>
+      <div class="rp__agenda-events" aria-live="polite">
+        <p v-if="agendaLoading && !agendaEvents.length" class="rp__empty">Chargement…</p>
+        <div v-else-if="agendaError" class="rp__agenda-error" role="alert">
+          <span>{{ agendaError }}</span>
+          <button type="button" @click="loadAgendaEvents">Réessayer</button>
+        </div>
+        <p v-else-if="!todayEvents.length" class="rp__empty">Aucun événement aujourd’hui</p>
+        <template v-else>
+          <article
+            v-for="event in todayEvents"
+            :key="event.id"
+            class="rp__agenda-event"
+            :style="{ '--event-color': event.color || 'var(--dp-accent)' }"
+          >
+            <time>{{ agendaEventTime(event) }}</time>
+            <span>{{ event.title }}</span>
+          </article>
+        </template>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -204,6 +318,75 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
 .rp__group--grow {
   flex: 1;
   border-bottom: none;
+}
+
+.rp__agenda {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  max-height: 40%;
+  min-height: 170px;
+  border-top: 1px solid var(--dp-line);
+}
+
+.rp__agenda-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rp__agenda-link:hover {
+  color: var(--dp-accent);
+}
+
+.rp__agenda-events {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 3px;
+}
+
+.rp__agenda-event {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin-bottom: 3px;
+  padding: 4px 5px;
+  border-left: 2px solid var(--event-color);
+  background: var(--dp-panel-2);
+  color: var(--dp-text-2);
+  font-size: 10px;
+}
+
+.rp__agenda-event time {
+  flex: 0 0 auto;
+  color: var(--dp-text-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+}
+
+.rp__agenda-event span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp__agenda-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 4px;
+  color: var(--dp-danger);
+  font-size: 10px;
+}
+
+.rp__agenda-error button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .rp__head {

@@ -6,7 +6,7 @@ const MAX_BACKOFF_MS = 30_000
 const AUTH_CLOSE_CODES = new Set([1008, 4401, 4403])
 
 export const useDispatchSocket = () => {
-  const { applySnapshot, setConnected } = useDispatchStore()
+  const { applySnapshot, applyResetSnapshot, setConnected } = useDispatchStore()
   const config = useRuntimeConfig()
 
   let socket: WebSocket | null = null
@@ -83,6 +83,8 @@ export const useDispatchSocket = () => {
         }
         if (msg.type === 'snapshot' && msg.data) {
           applySnapshot(msg.data)
+        } else if (msg.type === 'assignments_reset' && msg.data) {
+          applyResetSnapshot(msg.data)
         }
       } catch {
         /* message illisible : ignoré */

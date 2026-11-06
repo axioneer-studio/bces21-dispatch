@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from deps import require_page_access
+from deps import get_current_user
 from grade_permissions import require_grade_permission
 from models import AgendaEvent, User
 from schemas import AgendaEventCreate, AgendaEventOut, AgendaEventUpdate, MessageResponse
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/agenda", tags=["agenda"])
 async def list_events(
     start: datetime | None = None,
     end: datetime | None = None,
-    _: User = Depends(require_page_access("agenda")),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(AgendaEvent).order_by(AgendaEvent.starts_at)
@@ -31,7 +31,6 @@ async def list_events(
 @router.post("/events", response_model=AgendaEventOut, status_code=status.HTTP_201_CREATED)
 async def create_event(
     payload: AgendaEventCreate,
-    _: User = Depends(require_page_access("agenda")),
     __: User = Depends(require_grade_permission("agenda.manage_events")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -48,7 +47,6 @@ async def create_event(
 async def update_event(
     event_id: int,
     payload: AgendaEventUpdate,
-    _: User = Depends(require_page_access("agenda")),
     __: User = Depends(require_grade_permission("agenda.manage_events")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -67,7 +65,6 @@ async def update_event(
 @router.delete("/events/{event_id}", response_model=MessageResponse)
 async def delete_event(
     event_id: int,
-    _: User = Depends(require_page_access("agenda")),
     __: User = Depends(require_grade_permission("agenda.manage_events")),
     db: AsyncSession = Depends(get_db),
 ):

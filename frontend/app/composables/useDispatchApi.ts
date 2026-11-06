@@ -1,5 +1,5 @@
 import { $fetch } from 'ofetch'
-import type { DispatchRadio, DispatchSlot, DispatchState } from './useDispatchStore'
+import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState } from './useDispatchStore'
 
 const config = () => useRuntimeConfig()
 
@@ -26,8 +26,20 @@ async function req<T>(
 }
 
 export async function fetchSnapshot() {
-  return await req<{ slots: DispatchSlot[]; radios: DispatchRadio[]; state: DispatchState }>(
-    '/api/dispatch/snapshot'
+  return await req<DispatchSnapshot>('/api/dispatch/snapshot')
+}
+
+export async function resetAssignments(deleteInterventions: boolean) {
+  return await req<DispatchSnapshot>(
+    '/api/dispatch/assignments/reset',
+    { method: 'POST', body: { delete_interventions: deleteInterventions } }
+  )
+}
+
+export async function saveDispatchNote(content: string) {
+  return await req<DispatchSnapshot>(
+    '/api/dispatch/note',
+    { method: 'PUT', body: { content } }
   )
 }
 
