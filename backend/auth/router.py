@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,21 +33,12 @@ logger = logging.getLogger("bces.auth")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-_PENDING_STATES: dict[str, datetime] = {}
 _PENDING_TTL_SECONDS = 60 * 10
+_OAUTH_STATE_COOKIE_PREFIX = "bces_oauth_state_"
 
 
-def _register_state(state_value: str) -> None:
-    _PENDING_STATES[state_value] = datetime.now(timezone.utc) + timedelta(
-        seconds=_PENDING_TTL_SECONDS
-    )
-
-
-def _consume_state(state_value: str) -> bool:
-    expiry = _PENDING_STATES.pop(state_value, None)
-    if expiry is None:
-        return False
-    return datetime.now(timezone.utc) <= expiry
+def _state_cookie_name(state_value: str) -> str:
+    return f"{_OAUTH_STATE_COOKIE_PREFIX}{state_value}"
 
 
 def _frontend_redirect(path: str, **params: str | None) -> str:
@@ -104,17 +95,28 @@ async def discord_start() -> RedirectResponse:
         )
 
     state = secrets.token_urlsafe(24)
-    _register_state(state)
     authorize_url = build_authorize_url(state)
-    return RedirectResponse(authorize_url, status_code=302)
+    response = RedirectResponse(authorize_url, status_code=302)
+    response.set_cookie(
+        key=_state_cookie_name(state),
+        value=state,
+        max_age=_PENDING_TTL_SECONDS,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/api/auth/discord",
+    )
+    return response
 
 
 async def _handle_callback(
     code: str,
     state_value: str,
+    state_cookie: str | None,
     db: AsyncSession,
 ) -> RedirectResponse:
-    if not _consume_state(state_value):
+    if not state_cookie or not secrets.compare_digest(state_value, state_cookie):
+        logger.warning("Discord OAuth callback rejected: state cookie is missing or invalid.")
         return RedirectResponse(
             _frontend_redirect(
                 "/", error="invalid_state", error_description="Session OAuth expirée ou invalide."
@@ -213,25 +215,39 @@ def _status_redirect_target(user: User) -> str:
 
 @router.get("/discord/callback")
 async def discord_callback(
+    request: Request,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
     error_description: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
+    settings = get_settings()
+    state_cookie_name = _state_cookie_name(state) if state else None
+    state_cookie = request.cookies.get(state_cookie_name) if state_cookie_name else None
+
     if error:
-        return RedirectResponse(
+        response = RedirectResponse(
             _frontend_redirect("/", error=error, error_description=error_description),
             status_code=302,
         )
-
-    if not code or not state:
-        return RedirectResponse(
+    elif not code or not state:
+        response = RedirectResponse(
             _frontend_redirect("/", error="missing_code"),
             status_code=302,
         )
+    else:
+        response = await _handle_callback(code, state, state_cookie, db)
 
-    return await _handle_callback(code, state, db)
+    if state_cookie_name:
+        response.delete_cookie(
+            key=state_cookie_name,
+            path="/api/auth/discord",
+            secure=settings.session_cookie_secure,
+            httponly=True,
+            samesite="lax",
+        )
+    return response
 
 
 @router.post("/profile", response_model=UserResponse)
