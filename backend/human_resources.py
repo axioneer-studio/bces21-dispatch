@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from dispatch import push_employees_changed
 from app_permissions import require_app_permission
 from deps import (
     require_any_page_access,
@@ -192,6 +193,7 @@ async def create_employee(
     db.add(employee)
     await db.commit()
     await db.refresh(employee)
+    await push_employees_changed()
     return _employee_out(employee, include_hr_details=True)
 
 
@@ -252,6 +254,7 @@ async def update_employee(
         setattr(employee, key, value)
     await db.commit()
     await db.refresh(employee)
+    await push_employees_changed()
     return _employee_out(employee, include_hr_details=True)
 
 
@@ -277,6 +280,7 @@ async def link_employee_account(
     employee.account_user = account
     await db.commit()
     await db.refresh(employee)
+    await push_employees_changed()
     return _employee_out(employee, include_hr_details=True)
 
 
@@ -310,4 +314,5 @@ async def delete_employee(employee_id: int, db: AsyncSession = Depends(get_db)):
         )
     await db.delete(employee)
     await db.commit()
+    await push_employees_changed()
     return MessageResponse(message="Employé supprimé.")

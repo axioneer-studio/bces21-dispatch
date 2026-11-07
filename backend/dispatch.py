@@ -106,6 +106,10 @@ async def push_snapshot(db: AsyncSession) -> None:
         await manager.broadcast({"type": "snapshot", "data": snap})
 
 
+async def push_employees_changed() -> None:
+    await manager.broadcast({"type": "employees_changed"})
+
+
 # --- WebSocket endpoint ---
 
 @router.websocket("/ws/dispatch")

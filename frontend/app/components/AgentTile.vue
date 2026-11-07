@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent } from '~/utils/agent'
-import { agentCallsign, agentDisplayName } from '~/utils/agent'
+import { agentDisplayName } from '~/utils/agent'
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +39,14 @@ const gradeTextColor = computed(() => {
   return luminance > 0.179 ? '#111111' : '#ffffff'
 })
 
+const competencyRows = computed(() => {
+  const rows: string[][] = []
+  for (let index = 0; index < props.agent.competencies.length; index += 6) {
+    rows.push(props.agent.competencies.slice(index, index + 6))
+  }
+  return rows
+})
+
 function onDragStart(e: DragEvent) {
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
@@ -57,7 +65,11 @@ function onRemove(e: MouseEvent) {
 <template>
   <div
     class="at"
-    :class="[`at--${tone}`, { 'at--compact': compact, 'at--graded': agent.grade_color }]"
+    :class="[`at--${tone}`, {
+      'at--compact': compact,
+      'at--graded': agent.grade_color,
+      'at--removable': removable
+    }]"
     :style="agent.grade_color
       ? { '--at-grade-color': agent.grade_color, '--at-grade-text': gradeTextColor }
       : undefined"
@@ -66,8 +78,17 @@ function onRemove(e: MouseEvent) {
     @dragstart="onDragStart"
   >
     <span class="at__name">{{ agentDisplayName(agent, agents) }}</span>
-    <span class="at__skills">{{ agent.competencies.join(' ') || '·' }}</span>
-    <span class="at__num">{{ agentCallsign(agent) }}</span>
+    <span class="at__skills">
+      <span v-if="!competencyRows.length" class="at__skills-empty">·</span>
+      <span v-for="(row, rowIndex) in competencyRows" :key="rowIndex" class="at__skills-row">
+        <span
+          v-for="(competency, index) in row"
+          :key="`${competency}-${index}`"
+          class="at__skill"
+        >{{ competency }}</span>
+      </span>
+    </span>
+    <span class="at__num">{{ agent.phone || '—' }}</span>
     <button
       v-if="removable"
       type="button"
@@ -85,25 +106,26 @@ function onRemove(e: MouseEvent) {
 .at {
   position: relative;
   display: grid;
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  align-content: stretch;
+  grid-template-rows: repeat(3, auto);
+  align-content: center;
   align-items: center;
   justify-items: center;
   gap: 0;
   width: 96px;
-  height: 58px;
+  min-height: 58px;
+  flex: 0 0 96px;
   padding: 3px 4px;
   background: var(--dp-tile-bg);
   border: 1px solid var(--dp-tile-border);
   border-radius: 3px;
   font-variant-numeric: tabular-nums;
   user-select: none;
-  overflow: hidden;
 }
 
 .at--compact {
   width: 84px;
-  height: 48px;
+  min-height: 48px;
+  flex-basis: 84px;
 }
 
 .at--pool {
@@ -134,20 +156,45 @@ function onRemove(e: MouseEvent) {
   font-weight: 700;
   line-height: 1.15;
   color: var(--dp-text);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.at--removable .at__name {
+  padding-right: 12px;
 }
 
 .at__skills {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-size: 10px;
   line-height: 1.15;
-  letter-spacing: -0.5px;
   min-height: 12px;
+  width: 100%;
+  min-width: 0;
   color: inherit;
   text-align: center;
   filter: saturate(1.1);
+}
+
+.at__skill,
+.at__skills-empty {
+  flex: 0 0 calc(100% / 6);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.at__skills-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.at__skills-empty {
+  flex: none;
 }
 
 .at__num {
@@ -157,6 +204,9 @@ function onRemove(e: MouseEvent) {
   line-height: 1.15;
   color: #fff;
   text-align: center;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .at__x {

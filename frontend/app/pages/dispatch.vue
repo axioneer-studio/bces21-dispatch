@@ -37,6 +37,17 @@ const { data: agentsData } = await useAsyncData<Agent[]>('dispatch-employees', a
 })
 
 const agents = computed<Agent[]>(() => agentsData.value ?? [])
+const toast = useAppToast()
+
+async function refreshAgents() {
+  try {
+    agentsData.value = await $fetch<Agent[]>('/api/employees', {
+      credentials: 'include'
+    })
+  } catch {
+    toast.error('Mise à jour des employés impossible.')
+  }
+}
 
 const {
   slots,
@@ -50,8 +61,7 @@ const {
   completeEmployeeMove,
   cancelEmployeeMove
 } = useDispatchStore()
-const { connect, disconnect } = useDispatchSocket()
-const toast = useAppToast()
+const { connect, disconnect } = useDispatchSocket(refreshAgents)
 const movingEmployees = new Set<number>()
 const noteDraft = ref('')
 const noteDirty = ref(false)
