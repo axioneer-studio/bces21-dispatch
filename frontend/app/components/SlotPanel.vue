@@ -123,6 +123,7 @@ function unassign(agentId: number) {
   background: var(--dp-panel-2);
   border: 1px solid var(--dp-line);
   transition: background 0.12s ease;
+  overflow: auto;
 }
 
 .sp[data-drop-over='1'] {
@@ -134,10 +135,6 @@ function unassign(agentId: number) {
 .sp--pool[data-drop-over='1'] {
   background: var(--dp-warn-soft);
   outline-color: var(--dp-warn-line);
-}
-
-.sp--pool {
-  overflow: auto;
 }
 
 </style>

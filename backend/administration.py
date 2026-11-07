@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from dispatch import push_employees_changed
 from deps import PAGE_KEYS, require_admin, require_super_admin, user_has_page_access
 from app_permissions import APP_PERMISSION_CATALOG
 from models import ApplicationSetting, Employee, Role, User
@@ -221,6 +222,8 @@ async def delete_user(
 
     await db.delete(target)
     await db.commit()
+    if employee is not None:
+        await push_employees_changed()
     return MessageResponse(message="Compte utilisateur supprimé.")
 
 
@@ -402,6 +405,8 @@ async def approve_registration(
     if employee is not None:
         employee.is_active = True
     await db.commit()
+    if employee is not None:
+        await push_employees_changed()
     return MessageResponse(message=f"{target.discord_username} validé.")
 
 
@@ -421,4 +426,6 @@ async def reject_registration(
     if employee is not None:
         employee.is_active = False
     await db.commit()
+    if employee is not None:
+        await push_employees_changed()
     return MessageResponse(message=f"Demande de {target.discord_username} refusée.")

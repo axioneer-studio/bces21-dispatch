@@ -5,7 +5,7 @@ const MAX_BACKOFF_MS = 30_000
 /** Codes 1008 (policy) et 4401 → refus d'auth : ne pas réessayer en boucle. */
 const AUTH_CLOSE_CODES = new Set([1008, 4401, 4403])
 
-export const useDispatchSocket = () => {
+export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void>) => {
   const { applySnapshot, applyResetSnapshot, setConnected } = useDispatchStore()
   const config = useRuntimeConfig()
 
@@ -79,12 +79,14 @@ export const useDispatchSocket = () => {
       try {
         const msg = JSON.parse(event.data as string) as {
           type: string
-          data: DispatchSnapshot
+          data?: DispatchSnapshot
         }
         if (msg.type === 'snapshot' && msg.data) {
           applySnapshot(msg.data)
         } else if (msg.type === 'assignments_reset' && msg.data) {
           applyResetSnapshot(msg.data)
+        } else if (msg.type === 'employees_changed') {
+          void onEmployeesChanged?.()
         }
       } catch {
         /* message illisible : ignoré */
