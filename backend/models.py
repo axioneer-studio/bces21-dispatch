@@ -241,3 +241,45 @@ class AgendaEvent(Base):
     color: Mapped[str] = mapped_column(String(16), default="#46996d", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class Vehicle(Base):
+    """Véhicule de la flotte, géré dans Administration."""
+
+    __tablename__ = "vehicles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    plate: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class ParkingSpot(Base):
+    """Emplacement de stationnement proposé dans la flotte (liste non exhaustive)."""
+
+    __tablename__ = "parking_spots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class FleetEntry(Base):
+    """Ligne de l'encart « Flotte de véhicules » du Dispatch.
+
+    L'emplacement est du texte libre : il peut reprendre un emplacement de
+    stationnement ou toute autre valeur saisie par le dispatcheur.
+    """
+
+    __tablename__ = "dispatch_fleet_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    vehicle_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    location: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    note: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

@@ -1,5 +1,5 @@
 import { $fetch } from 'ofetch'
-import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState } from './useDispatchStore'
+import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState, FleetEntry } from './useDispatchStore'
 
 const config = () => useRuntimeConfig()
 
@@ -11,7 +11,7 @@ function base(): string {
 async function req<T>(
   path: string,
   options: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     body?: Record<string, unknown>
     credentials?: 'include'
   } = {}
@@ -81,6 +81,24 @@ export async function unassignUser(slotId: number, employeeId: number) {
   return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign/${employeeId}`, {
     method: 'DELETE'
   })
+}
+
+export async function createFleetEntry() {
+  return await req<FleetEntry>('/api/dispatch/fleet', { method: 'POST' })
+}
+
+export async function updateFleetEntry(
+  id: number,
+  patch: Partial<Pick<FleetEntry, 'vehicle_id' | 'location' | 'note'>>
+) {
+  return await req<FleetEntry>(`/api/dispatch/fleet/${id}`, {
+    method: 'PATCH',
+    body: patch
+  })
+}
+
+export async function deleteFleetEntry(id: number) {
+  return await req<{ message: string }>(`/api/dispatch/fleet/${id}`, { method: 'DELETE' })
 }
 
 export async function updateRadio(

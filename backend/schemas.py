@@ -531,11 +531,107 @@ class DispatchNoteUpdateRequest(BaseModel):
     content: str = Field(max_length=10000)
 
 
+# --- Flotte de véhicules ---
+
+def _clean_required(value: Optional[str], label: str) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        raise ValueError(f"{label} est obligatoire.")
+    return value
+
+
+def _clean_plate(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip().upper()
+    return value or None
+
+
+class VehicleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    plate: Optional[str]
+
+
+class VehicleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    plate: Optional[str] = Field(default=None, max_length=16)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du véhicule")
+
+    @field_validator("plate")
+    @classmethod
+    def _plate(cls, value: Optional[str]) -> Optional[str]:
+        return _clean_plate(value)
+
+
+class VehicleUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    plate: Optional[str] = Field(default=None, max_length=16)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: Optional[str]) -> Optional[str]:
+        return _clean_required(value, "Le nom du véhicule")
+
+    @field_validator("plate")
+    @classmethod
+    def _plate(cls, value: Optional[str]) -> Optional[str]:
+        return _clean_plate(value)
+
+
+class ParkingSpotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class ParkingSpotRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom de l’emplacement")
+
+
+class FleetEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    vehicle_id: Optional[int]
+    location: str
+    note: str
+    order: int
+
+
+class FleetEntryUpdateRequest(BaseModel):
+    vehicle_id: Optional[int] = None
+    location: Optional[str] = Field(default=None, max_length=64)
+    note: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("location", "note")
+    @classmethod
+    def _strip(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value is not None else None
+
+
 class DispatchSnapshot(BaseModel):
     slots: list[SlotOut]
     radios: list[RadioOut]
     state: StateOut
     note: str = ""
+    fleet: list[FleetEntryOut] = Field(default_factory=list)
+    vehicles: list[VehicleOut] = Field(default_factory=list)
+    parking_spots: list[ParkingSpotOut] = Field(default_factory=list)
 
 
 class DispatchResetRequest(BaseModel):
