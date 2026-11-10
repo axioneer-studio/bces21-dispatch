@@ -25,6 +25,9 @@ const usedVehicleIds = computed(
   () => new Set(props.entries.flatMap((entry) => (entry.vehicle_id === null ? [] : [entry.vehicle_id])))
 )
 
+const vehicleName = (entry: FleetEntry) =>
+  props.vehicles.find((vehicle) => vehicle.id === entry.vehicle_id)?.name ?? '—'
+
 /** Véhicules proposés : ceux qui ne sont sur aucune autre ligne, plus celui de la ligne. */
 function vehicleOptions(entry: FleetEntry): Vehicle[] {
   return props.vehicles.filter(
@@ -107,41 +110,50 @@ async function removeEntry(entry: FleetEntry) {
 
 <template>
   <div class="fl">
-    <div class="fl__cols" aria-hidden="true">
-      <span>Véhicule</span>
-      <span>Lieu</span>
-      <span>Informations</span>
-      <span />
-    </div>
+    <div class="fl__table">
+      <div class="fl__cols" aria-hidden="true">
+        <span>Véhicule</span>
+        <span>Lieu</span>
+        <span>Informations</span>
+        <span />
+      </div>
 
-    <div class="fl__rows">
       <div v-for="entry in entries" :key="entry.id" class="fl__row">
-        <select
-          class="fl__field fl__select"
-          :value="entry.vehicle_id ?? ''"
-          aria-label="Véhicule"
-          @change="setVehicle(entry, $event)"
-        >
-          <option value="">—</option>
-          <option v-for="vehicle in vehicleOptions(entry)" :key="vehicle.id" :value="vehicle.id">
-            {{ vehicle.name }}
-          </option>
-        </select>
+        <div class="fl__vehicle">
+          <!-- Donne à la colonne la largeur du nom affiché (un <select> prendrait celle de sa plus longue option). -->
+          <span class="fl__sizer" aria-hidden="true">{{ vehicleName(entry) }}</span>
+          <select
+            class="fl__field fl__select"
+            :value="entry.vehicle_id ?? ''"
+            aria-label="Véhicule"
+            @change="setVehicle(entry, $event)"
+          >
+            <option value="">—</option>
+            <option v-for="vehicle in vehicleOptions(entry)" :key="vehicle.id" :value="vehicle.id">
+              {{ vehicle.name }}
+            </option>
+          </select>
+          <Icon name="lucide:chevron-down" size="10" class="fl__chevron" aria-hidden="true" />
+        </div>
 
-        <input
-          class="fl__field"
-          type="text"
-          :list="spotsListId"
-          :value="fieldValue(entry, 'location')"
-          maxlength="64"
-          placeholder="Lieu"
-          aria-label="Lieu"
-          @focus="startEdit(entry, 'location')"
-          @input="onInput(entry, 'location', $event)"
-          @blur="commit(entry, 'location')"
-          @keydown.enter="blurField"
-          @keydown.esc="cancelEdit(entry, 'location', $event)"
-        >
+        <div class="fl__location">
+          <!-- Élargit la colonne au lieu le plus long, pour qu'il ne soit jamais coupé. -->
+          <span class="fl__sizer" aria-hidden="true">{{ fieldValue(entry, 'location') || 'Lieu' }}</span>
+          <input
+            class="fl__field"
+            type="text"
+            :list="spotsListId"
+            :value="fieldValue(entry, 'location')"
+            maxlength="64"
+            placeholder="Lieu"
+            aria-label="Lieu"
+            @focus="startEdit(entry, 'location')"
+            @input="onInput(entry, 'location', $event)"
+            @blur="commit(entry, 'location')"
+            @keydown.enter="blurField"
+            @keydown.esc="cancelEdit(entry, 'location', $event)"
+          >
+        </div>
 
         <input
           class="fl__field"
@@ -190,42 +202,118 @@ async function removeEntry(entry: FleetEntry) {
   background: var(--dp-panel-2);
 }
 
-/* Véhicule 1/3, Lieu le reste, Informations 40 % (+ colonne de suppression). */
+/*
+ * Colonnes partagées par toutes les lignes (sous-grilles), dans l'ordre :
+ * - Véhicule : 30 % au minimum, s'élargit jusqu'au nom affiché le plus long ;
+ * - Lieu : tout l'espace restant, au minimum 10 % ou le lieu le plus long
+ *   (le minimum « auto » de la piste 1fr suit le contenu ; les 10 % sont
+ *   portés par le libellé de la colonne) ;
+ * - Informations : 40 % par défaut, réduites si le véhicule ou le lieu prend de la place ;
+ * - suppression.
+ */
+.fl__table {
+  display: grid;
+  flex: 1;
+  container-type: inline-size;
+  grid-template-columns: minmax(30%, max-content) 1fr minmax(0, 40%) 14px;
+  align-content: start;
+  column-gap: 3px;
+  row-gap: 2px;
+  min-height: 0;
+  padding: 0 2px 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .fl__cols,
 .fl__row {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(0, 6fr) 14px;
-  gap: 3px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  column-gap: 5px;
   align-items: center;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
 }
 
 .fl__cols {
-  padding: 3px 6px;
-  border-bottom: 1px solid var(--dp-line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  border-bottom-color: var(--dp-line);
+  border-radius: 0;
+  background: var(--dp-panel-2);
   color: var(--dp-text-dim);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.fl__rows {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-height: 0;
-  padding: 2px;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 .fl__row {
-  padding: 2px 4px;
   background: transparent;
-  border: 1px solid var(--dp-line);
-  border-radius: 3px;
+  border-color: var(--dp-line);
+}
+
+/* Libellés alignés sur le texte des champs (marge intérieure + bordure). */
+.fl__cols > span {
+  padding: 0 5px;
+}
+
+/* 10 % de la largeur du tableau : minimum de la colonne Lieu. */
+.fl__cols > span:nth-child(2) {
+  min-width: 10cqw;
+}
+
+/* Trait vertical dans l'espace entre Véhicule | Lieu | Informations. */
+.fl__cols > span:nth-child(2),
+.fl__cols > span:nth-child(3),
+.fl__row > .fl__location,
+.fl__row > .fl__field {
+  box-shadow: -3px 0 0 -2px var(--dp-line-strong);
+}
+
+.fl__vehicle {
+  position: relative;
+  min-width: 0;
+}
+
+/* Pas de min-width: 0 ici : la colonne doit garder la largeur du texte. */
+.fl__location {
+  position: relative;
+}
+
+.fl__location .fl__sizer {
+  padding-right: 5px;
+  overflow: visible;
+}
+
+.fl__location .fl__field {
+  position: absolute;
+  inset: 0;
+}
+
+/*
+ * Même police et mêmes marges que le champ (marge intérieure + bordure).
+ * Pour le véhicule : 18 px de flèche + 2 px de marge, pour éviter les « … ».
+ */
+.fl__sizer {
+  display: block;
+  height: 20px;
+  padding: 0 21px 0 5px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.fl__vehicle .fl__select {
+  position: absolute;
+  inset: 0;
 }
 
 .fl__row:hover {
@@ -265,8 +353,25 @@ async function removeEntry(entry: FleetEntry) {
   color: var(--dp-text);
 }
 
+/* Flèche dessinée par l'icône, de largeur fixe (la flèche native varie selon le navigateur). */
 .fl__select {
+  appearance: none;
+  padding-right: 18px;
   cursor: pointer;
+}
+
+.fl__chevron {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  color: var(--dp-text-dim);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.fl__vehicle:hover .fl__chevron,
+.fl__select:focus + .fl__chevron {
+  color: var(--dp-text);
 }
 
 .fl__select option {
@@ -298,6 +403,7 @@ async function removeEntry(entry: FleetEntry) {
 }
 
 .fl__empty {
+  grid-column: 1 / -1;
   margin: 0;
   padding: 12px;
   color: var(--dp-text-dim);
