@@ -2,13 +2,13 @@
 import type { DispatchRadio } from '~/composables/useDispatchStore'
 import type { Agent } from '~/utils/agent'
 import { agentDisplayName, sortAgentsByGradeAndArrival } from '~/utils/agent'
-import { splitRadios } from '~/utils/radios'
-import { createRadio, deleteRadio, updateRadio } from '~/composables/useDispatchApi'
+import { radioStatus, splitRadios } from '~/utils/radios'
+import type { RadioStatus } from '~/utils/radios'
+import { updateRadio } from '~/composables/useDispatchApi'
 
 const props = defineProps<{
   radios: DispatchRadio[]
   agents: Agent[]
-  canManage: boolean
 }>()
 
 const toast = useAppToast()
@@ -91,13 +91,69 @@ async function loadAgendaEvents() {
   }
 }
 
+// --- Menu (porteur ou état) : un seul ouvert, rendu dans <body> pour pouvoir
+// dépasser de la case, positionné sous la ligne de la radio (ou au-dessus
+// s'il manque de place en bas).
+
+type MenuKind = 'holder' | 'status'
+const MENU_MIN_WIDTH = 220
+const MENU_MAX_HEIGHT = 260
+const VIEWPORT_MARGIN = 8
+
+const openMenu = ref<{ radioId: number; kind: MenuKind; style: Record<string, string> } | null>(null)
+const menuEl = ref<HTMLElement | null>(null)
+const menuRadio = computed(() =>
+  openMenu.value ? props.radios.find((radio) => radio.id === openMenu.value!.radioId) ?? null : null
+)
+
+const isMenuOpen = (radio: DispatchRadio, kind: MenuKind) =>
+  openMenu.value?.radioId === radio.id && openMenu.value.kind === kind
+
+function menuStyle(row: HTMLElement): Record<string, string> {
+  const rect = row.getBoundingClientRect()
+  const width = Math.min(Math.max(rect.width, MENU_MIN_WIDTH), window.innerWidth - 2 * VIEWPORT_MARGIN)
+  const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.left, window.innerWidth - width - VIEWPORT_MARGIN))
+  const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN
+  const spaceAbove = rect.top - VIEWPORT_MARGIN
+  const above = spaceBelow < MENU_MAX_HEIGHT && spaceAbove > spaceBelow
+  const maxHeight = Math.min(MENU_MAX_HEIGHT, above ? spaceAbove : spaceBelow)
+  return {
+    left: `${left}px`,
+    width: `${width}px`,
+    maxHeight: `${maxHeight}px`,
+    ...(above
+      ? { bottom: `${window.innerHeight - rect.top + 2}px` }
+      : { top: `${rect.bottom + 2}px` })
+  }
+}
+
+function toggleMenu(radio: DispatchRadio, kind: MenuKind, event: MouseEvent) {
+  if (isMenuOpen(radio, kind)) return closeMenu()
+  const row = (event.currentTarget as HTMLElement).closest<HTMLElement>('.rp__row')
+  if (!row) return
+  openMenu.value = { radioId: radio.id, kind, style: menuStyle(row) }
+}
+
+const closeMenu = () => { openMenu.value = null }
+
+/** Le menu est positionné une fois : on le ferme si la page ou la liste défile. */
+function closeOnScroll(event: Event) {
+  if (openMenu.value && !menuEl.value?.contains(event.target as Node)) closeMenu()
+}
+
 onMounted(() => {
   loadAgendaEvents()
   agendaRefreshTimer = setInterval(loadAgendaEvents, 5 * 60 * 1000)
+  document.addEventListener('click', closeMenu)
+  document.addEventListener('scroll', closeOnScroll, true)
+  window.addEventListener('resize', closeMenu)
 })
 
 onBeforeUnmount(() => {
   if (agendaRefreshTimer) clearInterval(agendaRefreshTimer)
+  document.removeEventListener('click', closeMenu)
+  document.removeEventListener('scroll', closeOnScroll, true)
+  window.removeEventListener('resize', closeMenu)
 })
 
 const sections = computed(() => {
@@ -108,7 +164,7 @@ const sections = computed(() => {
   ] as const
 })
 
-/** Employés proposés à l'affectation : actifs, sans radio, dans l'ordre de la réserve. */
+/** Employés actifs sans radio, dans l'ordre de la réserve. */
 const agentsWithoutRadio = computed(() => {
   const equipped = new Set(
     props.radios.flatMap((radio) => (radio.employee_id === null ? [] : [radio.employee_id]))
@@ -118,10 +174,32 @@ const agentsWithoutRadio = computed(() => {
   )
 })
 
-const statusOf = (r: DispatchRadio) =>
-  r.is_loading ? 'loading' : r.is_on ? 'on' : 'off'
+const hasDirectionMembers = computed(() =>
+  props.agents.some((agent) => agent.is_active && agent.grade_is_direction)
+)
+
+/** Proposés à l'affectation : une radio Direction ne va qu'à un membre de la Direction. */
+const candidatesFor = (radio: DispatchRadio) =>
+  radio.is_direction
+    ? agentsWithoutRadio.value.filter((agent) => agent.grade_is_direction)
+    : agentsWithoutRadio.value
+
+function noCandidateMessage(radio: DispatchRadio): string {
+  if (!radio.is_direction) return 'Tous les employés actifs ont une radio.'
+  return hasDirectionMembers.value
+    ? 'Tous les membres de la Direction ont une radio.'
+    : 'Aucun membre de la Direction : cochez « Fait partie de la Direction » sur un grade.'
+}
 
 const isAssigned = (r: DispatchRadio) => r.employee_id !== null
+
+const STATUS_OPTIONS: { value: RadioStatus; label: string; hint: string }[] = [
+  { value: 'on', label: 'ON', hint: 'Disponible' },
+  { value: 'standby', label: 'Sablier', hint: 'En service, indisponible à la radio' },
+  { value: 'off', label: 'OFF', hint: 'Radio éteinte' }
+]
+const statusLabel = (r: DispatchRadio) =>
+  STATUS_OPTIONS.find((option) => option.value === radioStatus(r))!.label
 
 /** Message d'erreur renvoyé par l'API (`detail`), sinon le message par défaut. */
 function apiError(error: unknown, fallback: string): string {
@@ -129,69 +207,20 @@ function apiError(error: unknown, fallback: string): string {
   return typeof detail === 'string' && detail ? detail : fallback
 }
 
-async function togglePower(radio: DispatchRadio) {
-  if (!radio.is_on && !isAssigned(radio)) {
+async function setStatus(radio: DispatchRadio, status: RadioStatus) {
+  closeMenu()
+  if (status === radioStatus(radio)) return
+  if (status !== 'off' && !isAssigned(radio)) {
     toast.warning('Affectez la radio à un employé avant de l’allumer.')
     return
   }
   try {
-    await updateRadio(radio.id, { is_on: !radio.is_on, is_loading: false })
+    await updateRadio(radio.id, { is_on: status === 'on', is_loading: status === 'standby' })
   } catch (error) {
     toast.error(apiError(error, 'Mise à jour impossible.'))
   }
 }
 
-async function setLoading(radio: DispatchRadio) {
-  if (!isAssigned(radio)) {
-    toast.warning('Affectez la radio à un employé avant de l’allumer.')
-    return
-  }
-  try {
-    await updateRadio(radio.id, { is_loading: true, is_on: false })
-    setTimeout(() => {
-      updateRadio(radio.id, { is_loading: false }).catch(() => {})
-    }, 2500)
-  } catch (error) {
-    toast.error(apiError(error, 'Mise à jour impossible.'))
-  }
-}
-
-async function editSerial(radio: DispatchRadio) {
-  const next = window.prompt('Numéro de série :', radio.serial)?.trim()
-  if (!next || next === radio.serial) return
-  try {
-    await updateRadio(radio.id, { serial: next })
-  } catch (error) {
-    toast.error(apiError(error, 'Mise à jour impossible.'))
-  }
-}
-
-const creating = ref(false)
-async function addRadio() {
-  if (creating.value) return
-  const serial = window.prompt('Numéro de série de la nouvelle radio :')?.trim()
-  if (!serial) return
-  creating.value = true
-  try {
-    await createRadio(serial)
-    toast.success(`Radio ${serial} créée.`)
-  } catch (error) {
-    toast.error(apiError(error, 'Création de la radio impossible.'))
-  } finally {
-    creating.value = false
-  }
-}
-
-async function removeRadio(radio: DispatchRadio) {
-  if (!window.confirm(`Supprimer la radio ${radio.serial || 'sans numéro'} ?`)) return
-  try {
-    await deleteRadio(radio.id)
-  } catch (error) {
-    toast.error(apiError(error, 'Suppression de la radio impossible.'))
-  }
-}
-
-const doctorMenu = ref<number | null>(null)
 const doctorOf = (radio: DispatchRadio) =>
   props.agents.find((a) => a.id === radio.employee_id) ?? null
 
@@ -202,7 +231,7 @@ const doctorName = (radio: DispatchRadio) => {
 
 
 async function setDoctor(radio: DispatchRadio, agentId: number | null) {
-  doctorMenu.value = null
+  closeMenu()
   if (agentId === radio.employee_id) return
   try {
     await updateRadio(radio.id, { employee_id: agentId })
@@ -224,89 +253,40 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
         <Icon :name="section.icon" size="12" />
         <span>{{ section.title }}</span>
         <span class="rp__count">{{ section.radios.length }}</span>
-        <button
-          v-if="canManage && section.key === 'normal'"
-          type="button"
-          class="rp__add"
-          title="Ajouter une radio"
-          :disabled="creating"
-          @click="addRadio"
-        >
-          <Icon name="lucide:plus" size="11" />
-        </button>
       </header>
       <div class="rp__rows">
         <div
           v-for="r in section.radios"
           :key="r.id"
           class="rp__row"
-          :class="{ 'rp__row--manage': canManage }"
-          :data-status="statusOf(r)"
+          :data-status="radioStatus(r)"
         >
-          <button
-            type="button"
-            class="rp__power"
-            :data-status="statusOf(r)"
-            :disabled="!r.is_on && !isAssigned(r)"
-            :title="!r.is_on && !isAssigned(r) ? 'Affectez la radio avant de l’allumer' : r.is_on ? 'Éteindre' : 'Allumer'"
-            @click="togglePower(r)"
-          >
-            <Icon v-if="statusOf(r) === 'on'" name="lucide:check" size="11" />
-            <Icon v-else-if="statusOf(r) === 'off'" name="lucide:x" size="11" />
-            <span v-else>⌛</span>
-          </button>
-          <button type="button" class="rp__serial" @click="editSerial(r)">
-            {{ r.serial || '—' }}
-          </button>
+          <span class="rp__serial">{{ r.serial || '—' }}</span>
           <div class="rp__doctor" @click.stop>
             <button
               type="button"
               class="rp__doctor-btn"
-              @click="doctorMenu = doctorMenu === r.id ? null : r.id"
+              :aria-expanded="isMenuOpen(r, 'holder')"
+              @click="toggleMenu(r, 'holder', $event)"
             >
               <span class="rp__doctor-name">{{ doctorName(r) }}</span>
             </button>
-            <div v-if="doctorMenu === r.id" class="rp__doctor-menu">
-              <template v-if="doctorOf(r)">
-                <div class="rp__doctor-current">
-                  <span>{{ agentDisplayName(doctorOf(r)!, agents) }}</span>
-                </div>
-                <button type="button" class="rp__doctor-item" @click="setDoctor(r, null)">
-                  <Icon name="lucide:x" size="10" /> Retirer l’affectation
-                </button>
-              </template>
-              <p class="rp__doctor-label">Sans radio</p>
-              <button
-                v-for="a in agentsWithoutRadio" :key="a.id" type="button"
-                class="rp__doctor-item"
-                @click="setDoctor(r, a.id)"
-              >
-                <span>{{ agentDisplayName(a, agents) }}</span>
-              </button>
-              <p v-if="!agentsWithoutRadio.length" class="rp__doctor-none">
-                Tous les employés actifs ont une radio.
-              </p>
-            </div>
           </div>
-          <button
-            type="button"
-            class="rp__wait"
-            :class="{ 'rp__wait--on': statusOf(r) === 'loading' }"
-            :disabled="!isAssigned(r)"
-            title="Attente (2.5 s)"
-            @click="setLoading(r)"
-          >
-            ⌛
-          </button>
-          <button
-            v-if="canManage"
-            type="button"
-            class="rp__delete"
-            title="Supprimer la radio"
-            @click="removeRadio(r)"
-          >
-            <Icon name="lucide:trash-2" size="10" />
-          </button>
+          <div class="rp__status" @click.stop>
+            <button
+              type="button"
+              class="rp__power"
+              :data-status="radioStatus(r)"
+              :title="`État : ${statusLabel(r)}`"
+              :aria-label="`État de la radio : ${statusLabel(r)}`"
+              :aria-expanded="isMenuOpen(r, 'status')"
+              @click="toggleMenu(r, 'status', $event)"
+            >
+              <Icon v-if="radioStatus(r) === 'on'" name="lucide:check" size="11" />
+              <Icon v-else-if="radioStatus(r) === 'off'" name="lucide:x" size="11" />
+              <Icon v-else name="lucide:hourglass" size="11" />
+            </button>
+          </div>
         </div>
         <div v-if="!section.radios.length" class="rp__empty">{{ section.empty }}</div>
       </div>
@@ -338,6 +318,59 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
         </template>
       </div>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="openMenu && menuRadio"
+        ref="menuEl"
+        class="rp__doctor-menu"
+        :style="openMenu.style"
+        @click.stop
+      >
+        <template v-if="openMenu.kind === 'holder'">
+          <template v-if="doctorOf(menuRadio)">
+            <div class="rp__doctor-current">
+              <span>{{ agentDisplayName(doctorOf(menuRadio)!, agents) }}</span>
+            </div>
+            <button type="button" class="rp__doctor-item" @click="setDoctor(menuRadio, null)">
+              <Icon name="lucide:x" size="10" /> Retirer l’affectation
+            </button>
+          </template>
+          <p class="rp__doctor-label">{{ menuRadio.is_direction ? 'Direction sans radio' : 'Sans radio' }}</p>
+          <button
+            v-for="a in candidatesFor(menuRadio)" :key="a.id" type="button"
+            class="rp__doctor-item"
+            @click="setDoctor(menuRadio, a.id)"
+          >
+            <span>{{ agentDisplayName(a, agents) }}</span>
+          </button>
+          <p v-if="!candidatesFor(menuRadio).length" class="rp__doctor-none">
+            {{ noCandidateMessage(menuRadio) }}
+          </p>
+        </template>
+        <template v-else>
+          <button
+            v-for="option in STATUS_OPTIONS"
+            :key="option.value"
+            type="button"
+            class="rp__doctor-item rp__status-item"
+            :class="{ 'rp__doctor-item--active': radioStatus(menuRadio) === option.value }"
+            :data-status="option.value"
+            :disabled="option.value !== 'off' && !isAssigned(menuRadio)"
+            @click="setStatus(menuRadio, option.value)"
+          >
+            <Icon v-if="option.value === 'on'" name="lucide:check" size="10" />
+            <Icon v-else-if="option.value === 'off'" name="lucide:x" size="10" />
+            <Icon v-else name="lucide:hourglass" size="10" />
+            <strong>{{ option.label }}</strong>
+            <span>{{ option.hint }}</span>
+          </button>
+          <p v-if="!isAssigned(menuRadio)" class="rp__doctor-none">
+            Affectez la radio avant de l’allumer.
+          </p>
+        </template>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -468,20 +501,15 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
 }
 
 .rp__row {
-  /* Ancre du menu d'affectation, qui prend toute la largeur de la ligne. */
-  position: relative;
   display: grid;
-  grid-template-columns: 22px minmax(52px, 0.9fr) minmax(64px, 1.3fr) 18px;
+  /* Numéro, porteur, puis l'état à droite comme sur le Google Sheets. */
+  grid-template-columns: minmax(52px, 0.9fr) minmax(64px, 1.3fr) 22px;
   align-items: center;
   gap: 3px;
   padding: 3px 4px;
   background: var(--dp-panel-2);
   border: 1px solid var(--dp-line);
   border-radius: 3px;
-}
-
-.rp__row--manage {
-  grid-template-columns: 22px minmax(52px, 0.9fr) minmax(64px, 1.3fr) 18px 14px;
 }
 
 .rp__row:hover {
@@ -492,7 +520,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   border-left: 2px solid var(--dp-accent);
 }
 
-.rp__row[data-status='loading'] {
+.rp__row[data-status='standby'] {
   border-left: 2px solid var(--dp-warn);
 }
 
@@ -514,10 +542,8 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   font-size: 10px;
 }
 
-.rp__power:disabled,
-.rp__wait:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.rp__power:hover {
+  border-color: var(--dp-line-strong);
 }
 
 .rp__power[data-status='on'] {
@@ -526,31 +552,48 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   color: var(--dp-accent);
 }
 
-.rp__power[data-status='loading'] {
+.rp__power[data-status='standby'] {
   background: var(--dp-warn-soft);
   border-color: var(--dp-warn-line);
   color: var(--dp-warn);
 }
 
 .rp__serial {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 2px;
+  padding: 2px 3px;
   color: var(--dp-text-2);
   font-family: ui-monospace, 'SFMono-Regular', monospace;
   font-size: 9.5px;
   font-weight: 600;
-  text-align: left;
-  padding: 2px 3px;
-  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rp__serial:hover {
-  background: var(--dp-panel-3);
-  border-color: var(--dp-line-strong);
-  color: var(--dp-text);
+.rp__status {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rp__status-item {
+  justify-content: flex-start;
+}
+
+.rp__status-item > span {
+  margin-left: auto;
+  color: var(--dp-text-dim);
+  font-weight: 500;
+}
+
+.rp__status-item[data-status='on'] { color: var(--dp-accent); }
+.rp__status-item[data-status='standby'] { color: var(--dp-warn); }
+
+.rp__status-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rp__status-item:disabled:hover {
+  background: transparent;
 }
 
 .rp__doctor {
@@ -587,19 +630,17 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
 }
 
 
+/* Rendu dans <body> : position et taille calculées depuis la ligne (menuStyle). */
 .rp__doctor-menu {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   padding: 3px;
   background: var(--dp-panel-3);
   border: 1px solid var(--dp-line-strong);
   border-radius: 3px;
-  max-height: 240px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -670,75 +711,6 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
 
 
 
-
-.rp__wait {
-  width: 16px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  color: var(--dp-text-dim);
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.rp__add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  background: var(--dp-panel-2);
-  border: 1px solid var(--dp-line-strong);
-  border-radius: 2px;
-  color: var(--dp-text-2);
-  cursor: pointer;
-}
-
-.rp__add:hover:not(:disabled) {
-  background: var(--dp-accent-soft);
-  border-color: var(--dp-accent-line);
-  color: var(--dp-accent);
-}
-
-.rp__add:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-
-.rp__delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: var(--dp-text-dim);
-  cursor: pointer;
-  opacity: 0;
-}
-
-.rp__row:hover .rp__delete,
-.rp__delete:focus-visible {
-  opacity: 1;
-}
-
-.rp__delete:hover {
-  color: var(--dp-danger);
-}
-
-.rp__wait:hover:not(:disabled),
-.rp__wait--on {
-  color: var(--dp-warn);
-  background: var(--dp-warn-soft);
-  border-color: var(--dp-warn-line);
-}
 
 .rp__empty {
   padding: 12px;

@@ -13,6 +13,8 @@ export interface Agent {
   grade_name: string | null
   grade_level: number | null
   grade_color: string | null
+  /** Grade coché « Fait partie de la Direction ». */
+  grade_is_direction?: boolean
   grade_permissions: string[]
   discord_id?: string | null
   discord_avatar?: string | null

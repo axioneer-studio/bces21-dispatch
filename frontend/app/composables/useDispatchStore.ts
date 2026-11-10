@@ -26,9 +26,11 @@ export interface DispatchAssignment {
 
 export interface DispatchRadio {
   id: number
+  /** Masqué par le serveur : 2 premiers caractères puis des X (0Va4ZeS → 0VXXXXX). */
   serial: string
   employee_id: number | null
   is_on: boolean
+  /** État « sablier » : en service mais indisponible à la radio. */
   is_loading: boolean
   frequency: string
   common_frequency: string

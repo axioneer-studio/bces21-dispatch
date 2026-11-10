@@ -97,6 +97,8 @@ class Grade(Base):
     level: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     color: Mapped[str] = mapped_column(String(7), default="#46996d", nullable=False)
     permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    # Les employés de ce grade peuvent recevoir une radio Direction.
+    is_direction: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     employees: Mapped[list["Employee"]] = relationship(back_populates="grade")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -186,8 +188,8 @@ class DispatchRadio(Base):
     common_frequency: Mapped[str] = mapped_column(
         String(16), default="570", nullable=False
     )
-    # Hérité : la section « Radio Direction » est désormais déduite du grade
-    # de l'employé affecté (Directeur / Directeur Adjoint), côté front.
+    # Case cochée dans l'onglet Radios de la Direction : la radio s'affiche
+    # dans la section « Radio Direction » du Dispatch.
     is_direction: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

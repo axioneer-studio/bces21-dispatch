@@ -266,7 +266,6 @@ async function finishNoteEdit() {
         <RadioPanel
           :radios="snapshot.radios"
           :agents="agents"
-          :can-manage="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_radios'))"
         />
       </aside>
 

@@ -7,9 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from deps import require_page_access
+from dispatch import push_employees_changed, push_snapshot, sorted_radios
 from grade_permissions import GRADE_PERMISSION_CATALOG
-from models import Employee, Grade, User
-from schemas import GradeCreateRequest, GradeOut, GradeUpdateRequest, MessageResponse
+from models import DispatchRadio, Employee, Grade, User
+from schemas import (
+    DirectionRadioCreateRequest,
+    DirectionRadioOut,
+    DirectionRadioUpdateRequest,
+    GradeCreateRequest,
+    GradeOut,
+    GradeUpdateRequest,
+    MessageResponse,
+)
 
 router = APIRouter(prefix="/api/direction", tags=["direction"])
 
@@ -40,6 +49,7 @@ async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
         level=grade.level,
         color=grade.color,
         permissions=_validated_permissions(permissions if isinstance(permissions, list) else []),
+        is_direction=grade.is_direction,
         employees_count=count or 0,
     )
 
@@ -82,6 +92,7 @@ async def create_grade(
         level=payload.level,
         color=payload.color,
         permissions=json.dumps(_validated_permissions(payload.permissions)),
+        is_direction=payload.is_direction,
     )
     db.add(grade)
     try:
@@ -124,6 +135,8 @@ async def update_grade(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Ce grade existe déjà.") from exc
     await db.refresh(grade)
+    # Le Dispatch trie et filtre les employés selon leur grade : il recharge la liste.
+    await push_employees_changed()
     return await _grade_out(db, grade)
 
 
@@ -147,3 +160,108 @@ async def delete_grade(
     await db.delete(grade)
     await db.commit()
     return MessageResponse(message="Grade supprimé.")
+
+
+# --- Radios : seule la Direction voit le numéro de série complet ---
+
+
+async def _radio_out(db: AsyncSession, radio: DispatchRadio) -> DirectionRadioOut:
+    employee = await db.get(Employee, radio.employee_id) if radio.employee_id else None
+    return DirectionRadioOut(
+        id=radio.id,
+        serial=radio.serial,
+        employee_id=radio.employee_id,
+        employee_name=" ".join(filter(None, [employee.first_name, employee.last_name]))
+        if employee
+        else None,
+        is_on=radio.is_on,
+        is_loading=radio.is_loading,
+        is_direction=radio.is_direction,
+    )
+
+
+async def _ensure_serial_available(
+    db: AsyncSession, serial: str, radio_id: int | None = None
+) -> None:
+    # La casse compte : « 0Va4ZeS » et « 0VA4ZES » sont deux numéros distincts.
+    filters = [DispatchRadio.serial == serial]
+    if radio_id is not None:
+        filters.append(DispatchRadio.id != radio_id)
+    if await db.scalar(select(DispatchRadio.id).where(*filters).limit(1)) is not None:
+        raise HTTPException(
+            status_code=409, detail="Une radio porte déjà ce numéro de série."
+        )
+
+
+@router.get("/radios", response_model=list[DirectionRadioOut])
+async def list_radios(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("direction")),
+):
+    radios = sorted_radios((await db.execute(select(DispatchRadio))).scalars().all())
+    return [await _radio_out(db, radio) for radio in radios]
+
+
+@router.post("/radios", response_model=DirectionRadioOut, status_code=status.HTTP_201_CREATED)
+async def create_radio(
+    payload: DirectionRadioCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("direction")),
+):
+    await _ensure_serial_available(db, payload.serial)
+    # Une radio naît toujours sans affectation, donc OFF.
+    radio = DispatchRadio(
+        serial=payload.serial,
+        employee_id=None,
+        is_on=False,
+        is_loading=False,
+        is_direction=payload.is_direction,
+    )
+    db.add(radio)
+    await db.commit()
+    await db.refresh(radio)
+    await push_snapshot(db)
+    return await _radio_out(db, radio)
+
+
+@router.patch("/radios/{radio_id}", response_model=DirectionRadioOut)
+async def update_radio(
+    radio_id: int,
+    payload: DirectionRadioUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("direction")),
+):
+    radio = await db.get(DispatchRadio, radio_id)
+    if radio is None:
+        raise HTTPException(status_code=404, detail="Radio introuvable.")
+    data = payload.model_dump(exclude_unset=True, exclude_none=True)
+    if "serial" in data:
+        await _ensure_serial_available(db, data["serial"], radio.id)
+    if data.get("is_direction") and radio.employee_id is not None:
+        holder = await db.get(Employee, radio.employee_id)
+        if holder is not None and not (holder.grade and holder.grade.is_direction):
+            raise HTTPException(
+                status_code=409,
+                detail="Le porteur de cette radio ne fait pas partie de la Direction : retirez d’abord l’affectation.",
+            )
+    for key, value in data.items():
+        setattr(radio, key, value)
+    await db.commit()
+    await db.refresh(radio)
+    await push_snapshot(db)
+    return await _radio_out(db, radio)
+
+
+@router.delete("/radios/{radio_id}", response_model=MessageResponse)
+async def delete_radio(
+    radio_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("direction")),
+):
+    radio = await db.get(DispatchRadio, radio_id)
+    if radio is None:
+        raise HTTPException(status_code=404, detail="Radio introuvable.")
+    await db.delete(radio)
+    await db.commit()
+    await push_snapshot(db)
+    return MessageResponse(message="Radio supprimée.")

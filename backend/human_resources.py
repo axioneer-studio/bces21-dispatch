@@ -48,6 +48,7 @@ def _employee_out(employee: Employee, *, include_hr_details: bool = False) -> Em
         grade_name=employee.grade.name if employee.grade else None,
         grade_level=employee.grade.level if employee.grade else None,
         grade_color=employee.grade.color if employee.grade else None,
+        grade_is_direction=bool(employee.grade and employee.grade.is_direction),
         grade_permissions=parse_grade_permissions(
             employee.grade.permissions if employee.grade else None
         ),

@@ -145,6 +145,7 @@ class EmployeeOut(BaseModel):
     grade_name: Optional[str] = None
     grade_level: Optional[int] = None
     grade_color: Optional[str] = None
+    grade_is_direction: bool = False
     grade_permissions: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -312,6 +313,7 @@ class GradeOut(BaseModel):
     level: int
     color: str
     permissions: list[str]
+    is_direction: bool
     employees_count: int
 
 
@@ -327,6 +329,7 @@ class GradeCreateRequest(BaseModel):
     level: int = Field(ge=1)
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
     permissions: list[str] = Field(default_factory=list, max_length=32)
+    is_direction: bool = False
 
     @field_validator("name")
     @classmethod
@@ -342,6 +345,7 @@ class GradeUpdateRequest(BaseModel):
     level: Optional[int] = Field(default=None, ge=1)
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
     permissions: Optional[list[str]] = Field(default=None, max_length=32)
+    is_direction: Optional[bool] = None
 
     @field_validator("name")
     @classmethod
@@ -504,8 +508,36 @@ def _clean_serial(value: Optional[str]) -> Optional[str]:
     return value
 
 
-class RadioCreateRequest(BaseModel):
+def mask_serial(serial: str) -> str:
+    """Numéro affiché sur le Dispatch : les 2 premiers caractères, le reste en X."""
+    return serial[:2] + "X" * max(len(serial) - 2, 0)
+
+
+class RadioUpdateRequest(BaseModel):
+    """Modifications possibles depuis le Dispatch : porteur et état.
+
+    États : ON (`is_on`), sablier (`is_loading` : en service mais indisponible
+    à la radio) ou OFF (ni l'un ni l'autre).
+    """
+
+    employee_id: Optional[int] = None
+    is_on: Optional[bool] = None
+    is_loading: Optional[bool] = None
+
+
+class DirectionRadioOut(BaseModel):
+    id: int
+    serial: str
+    employee_id: Optional[int]
+    employee_name: Optional[str]
+    is_on: bool
+    is_loading: bool
+    is_direction: bool
+
+
+class DirectionRadioCreateRequest(BaseModel):
     serial: str = Field(min_length=1, max_length=16)
+    is_direction: bool = False
 
     @field_validator("serial")
     @classmethod
@@ -513,11 +545,9 @@ class RadioCreateRequest(BaseModel):
         return _clean_serial(value)
 
 
-class RadioUpdateRequest(BaseModel):
+class DirectionRadioUpdateRequest(BaseModel):
     serial: Optional[str] = Field(default=None, max_length=16)
-    employee_id: Optional[int] = None
-    is_on: Optional[bool] = None
-    is_loading: Optional[bool] = None
+    is_direction: Optional[bool] = None
 
     @field_validator("serial")
     @classmethod

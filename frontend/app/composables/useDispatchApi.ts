@@ -83,20 +83,9 @@ export async function unassignUser(slotId: number, employeeId: number) {
   })
 }
 
-export async function createRadio(serial: string) {
-  return await req<DispatchRadio>('/api/dispatch/radios', {
-    method: 'POST',
-    body: { serial }
-  })
-}
-
-export async function deleteRadio(id: number) {
-  return await req<{ message: string }>(`/api/dispatch/radios/${id}`, { method: 'DELETE' })
-}
-
 export async function updateRadio(
   id: number,
-  patch: Partial<Pick<DispatchRadio, 'serial' | 'employee_id' | 'is_on' | 'is_loading'>>
+  patch: Partial<Pick<DispatchRadio, 'employee_id' | 'is_on' | 'is_loading'>>
 ) {
   return await req<DispatchRadio>(`/api/dispatch/radios/${id}`, {
     method: 'PATCH',
