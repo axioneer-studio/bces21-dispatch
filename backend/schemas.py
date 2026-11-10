@@ -495,11 +495,34 @@ class RadioOut(BaseModel):
         return value
 
 
+def _clean_serial(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        raise ValueError("Le numéro de série est obligatoire.")
+    return value
+
+
+class RadioCreateRequest(BaseModel):
+    serial: str = Field(min_length=1, max_length=16)
+
+    @field_validator("serial")
+    @classmethod
+    def _serial(cls, value: str) -> str:
+        return _clean_serial(value)
+
+
 class RadioUpdateRequest(BaseModel):
     serial: Optional[str] = Field(default=None, max_length=16)
     employee_id: Optional[int] = None
     is_on: Optional[bool] = None
     is_loading: Optional[bool] = None
+
+    @field_validator("serial")
+    @classmethod
+    def _serial(cls, value: Optional[str]) -> Optional[str]:
+        return _clean_serial(value)
 
 
 class StateOut(BaseModel):

@@ -27,6 +27,7 @@ from schemas import (
     DispatchResetRequest,
     DispatchSnapshot,
     MessageResponse,
+    RadioCreateRequest,
     RadioOut,
     RadioUpdateRequest,
     SlotCreateRequest,
@@ -79,10 +80,9 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
     )
     slots = (await db.execute(slots_q)).scalars().all()
 
-    radios_q = (
-        select(DispatchRadio)
-        .order_by(DispatchRadio.is_direction.asc(), DispatchRadio.order.asc(), DispatchRadio.id.asc())
-    )
+    # Le classement affiché (Direction / Radio, affectées d'abord) est calculé
+    # côté front à partir du grade des employés ; ici un ordre stable suffit.
+    radios_q = select(DispatchRadio).order_by(DispatchRadio.serial.asc(), DispatchRadio.id.asc())
     radios = (await db.execute(radios_q)).scalars().all()
 
     state = await db.get(DispatchState, 1)
@@ -386,6 +386,35 @@ async def unassign_user(
     return SlotOut.model_validate(slot)
 
 
+async def _ensure_serial_available(
+    db: AsyncSession, serial: str, radio_id: int | None = None
+) -> None:
+    filters = [DispatchRadio.serial == serial]
+    if radio_id is not None:
+        filters.append(DispatchRadio.id != radio_id)
+    if await db.scalar(select(DispatchRadio.id).where(*filters).limit(1)) is not None:
+        raise HTTPException(
+            status_code=409, detail="Une radio porte déjà ce numéro de série."
+        )
+
+
+@router.post("/api/dispatch/radios", response_model=RadioOut, status_code=201)
+async def create_radio(
+    payload: RadioCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_radios")),
+):
+    await _ensure_serial_available(db, payload.serial)
+    # Une radio naît toujours sans affectation, donc éteinte.
+    radio = DispatchRadio(serial=payload.serial, employee_id=None, is_on=False, is_loading=False)
+    db.add(radio)
+    await db.commit()
+    await db.refresh(radio)
+    await push_snapshot(db)
+    return RadioOut.model_validate(radio)
+
+
 @router.patch("/api/dispatch/radios/{radio_id}", response_model=RadioOut)
 async def update_radio(
     radio_id: int,
@@ -398,18 +427,61 @@ async def update_radio(
     if not radio:
         raise HTTPException(status_code=404, detail="Radio introuvable")
     data = payload.model_dump(exclude_unset=True)
+    if data.get("serial") is not None:
+        await _ensure_serial_available(db, data["serial"], radio.id)
     if data.get("employee_id") is not None:
         employee = await db.get(Employee, data["employee_id"])
         if employee is None or not employee.is_active:
             raise HTTPException(status_code=404, detail="Employé actif introuvable.")
+        # Une seule radio par employé.
+        other_radio = await db.scalar(
+            select(DispatchRadio.serial).where(
+                DispatchRadio.employee_id == employee.id,
+                DispatchRadio.id != radio.id,
+            ).limit(1)
+        )
+        if other_radio is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cet employé a déjà une radio ({other_radio or 'sans numéro'}).",
+            )
     if "employee_id" in data:
         radio.doctor_id = None
+
+    # Une radio sans affectation ne peut pas être allumée : on refuse une
+    # demande explicite et on éteint la radio quand on retire son affectation.
+    next_employee_id = data.get("employee_id", radio.employee_id)
+    if next_employee_id is None:
+        if data.get("is_on") or data.get("is_loading"):
+            raise HTTPException(
+                status_code=409,
+                detail="Affectez la radio à un employé avant de l’allumer.",
+            )
+        data["is_on"] = False
+        data["is_loading"] = False
+
     for k, v in data.items():
         setattr(radio, k, v)
     await db.commit()
     await db.refresh(radio)
     await push_snapshot(db)
     return RadioOut.model_validate(radio)
+
+
+@router.delete("/api/dispatch/radios/{radio_id}", response_model=MessageResponse)
+async def delete_radio(
+    radio_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("dispatch")),
+    __: User = Depends(require_grade_permission("dispatch.manage_radios")),
+):
+    radio = await db.get(DispatchRadio, radio_id)
+    if not radio:
+        raise HTTPException(status_code=404, detail="Radio introuvable")
+    await db.delete(radio)
+    await db.commit()
+    await push_snapshot(db)
+    return MessageResponse(message="Radio supprimée")
 
 
 @router.patch("/api/dispatch/state", response_model=StateOut)

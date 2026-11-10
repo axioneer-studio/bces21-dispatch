@@ -263,7 +263,11 @@ async function finishNoteEdit() {
       </section>
 
       <aside class="z z--radio">
-        <RadioPanel :radios="snapshot.radios" :agents="agents" />
+        <RadioPanel
+          :radios="snapshot.radios"
+          :agents="agents"
+          :can-manage="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_radios'))"
+        />
       </aside>
 
       <section v-if="hopital" class="z z--hopital">

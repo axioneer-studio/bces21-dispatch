@@ -11,7 +11,7 @@ function base(): string {
 async function req<T>(
   path: string,
   options: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     body?: Record<string, unknown>
     credentials?: 'include'
   } = {}
@@ -81,6 +81,17 @@ export async function unassignUser(slotId: number, employeeId: number) {
   return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign/${employeeId}`, {
     method: 'DELETE'
   })
+}
+
+export async function createRadio(serial: string) {
+  return await req<DispatchRadio>('/api/dispatch/radios', {
+    method: 'POST',
+    body: { serial }
+  })
+}
+
+export async function deleteRadio(id: number) {
+  return await req<{ message: string }>(`/api/dispatch/radios/${id}`, { method: 'DELETE' })
 }
 
 export async function updateRadio(
