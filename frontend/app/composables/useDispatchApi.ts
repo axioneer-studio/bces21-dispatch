@@ -103,7 +103,7 @@ export async function deleteFleetEntry(id: number) {
 
 export async function updateRadio(
   id: number,
-  patch: Partial<Pick<DispatchRadio, 'serial' | 'employee_id' | 'is_on' | 'is_loading'>>
+  patch: Partial<Pick<DispatchRadio, 'employee_id' | 'is_on' | 'is_loading'>>
 ) {
   return await req<DispatchRadio>(`/api/dispatch/radios/${id}`, {
     method: 'PATCH',

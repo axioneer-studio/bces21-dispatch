@@ -276,7 +276,10 @@ async function finishNoteEdit() {
       </section>
 
       <aside class="z z--radio">
-        <RadioPanel :radios="snapshot.radios" :agents="agents" />
+        <RadioPanel
+          :radios="snapshot.radios"
+          :agents="agents"
+        />
       </aside>
 
       <section v-if="hopital" class="z z--hopital">
