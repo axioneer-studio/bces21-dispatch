@@ -30,7 +30,7 @@ export interface DispatchRadio {
   serial: string
   employee_id: number | null
   is_on: boolean
-  /** État « sablier » : en service mais indisponible à la radio. */
+  /** État « Indisponible » : en service mais indisponible à la radio. */
   is_loading: boolean
   frequency: string
   common_frequency: string

@@ -188,8 +188,6 @@ class DispatchRadio(Base):
     common_frequency: Mapped[str] = mapped_column(
         String(16), default="570", nullable=False
     )
-    # Case cochée dans l'onglet Radios de la Direction : la radio s'affiche
-    # dans la section « Radio Direction » du Dispatch.
     is_direction: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

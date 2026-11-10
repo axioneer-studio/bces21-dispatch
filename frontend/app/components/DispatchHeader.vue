@@ -187,7 +187,7 @@ const safdLabel = computed(() =>
       >
         <h2 id="dh-reset-title">Réinitialiser le Dispatch ?</h2>
         <p id="dh-reset-description">
-          Les employés affectés seront remis dans « Hors service BCES », les radios ON ou en sablier passeront OFF et l’hôpital sera fermé.
+          Les employés affectés seront remis dans « Hors service BCES », les radios ON ou indisponibles passeront OFF et l’hôpital sera fermé.
         </p>
         <label v-if="props.canDeleteInterventions" class="dh-modal__option">
           <input v-model="deleteInterventions" type="checkbox">

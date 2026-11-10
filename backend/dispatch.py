@@ -215,7 +215,7 @@ async def reset_assignments(
         )
 
     await db.execute(delete(DispatchAssignment))
-    # Plus personne n'est en service : les radios ON ou en sablier passent OFF.
+    # Plus personne n'est en service : les radios ON ou indisponibles passent OFF.
     await db.execute(
         update(DispatchRadio)
         .where((DispatchRadio.is_on.is_(True)) | (DispatchRadio.is_loading.is_(True)))
@@ -421,11 +421,6 @@ async def update_radio(
         employee = await db.get(Employee, data["employee_id"])
         if employee is None or not employee.is_active:
             raise HTTPException(status_code=404, detail="Employé actif introuvable.")
-        if radio.is_direction and not (employee.grade and employee.grade.is_direction):
-            raise HTTPException(
-                status_code=409,
-                detail="Une radio Direction ne s’affecte qu’à un membre de la Direction.",
-            )
         # Une seule radio par employé.
         other_radio = await db.scalar(
             select(DispatchRadio.serial).where(
@@ -436,7 +431,7 @@ async def update_radio(
         if other_radio is not None:
             raise HTTPException(
                 status_code=409,
-                detail=f"Cet employé a déjà une radio ({other_radio or 'sans numéro'}).",
+                detail=f"Cet employé a déjà une radio ({mask_serial(other_radio) or 'sans numéro'}).",
             )
     if "employee_id" in data:
         radio.doctor_id = None
@@ -454,9 +449,9 @@ async def update_radio(
         data["is_loading"] = False
     elif data.get("is_on") and data.get("is_loading"):
         raise HTTPException(
-            status_code=422, detail="Une radio ne peut pas être à la fois ON et en sablier."
+            status_code=422, detail="Une radio ne peut pas être à la fois ON et indisponible."
         )
-    # Trois états exclusifs : passer ON retire le sablier, et inversement.
+    # Trois états exclusifs : passer ON retire « Indisponible », et inversement.
     elif data.get("is_on"):
         data["is_loading"] = False
     elif data.get("is_loading"):

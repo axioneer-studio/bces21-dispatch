@@ -2,7 +2,7 @@
 import type { DispatchRadio } from '~/composables/useDispatchStore'
 import type { Agent } from '~/utils/agent'
 import { agentDisplayName, sortAgentsByGradeAndArrival } from '~/utils/agent'
-import { radioStatus, splitRadios } from '~/utils/radios'
+import { isDirectionRadio, radioStatus, splitRadios } from '~/utils/radios'
 import type { RadioStatus } from '~/utils/radios'
 import { updateRadio } from '~/composables/useDispatchApi'
 
@@ -178,14 +178,17 @@ const hasDirectionMembers = computed(() =>
   props.agents.some((agent) => agent.is_active && agent.grade_is_direction)
 )
 
-/** Proposés à l'affectation : une radio Direction ne va qu'à un membre de la Direction. */
+const agentsById = computed(() => new Map(props.agents.map((agent) => [agent.id, agent])))
+const inDirection = (radio: DispatchRadio) => isDirectionRadio(radio, agentsById.value)
+
+/** Proposés à l'affectation : une radio Direction ne passe qu'à un autre membre de la Direction. */
 const candidatesFor = (radio: DispatchRadio) =>
-  radio.is_direction
+  inDirection(radio)
     ? agentsWithoutRadio.value.filter((agent) => agent.grade_is_direction)
     : agentsWithoutRadio.value
 
 function noCandidateMessage(radio: DispatchRadio): string {
-  if (!radio.is_direction) return 'Tous les employés actifs ont une radio.'
+  if (!inDirection(radio)) return 'Tous les employés actifs ont une radio.'
   return hasDirectionMembers.value
     ? 'Tous les membres de la Direction ont une radio.'
     : 'Aucun membre de la Direction : cochez « Fait partie de la Direction » sur un grade.'
@@ -193,10 +196,10 @@ function noCandidateMessage(radio: DispatchRadio): string {
 
 const isAssigned = (r: DispatchRadio) => r.employee_id !== null
 
-const STATUS_OPTIONS: { value: RadioStatus; label: string; hint: string }[] = [
-  { value: 'on', label: 'ON', hint: 'Disponible' },
-  { value: 'standby', label: 'Sablier', hint: 'En service, indisponible à la radio' },
-  { value: 'off', label: 'OFF', hint: 'Radio éteinte' }
+const STATUS_OPTIONS: { value: RadioStatus; label: string }[] = [
+  { value: 'on', label: 'ON' },
+  { value: 'standby', label: 'Indisponible' },
+  { value: 'off', label: 'OFF' }
 ]
 const statusLabel = (r: DispatchRadio) =>
   STATUS_OPTIONS.find((option) => option.value === radioStatus(r))!.label
@@ -336,7 +339,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
               <Icon name="lucide:x" size="10" /> Retirer l’affectation
             </button>
           </template>
-          <p class="rp__doctor-label">{{ menuRadio.is_direction ? 'Direction sans radio' : 'Sans radio' }}</p>
+          <p class="rp__doctor-label">{{ inDirection(menuRadio) ? 'Direction sans radio' : 'Sans radio' }}</p>
           <button
             v-for="a in candidatesFor(menuRadio)" :key="a.id" type="button"
             class="rp__doctor-item"
@@ -363,7 +366,6 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
             <Icon v-else-if="option.value === 'off'" name="lucide:x" size="10" />
             <Icon v-else name="lucide:hourglass" size="10" />
             <strong>{{ option.label }}</strong>
-            <span>{{ option.hint }}</span>
           </button>
           <p v-if="!isAssigned(menuRadio)" class="rp__doctor-none">
             Affectez la radio avant de l’allumer.
@@ -576,12 +578,6 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
 
 .rp__status-item {
   justify-content: flex-start;
-}
-
-.rp__status-item > span {
-  margin-left: auto;
-  color: var(--dp-text-dim);
-  font-weight: 500;
 }
 
 .rp__status-item[data-status='on'] { color: var(--dp-accent); }

@@ -516,8 +516,8 @@ def mask_serial(serial: str) -> str:
 class RadioUpdateRequest(BaseModel):
     """Modifications possibles depuis le Dispatch : porteur et état.
 
-    États : ON (`is_on`), sablier (`is_loading` : en service mais indisponible
-    à la radio) ou OFF (ni l'un ni l'autre).
+    États : ON (`is_on`), Indisponible (`is_loading` : en service mais
+    indisponible à la radio) ou OFF (ni l'un ni l'autre).
     """
 
     employee_id: Optional[int] = None
@@ -532,12 +532,12 @@ class DirectionRadioOut(BaseModel):
     employee_name: Optional[str]
     is_on: bool
     is_loading: bool
+    # Porteur membre de la Direction (selon son grade) : radio Direction.
     is_direction: bool
 
 
 class DirectionRadioCreateRequest(BaseModel):
     serial: str = Field(min_length=1, max_length=16)
-    is_direction: bool = False
 
     @field_validator("serial")
     @classmethod
@@ -547,7 +547,6 @@ class DirectionRadioCreateRequest(BaseModel):
 
 class DirectionRadioUpdateRequest(BaseModel):
     serial: Optional[str] = Field(default=None, max_length=16)
-    is_direction: Optional[bool] = None
 
     @field_validator("serial")
     @classmethod

@@ -172,7 +172,7 @@ async function deleteGrade(grade: Grade) {
 // --- Radios : seule la Direction voit le numéro de série complet ---
 
 const radios = ref<DirectionRadio[]>(initialRadios.value ?? [])
-const radioForm = reactive({ serial: '', is_direction: false })
+const radioForm = reactive({ serial: '' })
 const creatingRadio = ref(false)
 const busyRadioId = ref<number | null>(null)
 /** Numéro en cours de saisie, par radio. */
@@ -180,7 +180,7 @@ const serialDrafts = reactive<Record<number, string>>({})
 const directionRadioCount = computed(() => radios.value.filter((radio) => radio.is_direction).length)
 
 const radioStatusLabel = (radio: DirectionRadio) =>
-  radio.is_on ? 'ON' : radio.is_loading ? 'Sablier' : 'OFF'
+  radio.is_on ? 'ON' : radio.is_loading ? 'Indisponible' : 'OFF'
 const radioStatusKey = (radio: DirectionRadio) =>
   radio.is_on ? 'on' : radio.is_loading ? 'standby' : 'off'
 
@@ -197,11 +197,10 @@ async function createRadio() {
   try {
     await $fetch('/api/direction/radios', {
       method: 'POST',
-      body: { serial, is_direction: radioForm.is_direction },
+      body: { serial },
       credentials: 'include'
     })
     radioForm.serial = ''
-    radioForm.is_direction = false
     await refreshRadios()
   } catch (cause) {
     error.value = messageFromError(cause, 'Création de la radio impossible.')
@@ -210,7 +209,7 @@ async function createRadio() {
   }
 }
 
-async function updateRadio(radio: DirectionRadio, patch: Partial<Pick<DirectionRadio, 'serial' | 'is_direction'>>) {
+async function updateRadio(radio: DirectionRadio, patch: Pick<DirectionRadio, 'serial'>) {
   if (busyRadioId.value !== null) return false
   busyRadioId.value = radio.id
   error.value = ''
@@ -224,11 +223,6 @@ async function updateRadio(radio: DirectionRadio, patch: Partial<Pick<DirectionR
   } finally {
     busyRadioId.value = null
   }
-}
-
-async function toggleDirection(radio: DirectionRadio, event: Event) {
-  const checkbox = event.target as HTMLInputElement
-  if (!(await updateRadio(radio, { is_direction: checkbox.checked }))) checkbox.checked = radio.is_direction
 }
 
 async function commitSerial(radio: DirectionRadio) {
@@ -410,10 +404,6 @@ async function deleteRadio(radio: DirectionRadio) {
           <span>Numéro de série</span>
           <input v-model="radioForm.serial" required maxlength="16" autocomplete="off" spellcheck="false" placeholder="Ex. 0Va4ZeS">
         </label>
-        <label class="direction-check">
-          <input v-model="radioForm.is_direction" type="checkbox">
-          <span>Radio Direction</span>
-        </label>
         <button class="direction-button direction-button--primary" type="submit" :disabled="creatingRadio || !radioForm.serial.trim()">
           <Icon :name="creatingRadio ? 'lucide:loader-circle' : 'lucide:plus'" size="15" :class="{ 'direction-spin': creatingRadio }" />
           {{ creatingRadio ? 'Ajout…' : 'Ajouter la radio' }}
@@ -421,7 +411,7 @@ async function deleteRadio(radio: DirectionRadio) {
       </form>
 
       <div v-if="radios.length" class="direction-radio-cols" aria-hidden="true">
-        <span>Numéro de série</span><span>Porteur</span><span>État</span><span>Direction</span><span />
+        <span>Numéro de série</span><span>Porteur</span><span>État</span><span />
       </div>
       <article v-for="radio in radios" :key="radio.id" class="direction-radio">
         <input
@@ -438,18 +428,10 @@ async function deleteRadio(radio: DirectionRadio) {
           @keydown.esc="cancelSerial(radio, $event)"
         >
         <span class="direction-radio__holder" :class="{ 'direction-muted': !radio.employee_name }">
-          {{ radio.employee_name ?? 'Non affectée' }}
+          <span>{{ radio.employee_name ?? 'Non affectée' }}</span>
+          <span v-if="radio.is_direction" class="direction-grade__badge"><Icon name="lucide:radio-tower" size="11" /> Direction</span>
         </span>
         <span class="direction-radio__status" :data-status="radioStatusKey(radio)">{{ radioStatusLabel(radio) }}</span>
-        <label class="direction-check">
-          <input
-            type="checkbox"
-            :checked="radio.is_direction"
-            :disabled="busyRadioId === radio.id"
-            @change="toggleDirection(radio, $event)"
-          >
-          <span>Direction</span>
-        </label>
         <button type="button" class="direction-button direction-button--danger" :disabled="busyRadioId !== null" :aria-label="`Supprimer la radio ${radio.serial}`" @click="deleteRadio(radio)">
           <Icon name="lucide:trash-2" size="14" />
         </button>
@@ -528,13 +510,15 @@ async function deleteRadio(radio: DirectionRadio) {
 .direction-radio-create input:focus-visible, .direction-radio__serial:focus-visible { outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; border-color: var(--dp-accent-line); }
 .direction-check { display: inline-flex; min-height: 38px; align-items: center; gap: 8px; color: var(--dp-text-2); font-size: 11px; cursor: pointer; }
 .direction-check input { accent-color: var(--dp-accent); }
-.direction-radio-cols, .direction-radio { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 1.4fr) 76px 104px 40px; align-items: center; gap: 12px; }
+.direction-radio-cols, .direction-radio { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 1.4fr) 100px 40px; align-items: center; gap: 12px; }
 .direction-radio-cols { padding: 0 12px 8px; color: var(--dp-text-dim); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .direction-radio { padding: 10px 12px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); }
 .direction-radio + .direction-radio { margin-top: 8px; }
 .direction-radio__serial { min-height: 34px; background: transparent; border-color: transparent; }
 .direction-radio__serial:hover:not(:disabled) { border-color: var(--dp-line-strong); background: var(--dp-bg); }
-.direction-radio__holder { overflow: hidden; color: var(--dp-text); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.direction-radio__holder { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--dp-text); font-size: 12px; font-weight: 600; }
+.direction-radio__holder > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.direction-radio__holder .direction-grade__badge { flex-shrink: 0; }
 .direction-radio__status { justify-self: start; padding: 4px 9px; border: 1px solid var(--dp-line); border-radius: 999px; color: var(--dp-text-dim); font-size: 10px; font-weight: 700; }
 .direction-radio__status[data-status='on'] { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
 .direction-radio__status[data-status='standby'] { border-color: var(--dp-warn-line); color: var(--dp-warn); background: var(--dp-warn-soft); }

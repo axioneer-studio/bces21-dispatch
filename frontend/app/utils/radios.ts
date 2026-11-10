@@ -3,15 +3,21 @@ import type { Agent } from '~/utils/agent'
 
 export type RadioStatus = 'on' | 'standby' | 'off'
 
-/** ON : disponible ; sablier (`standby`) : en service mais indisponible à la radio. */
+/** ON : disponible ; Indisponible (`standby`) : en service mais indisponible à la radio. */
 export function radioStatus(radio: Pick<DispatchRadio, 'is_on' | 'is_loading'>): RadioStatus {
   if (radio.is_on) return 'on'
   if (radio.is_loading) return 'standby'
   return 'off'
 }
 
+/** Radio Direction : son porteur a un grade coché « Fait partie de la Direction ». */
+export function isDirectionRadio(radio: DispatchRadio, agentsById: Map<number, Agent>): boolean {
+  if (radio.employee_id === null) return false
+  return Boolean(agentsById.get(radio.employee_id)?.grade_is_direction)
+}
+
 export interface RadioSections {
-  /** Radios cochées « Direction », dans l'ordre des grades de la RH puis par ancienneté. */
+  /** Radios des membres de la Direction, dans l'ordre des grades de la RH puis par ancienneté. */
   direction: DispatchRadio[]
   /** Autres radios : affectées puis libres, chacune par numéro de série. */
   normal: DispatchRadio[]
@@ -29,8 +35,8 @@ export function splitRadios(radios: DispatchRadio[], agents: Agent[]): RadioSect
   const holder = (radio: DispatchRadio) =>
     radio.employee_id === null ? null : agentsById.get(radio.employee_id) ?? null
 
-  const direction = radios.filter((radio) => radio.is_direction)
-  const normal = radios.filter((radio) => !radio.is_direction)
+  const direction = radios.filter((radio) => isDirectionRadio(radio, agentsById))
+  const normal = radios.filter((radio) => !isDirectionRadio(radio, agentsById))
 
   direction.sort((a, b) => {
     const agentA = holder(a)

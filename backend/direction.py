@@ -176,7 +176,7 @@ async def _radio_out(db: AsyncSession, radio: DispatchRadio) -> DirectionRadioOu
         else None,
         is_on=radio.is_on,
         is_loading=radio.is_loading,
-        is_direction=radio.is_direction,
+        is_direction=bool(employee and employee.grade and employee.grade.is_direction),
     )
 
 
@@ -199,7 +199,13 @@ async def list_radios(
     _: User = Depends(require_page_access("direction")),
 ):
     radios = sorted_radios((await db.execute(select(DispatchRadio))).scalars().all())
-    return [await _radio_out(db, radio) for radio in radios]
+    out = [await _radio_out(db, radio) for radio in radios]
+    # Direction en haut, puis les radios affectées, puis les libres ; le tri
+    # stable garde l'ordre par numéro de série dans chaque groupe.
+    return sorted(
+        out,
+        key=lambda radio: 0 if radio.is_direction else 1 if radio.employee_id is not None else 2,
+    )
 
 
 @router.post("/radios", response_model=DirectionRadioOut, status_code=status.HTTP_201_CREATED)
@@ -215,7 +221,6 @@ async def create_radio(
         employee_id=None,
         is_on=False,
         is_loading=False,
-        is_direction=payload.is_direction,
     )
     db.add(radio)
     await db.commit()
@@ -237,13 +242,6 @@ async def update_radio(
     data = payload.model_dump(exclude_unset=True, exclude_none=True)
     if "serial" in data:
         await _ensure_serial_available(db, data["serial"], radio.id)
-    if data.get("is_direction") and radio.employee_id is not None:
-        holder = await db.get(Employee, radio.employee_id)
-        if holder is not None and not (holder.grade and holder.grade.is_direction):
-            raise HTTPException(
-                status_code=409,
-                detail="Le porteur de cette radio ne fait pas partie de la Direction : retirez d’abord l’affectation.",
-            )
     for key, value in data.items():
         setattr(radio, key, value)
     await db.commit()
