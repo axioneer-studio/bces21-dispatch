@@ -47,6 +47,14 @@ interface FleetVehicle {
   id: number
   name: string
   plate: string | null
+  model: string | null
+}
+
+interface VehicleImportResult {
+  created: number
+  updated: number
+  deleted: number
+  vehicles: FleetVehicle[]
 }
 
 interface ParkingSpot {
@@ -121,13 +129,19 @@ const activeAdminSection = ref<(typeof adminSections)[number]>(
 )
 
 // --- Flotte : véhicules et emplacements de stationnement ---
-const byVehicleName = (a: FleetVehicle, b: FleetVehicle) =>
-  a.name.localeCompare(b.name, 'fr') || (a.plate ?? '').localeCompare(b.plate ?? '', 'fr')
+/** Par modèle (Z → A) puis par plaque (A → Z) ; sans modèle ou sans plaque en dernier (même ordre que l'API). */
+const byModelAndPlate = (a: FleetVehicle, b: FleetVehicle) =>
+  Number(a.model === null) - Number(b.model === null)
+  || (b.model ?? '').localeCompare(a.model ?? '', 'fr', { sensitivity: 'base' })
+  || Number(a.plate === null) - Number(b.plate === null)
+  || (a.plate ?? '').localeCompare(b.plate ?? '', 'fr', { sensitivity: 'base' })
+  || a.name.localeCompare(b.name, 'fr')
+  || a.id - b.id
 const bySpotName = (a: ParkingSpot, b: ParkingSpot) => a.name.localeCompare(b.name, 'fr')
 
 const vehicles = ref<FleetVehicle[]>(initialVehicles.value ?? [])
 const parkingSpots = ref<ParkingSpot[]>(initialParkingSpots.value ?? [])
-const vehicleForm = reactive({ name: '', plate: '' })
+const vehicleForm = reactive({ name: '', plate: '', model: '' })
 const spotForm = reactive({ name: '' })
 const savingVehicle = ref(false)
 const savingSpot = ref(false)
@@ -360,12 +374,13 @@ async function createVehicle() {
   try {
     const vehicle = await $fetch<FleetVehicle>('/api/admin/vehicles', {
       method: 'POST',
-      body: { name: vehicleForm.name, plate: vehicleForm.plate || null },
+      body: { name: vehicleForm.name, plate: vehicleForm.plate || null, model: vehicleForm.model || null },
       credentials: 'include'
     })
-    vehicles.value = [...vehicles.value, vehicle].sort(byVehicleName)
+    vehicles.value = [...vehicles.value, vehicle].sort(byModelAndPlate)
     vehicleForm.name = ''
     vehicleForm.plate = ''
+    vehicleForm.model = ''
   } catch (cause) {
     error.value = messageFromError(cause, 'Création du véhicule impossible.')
   } finally {
@@ -378,11 +393,11 @@ async function saveVehicle(vehicle: FleetVehicle) {
     try {
       const saved = await $fetch<FleetVehicle>(`/api/admin/vehicles/${vehicle.id}`, {
         method: 'PATCH',
-        body: { name: vehicle.name, plate: vehicle.plate || null },
+        body: { name: vehicle.name, plate: vehicle.plate || null, model: vehicle.model || null },
         credentials: 'include'
       })
       Object.assign(vehicle, saved)
-      vehicles.value = [...vehicles.value].sort(byVehicleName)
+      vehicles.value = [...vehicles.value].sort(byModelAndPlate)
     } catch (cause) {
       error.value = messageFromError(cause, 'Modification du véhicule impossible.')
     }
@@ -399,6 +414,88 @@ async function deleteVehicle(vehicle: FleetVehicle) {
       error.value = messageFromError(cause, 'Suppression du véhicule impossible.')
     }
   })
+}
+
+// --- Import du garage (JSON exporté du jeu) : seuls nom, plaque et modèle sont repris ---
+
+type ImportedVehicle = { name: string; plate: string | null; model: string | null }
+
+const toast = useAppToast()
+const vehicleFileInput = ref<HTMLInputElement | null>(null)
+const importingVehicles = ref(false)
+
+const optionalText = (value: unknown) =>
+  typeof value === 'string' && value.trim() ? value.trim() : null
+
+function parseGarageJson(text: string): ImportedVehicle[] {
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error('Le fichier n’est pas un JSON valide.')
+  }
+  if (!Array.isArray(data)) throw new Error('Le JSON doit contenir une liste de véhicules.')
+  return data.map((item, index) => {
+    const entry = (item ?? {}) as Record<string, unknown>
+    const name = optionalText(entry.name)
+    if (!name) throw new Error(`Le véhicule n°${index + 1} n’a pas de nom.`)
+    if (name.length > 64) throw new Error(`Le nom « ${name} » dépasse 64 caractères.`)
+    const plate = optionalText(entry.plateText)?.toUpperCase() ?? null
+    if (plate && plate.length > 16) throw new Error(`La plaque « ${plate} » dépasse 16 caractères.`)
+    const model = optionalText(entry.model)
+    if (model && model.length > 64) throw new Error(`Le modèle « ${model} » dépasse 64 caractères.`)
+    return { name, plate, model }
+  })
+}
+
+/** Véhicules actuels absents du fichier (reconnus par plaque, ou par nom sans plaque). */
+function vehiclesMissingFrom(imported: ImportedVehicle[]): FleetVehicle[] {
+  const plates = new Set(imported.flatMap((vehicle) => (vehicle.plate ? [vehicle.plate] : [])))
+  const plateless = imported.filter((vehicle) => !vehicle.plate).map((vehicle) => vehicle.name)
+  return vehicles.value.filter((vehicle) => {
+    if (vehicle.plate) return !plates.has(vehicle.plate.toUpperCase())
+    const index = plateless.indexOf(vehicle.name)
+    if (index < 0) return true
+    plateless.splice(index, 1)
+    return false
+  })
+}
+
+async function importVehicles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || importingVehicles.value) return
+  error.value = ''
+
+  let imported: ImportedVehicle[]
+  try {
+    imported = parseGarageJson(await file.text())
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Lecture du fichier impossible.'
+    return
+  }
+
+  const missing = vehiclesMissingFrom(imported)
+  const warning = missing.length
+    ? `\n\nVéhicules absents du fichier, supprimés et retirés des lignes de la flotte (${missing.length}) :\n${missing.map((vehicle) => `• ${vehicle.name}`).join('\n')}`
+    : ''
+  if (!window.confirm(`Remplacer la liste par les ${imported.length} véhicules du fichier « ${file.name} » ?${warning}`)) return
+
+  importingVehicles.value = true
+  try {
+    const result = await $fetch<VehicleImportResult>('/api/admin/vehicles/import', {
+      method: 'PUT',
+      body: { vehicles: imported },
+      credentials: 'include'
+    })
+    vehicles.value = result.vehicles
+    toast.success(`Import terminé : ${result.created} ajouté(s), ${result.updated} modifié(s), ${result.deleted} supprimé(s).`)
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Import des véhicules impossible.')
+  } finally {
+    importingVehicles.value = false
+  }
 }
 
 async function createSpot() {
@@ -636,11 +733,16 @@ function statusLabel(status: string) {
 
     <section id="admin-vehicles" v-show="activeAdminSection === 'vehicles'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-vehicles" tabindex="0">
       <div class="admin-section__heading">
-        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:car-front" size="18" /></span><div><h2>Véhicules de la flotte</h2><p>Véhicules proposés dans l’encart « Flotte de véhicules » du Dispatch.</p></div></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:car-front" size="18" /></span><div><h2>Véhicules de la flotte</h2><p>Véhicules proposés dans l’encart « Flotte de véhicules » du Dispatch. L’import d’un JSON du garage remplace la liste (nom, plaque et modèle).</p></div></div>
+        <input ref="vehicleFileInput" type="file" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true" @change="importVehicles">
+        <button type="button" class="admin-button" :disabled="importingVehicles" @click="vehicleFileInput?.click()">
+          <Icon :name="importingVehicles ? 'lucide:loader-circle' : 'lucide:file-up'" size="14" :class="{ 'admin-spin': importingVehicles }" /> {{ importingVehicles ? 'Import…' : 'Importer un JSON' }}
+        </button>
       </div>
       <form class="admin-catalog-create" @submit.prevent="createVehicle">
         <label><span>Nom du véhicule</span><input v-model="vehicleForm.name" required maxlength="64" placeholder="Ex. Ambulance"></label>
         <label><span>Plaque d’immatriculation</span><input v-model="vehicleForm.plate" maxlength="16" placeholder="Facultative"></label>
+        <label><span>Modèle</span><input v-model="vehicleForm.model" maxlength="64" placeholder="Facultatif"></label>
         <button class="admin-button admin-button--primary" type="submit" :disabled="savingVehicle || !vehicleForm.name.trim()">
           <Icon :name="savingVehicle ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingVehicle }" /> {{ savingVehicle ? 'Création…' : 'Ajouter ce véhicule' }}
         </button>
@@ -648,6 +750,7 @@ function statusLabel(status: string) {
       <form v-for="vehicle in vehicles" :key="vehicle.id" class="admin-row admin-catalog-row" @submit.prevent="saveVehicle(vehicle)">
         <label><span class="sr-only">Nom du véhicule</span><input v-model="vehicle.name" required maxlength="64"></label>
         <label><span class="sr-only">Plaque de {{ vehicle.name }}</span><input v-model="vehicle.plate" maxlength="16" placeholder="Sans plaque"></label>
+        <label><span class="sr-only">Modèle de {{ vehicle.name }}</span><input v-model="vehicle.model" maxlength="64" placeholder="Modèle inconnu"></label>
         <div class="admin-row__actions">
           <button type="submit" class="admin-button" :disabled="workingVehicleIds.includes(vehicle.id) || !vehicle.name.trim()">
             <Icon name="lucide:save" size="14" /> Enregistrer
@@ -765,10 +868,10 @@ function statusLabel(status: string) {
 .admin-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }.admin-toggle span { display: grid; gap: 4px; }.admin-toggle strong { font-size: 12px; }.admin-toggle small { color: var(--dp-text-dim); font-size: 10px; }
 .admin-saved { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--dp-accent); font-size: 10px; }
 .admin-error { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }.admin-error span { flex: 1; }.admin-error button { color: inherit; }
-.admin-catalog-create { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(140px, .7fr) auto; align-items: end; gap: 14px; margin-bottom: 8px; padding: 16px; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel-2); }
+.admin-catalog-create { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; align-items: end; gap: 14px; margin-bottom: 8px; padding: 16px; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel-2); }
 .admin-catalog-create--single { grid-template-columns: minmax(160px, 1fr) auto; }
 .admin-catalog-create > label { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
-.admin-catalog-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(140px, .7fr) auto; }
+.admin-catalog-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; }
 .admin-catalog-row--single { grid-template-columns: minmax(160px, 1fr) auto; }
 .admin-catalog-row + .admin-catalog-row { margin-top: 9px; }
 .admin-catalog-create input, .admin-catalog-row input { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }

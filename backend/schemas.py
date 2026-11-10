@@ -549,17 +549,25 @@ def _clean_plate(value: Optional[str]) -> Optional[str]:
     return value or None
 
 
+def _clean_optional(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    return value.strip() or None
+
+
 class VehicleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     plate: Optional[str]
+    model: Optional[str] = None
 
 
 class VehicleCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     plate: Optional[str] = Field(default=None, max_length=16)
+    model: Optional[str] = Field(default=None, max_length=64)
 
     @field_validator("name")
     @classmethod
@@ -571,10 +579,16 @@ class VehicleCreateRequest(BaseModel):
     def _plate(cls, value: Optional[str]) -> Optional[str]:
         return _clean_plate(value)
 
+    @field_validator("model")
+    @classmethod
+    def _model(cls, value: Optional[str]) -> Optional[str]:
+        return _clean_optional(value)
+
 
 class VehicleUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=64)
     plate: Optional[str] = Field(default=None, max_length=16)
+    model: Optional[str] = Field(default=None, max_length=64)
 
     @field_validator("name")
     @classmethod
@@ -585,6 +599,24 @@ class VehicleUpdateRequest(BaseModel):
     @classmethod
     def _plate(cls, value: Optional[str]) -> Optional[str]:
         return _clean_plate(value)
+
+    @field_validator("model")
+    @classmethod
+    def _model(cls, value: Optional[str]) -> Optional[str]:
+        return _clean_optional(value)
+
+
+class VehicleImportRequest(BaseModel):
+    """Liste complète du garage : le catalogue devient exactement cette liste."""
+
+    vehicles: list[VehicleCreateRequest] = Field(max_length=500)
+
+
+class VehicleImportResult(BaseModel):
+    created: int
+    updated: int
+    deleted: int
+    vehicles: list[VehicleOut]
 
 
 class ParkingSpotOut(BaseModel):

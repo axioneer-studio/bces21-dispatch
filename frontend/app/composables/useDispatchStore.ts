@@ -59,6 +59,7 @@ export interface Vehicle {
   id: number
   name: string
   plate: string | null
+  model: string | null
 }
 
 export interface ParkingSpot {

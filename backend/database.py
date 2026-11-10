@@ -74,6 +74,10 @@ _GRADE_ALTER_STATEMENTS = [
     "ALTER TABLE grades ADD COLUMN color VARCHAR(7) DEFAULT '#46996d' NOT NULL",
 ]
 
+_VEHICLE_ALTER_STATEMENTS = [
+    "ALTER TABLE vehicles ADD COLUMN model VARCHAR(64)",
+]
+
 
 async def _run_user_migrations(conn) -> None:
     for stmt in _USER_ALTER_STATEMENTS:
@@ -119,6 +123,15 @@ async def _run_employee_migrations(conn) -> None:
 
 async def _run_grade_migrations(conn) -> None:
     for stmt in _GRADE_ALTER_STATEMENTS:
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
+
+
+async def _run_vehicle_migrations(conn) -> None:
+    for stmt in _VEHICLE_ALTER_STATEMENTS:
         try:
             async with conn.begin_nested():
                 await conn.execute(text(stmt))
@@ -242,6 +255,7 @@ async def init_db() -> None:
         await _run_role_migrations(conn)
         await _run_employee_migrations(conn)
         await _run_grade_migrations(conn)
+        await _run_vehicle_migrations(conn)
         await _run_access_migrations(conn)
         await _run_dispatch_migrations(conn)
 
