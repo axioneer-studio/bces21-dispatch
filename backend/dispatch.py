@@ -20,7 +20,10 @@ from models import (
     DispatchSlot,
     DispatchState,
     DispatchNote,
+    FleetEntry,
+    ParkingSpot,
     User,
+    Vehicle,
 )
 from schemas import (
     AssignRequest,
@@ -28,6 +31,8 @@ from schemas import (
     DispatchResetRequest,
     DispatchSnapshot,
     MessageResponse,
+    FleetEntryOut,
+    ParkingSpotOut,
     RadioOut,
     RadioUpdateRequest,
     SlotCreateRequest,
@@ -35,6 +40,7 @@ from schemas import (
     SlotUpdateRequest,
     StateOut,
     StateUpdateRequest,
+    VehicleOut,
     mask_serial,
 )
 
@@ -105,11 +111,24 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
         await db.commit()
     note = await db.get(DispatchNote, 1)
 
+    fleet = (
+        await db.execute(select(FleetEntry).order_by(FleetEntry.order.asc(), FleetEntry.id.asc()))
+    ).scalars().all()
+    vehicles = (
+        await db.execute(select(Vehicle).order_by(Vehicle.name.asc(), Vehicle.plate.asc(), Vehicle.id.asc()))
+    ).scalars().all()
+    parking_spots = (
+        await db.execute(select(ParkingSpot).order_by(ParkingSpot.name.asc()))
+    ).scalars().all()
+
     return {
         "slots": [SlotOut.model_validate(s).model_dump(mode="json") for s in slots],
         "radios": [dispatch_radio_out(r).model_dump(mode="json") for r in radios],
         "state": StateOut.model_validate(state).model_dump(mode="json"),
         "note": note.content if note else "",
+        "fleet": [FleetEntryOut.model_validate(f).model_dump(mode="json") for f in fleet],
+        "vehicles": [VehicleOut.model_validate(v).model_dump(mode="json") for v in vehicles],
+        "parking_spots": [ParkingSpotOut.model_validate(p).model_dump(mode="json") for p in parking_spots],
     }
 
 

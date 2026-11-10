@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Ref } from 'vue'
+
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Administration · BCES' })
 
@@ -41,6 +43,25 @@ interface AppSettings {
   registration_open: boolean
 }
 
+interface FleetVehicle {
+  id: number
+  name: string
+  plate: string | null
+  model: string | null
+}
+
+interface VehicleImportResult {
+  created: number
+  updated: number
+  deleted: number
+  vehicles: FleetVehicle[]
+}
+
+interface ParkingSpot {
+  id: number
+  name: string
+}
+
 const pageOptions = [
   { key: 'dashboard', label: 'Accueil' },
   { key: 'dispatch', label: 'Dispatch' },
@@ -51,7 +72,15 @@ const pageOptions = [
 ]
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const [{ data: initialUsers }, { data: initialRoles }, { data: permissionOptions }, { data: initialRequests }, { data: initialSettings }] =
+const [
+  { data: initialUsers },
+  { data: initialRoles },
+  { data: permissionOptions },
+  { data: initialRequests },
+  { data: initialSettings },
+  { data: initialVehicles },
+  { data: initialParkingSpots }
+] =
   await Promise.all([
     useAsyncData('admin-users', () =>
       $fetch<AppUser[]>('/api/admin/users', { credentials: 'include', headers: requestHeaders })
@@ -70,6 +99,12 @@ const [{ data: initialUsers }, { data: initialRoles }, { data: permissionOptions
     ),
     useAsyncData('admin-settings', () =>
       $fetch<AppSettings>('/api/admin/settings', { credentials: 'include', headers: requestHeaders })
+    ),
+    useAsyncData('admin-vehicles', () =>
+      $fetch<FleetVehicle[]>('/api/admin/vehicles', { credentials: 'include', headers: requestHeaders })
+    ),
+    useAsyncData('admin-parking-spots', () =>
+      $fetch<ParkingSpot[]>('/api/admin/parking-spots', { credentials: 'include', headers: requestHeaders })
     )
   ])
 
@@ -88,10 +123,30 @@ const workingUserIds = ref<number[]>([])
 const savingRole = ref(false)
 const savingRoleIds = ref<number[]>([])
 const deletingRoleIds = ref<number[]>([])
-const activeAdminSection = ref<'registrations' | 'users' | 'roles' | 'settings'>(
+const adminSections = ['registrations', 'users', 'roles', 'vehicles', 'parking', 'settings'] as const
+const activeAdminSection = ref<(typeof adminSections)[number]>(
   registrations.value.length ? 'registrations' : 'users'
 )
-const adminSections = ['registrations', 'users', 'roles', 'settings'] as const
+
+// --- Flotte : véhicules et emplacements de stationnement ---
+/** Par modèle (Z → A) puis par plaque (A → Z) ; sans modèle ou sans plaque en dernier (même ordre que l'API). */
+const byModelAndPlate = (a: FleetVehicle, b: FleetVehicle) =>
+  Number(a.model === null) - Number(b.model === null)
+  || (b.model ?? '').localeCompare(a.model ?? '', 'fr', { sensitivity: 'base' })
+  || Number(a.plate === null) - Number(b.plate === null)
+  || (a.plate ?? '').localeCompare(b.plate ?? '', 'fr', { sensitivity: 'base' })
+  || a.name.localeCompare(b.name, 'fr')
+  || a.id - b.id
+const bySpotName = (a: ParkingSpot, b: ParkingSpot) => a.name.localeCompare(b.name, 'fr')
+
+const vehicles = ref<FleetVehicle[]>(initialVehicles.value ?? [])
+const parkingSpots = ref<ParkingSpot[]>(initialParkingSpots.value ?? [])
+const vehicleForm = reactive({ name: '', plate: '', model: '' })
+const spotForm = reactive({ name: '' })
+const savingVehicle = ref(false)
+const savingSpot = ref(false)
+const workingVehicleIds = ref<number[]>([])
+const workingSpotIds = ref<number[]>([])
 
 const filteredUsers = computed(() => {
   const query = userSearch.value.trim().toLocaleLowerCase('fr')
@@ -301,6 +356,195 @@ async function saveSettings() {
   }
 }
 
+async function withWorking(ids: Ref<number[]>, id: number, task: () => Promise<void>) {
+  if (ids.value.includes(id)) return
+  error.value = ''
+  ids.value.push(id)
+  try {
+    await task()
+  } finally {
+    ids.value = ids.value.filter((item) => item !== id)
+  }
+}
+
+async function createVehicle() {
+  if (savingVehicle.value || !vehicleForm.name.trim()) return
+  error.value = ''
+  savingVehicle.value = true
+  try {
+    const vehicle = await $fetch<FleetVehicle>('/api/admin/vehicles', {
+      method: 'POST',
+      body: { name: vehicleForm.name, plate: vehicleForm.plate || null, model: vehicleForm.model || null },
+      credentials: 'include'
+    })
+    vehicles.value = [...vehicles.value, vehicle].sort(byModelAndPlate)
+    vehicleForm.name = ''
+    vehicleForm.plate = ''
+    vehicleForm.model = ''
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Création du véhicule impossible.')
+  } finally {
+    savingVehicle.value = false
+  }
+}
+
+async function saveVehicle(vehicle: FleetVehicle) {
+  await withWorking(workingVehicleIds, vehicle.id, async () => {
+    try {
+      const saved = await $fetch<FleetVehicle>(`/api/admin/vehicles/${vehicle.id}`, {
+        method: 'PATCH',
+        body: { name: vehicle.name, plate: vehicle.plate || null, model: vehicle.model || null },
+        credentials: 'include'
+      })
+      Object.assign(vehicle, saved)
+      vehicles.value = [...vehicles.value].sort(byModelAndPlate)
+    } catch (cause) {
+      error.value = messageFromError(cause, 'Modification du véhicule impossible.')
+    }
+  })
+}
+
+async function deleteVehicle(vehicle: FleetVehicle) {
+  if (!window.confirm(`Supprimer le véhicule « ${vehicle.name} » ? Il sera retiré des lignes de la flotte.`)) return
+  await withWorking(workingVehicleIds, vehicle.id, async () => {
+    try {
+      await $fetch(`/api/admin/vehicles/${vehicle.id}`, { method: 'DELETE', credentials: 'include' })
+      vehicles.value = vehicles.value.filter((item) => item.id !== vehicle.id)
+    } catch (cause) {
+      error.value = messageFromError(cause, 'Suppression du véhicule impossible.')
+    }
+  })
+}
+
+// --- Import du garage (JSON exporté du jeu) : seuls nom, plaque et modèle sont repris ---
+
+type ImportedVehicle = { name: string; plate: string | null; model: string | null }
+
+const toast = useAppToast()
+const vehicleFileInput = ref<HTMLInputElement | null>(null)
+const importingVehicles = ref(false)
+
+const optionalText = (value: unknown) =>
+  typeof value === 'string' && value.trim() ? value.trim() : null
+
+function parseGarageJson(text: string): ImportedVehicle[] {
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error('Le fichier n’est pas un JSON valide.')
+  }
+  if (!Array.isArray(data)) throw new Error('Le JSON doit contenir une liste de véhicules.')
+  return data.map((item, index) => {
+    const entry = (item ?? {}) as Record<string, unknown>
+    const name = optionalText(entry.name)
+    if (!name) throw new Error(`Le véhicule n°${index + 1} n’a pas de nom.`)
+    if (name.length > 64) throw new Error(`Le nom « ${name} » dépasse 64 caractères.`)
+    const plate = optionalText(entry.plateText)?.toUpperCase() ?? null
+    if (plate && plate.length > 16) throw new Error(`La plaque « ${plate} » dépasse 16 caractères.`)
+    const model = optionalText(entry.model)
+    if (model && model.length > 64) throw new Error(`Le modèle « ${model} » dépasse 64 caractères.`)
+    return { name, plate, model }
+  })
+}
+
+/** Véhicules actuels absents du fichier (reconnus par plaque, ou par nom sans plaque). */
+function vehiclesMissingFrom(imported: ImportedVehicle[]): FleetVehicle[] {
+  const plates = new Set(imported.flatMap((vehicle) => (vehicle.plate ? [vehicle.plate] : [])))
+  const plateless = imported.filter((vehicle) => !vehicle.plate).map((vehicle) => vehicle.name)
+  return vehicles.value.filter((vehicle) => {
+    if (vehicle.plate) return !plates.has(vehicle.plate.toUpperCase())
+    const index = plateless.indexOf(vehicle.name)
+    if (index < 0) return true
+    plateless.splice(index, 1)
+    return false
+  })
+}
+
+async function importVehicles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || importingVehicles.value) return
+  error.value = ''
+
+  let imported: ImportedVehicle[]
+  try {
+    imported = parseGarageJson(await file.text())
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Lecture du fichier impossible.'
+    return
+  }
+
+  const missing = vehiclesMissingFrom(imported)
+  const warning = missing.length
+    ? `\n\nVéhicules absents du fichier, supprimés et retirés des lignes de la flotte (${missing.length}) :\n${missing.map((vehicle) => `• ${vehicle.name}`).join('\n')}`
+    : ''
+  if (!window.confirm(`Remplacer la liste par les ${imported.length} véhicules du fichier « ${file.name} » ?${warning}`)) return
+
+  importingVehicles.value = true
+  try {
+    const result = await $fetch<VehicleImportResult>('/api/admin/vehicles/import', {
+      method: 'PUT',
+      body: { vehicles: imported },
+      credentials: 'include'
+    })
+    vehicles.value = result.vehicles
+    toast.success(`Import terminé : ${result.created} ajouté(s), ${result.updated} modifié(s), ${result.deleted} supprimé(s).`)
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Import des véhicules impossible.')
+  } finally {
+    importingVehicles.value = false
+  }
+}
+
+async function createSpot() {
+  if (savingSpot.value || !spotForm.name.trim()) return
+  error.value = ''
+  savingSpot.value = true
+  try {
+    const spot = await $fetch<ParkingSpot>('/api/admin/parking-spots', {
+      method: 'POST',
+      body: { name: spotForm.name },
+      credentials: 'include'
+    })
+    parkingSpots.value = [...parkingSpots.value, spot].sort(bySpotName)
+    spotForm.name = ''
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Création de l’emplacement impossible.')
+  } finally {
+    savingSpot.value = false
+  }
+}
+
+async function saveSpot(spot: ParkingSpot) {
+  await withWorking(workingSpotIds, spot.id, async () => {
+    try {
+      const saved = await $fetch<ParkingSpot>(`/api/admin/parking-spots/${spot.id}`, {
+        method: 'PATCH',
+        body: { name: spot.name },
+        credentials: 'include'
+      })
+      Object.assign(spot, saved)
+      parkingSpots.value = [...parkingSpots.value].sort(bySpotName)
+    } catch (cause) {
+      error.value = messageFromError(cause, 'Modification de l’emplacement impossible.')
+    }
+  })
+}
+
+async function deleteSpot(spot: ParkingSpot) {
+  if (!window.confirm(`Supprimer l’emplacement « ${spot.name} » ?`)) return
+  await withWorking(workingSpotIds, spot.id, async () => {
+    try {
+      await $fetch(`/api/admin/parking-spots/${spot.id}`, { method: 'DELETE', credentials: 'include' })
+      parkingSpots.value = parkingSpots.value.filter((item) => item.id !== spot.id)
+    } catch (cause) {
+      error.value = messageFromError(cause, 'Suppression de l’emplacement impossible.')
+    }
+  })
+}
+
 function statusLabel(status: string) {
   if (status === 'pending') return 'En attente'
   if (status === 'disabled') return 'Désactivé'
@@ -338,6 +582,12 @@ function statusLabel(status: string) {
       </button>
       <button id="admin-tab-roles" type="button" role="tab" :aria-selected="activeAdminSection === 'roles'" aria-controls="admin-roles" :class="{ 'is-active': activeAdminSection === 'roles' }" @click="activeAdminSection = 'roles'">
         <Icon name="lucide:shield-check" size="16" /> Rôles <span>{{ roles.length }}</span>
+      </button>
+      <button id="admin-tab-vehicles" type="button" role="tab" :aria-selected="activeAdminSection === 'vehicles'" aria-controls="admin-vehicles" :class="{ 'is-active': activeAdminSection === 'vehicles' }" @click="activeAdminSection = 'vehicles'">
+        <Icon name="lucide:car-front" size="16" /> Véhicules <span>{{ vehicles.length }}</span>
+      </button>
+      <button id="admin-tab-parking" type="button" role="tab" :aria-selected="activeAdminSection === 'parking'" aria-controls="admin-parking" :class="{ 'is-active': activeAdminSection === 'parking' }" @click="activeAdminSection = 'parking'">
+        <Icon name="lucide:square-parking" size="16" /> Stationnement <span>{{ parkingSpots.length }}</span>
       </button>
       <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="activeAdminSection = 'settings'">
         <Icon name="lucide:settings-2" size="16" /> Paramètres
@@ -481,6 +731,68 @@ function statusLabel(status: string) {
       <div v-if="!roles.length" class="admin-empty">Aucun rôle applicatif créé.</div>
     </section>
 
+    <section id="admin-vehicles" v-show="activeAdminSection === 'vehicles'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-vehicles" tabindex="0">
+      <div class="admin-section__heading">
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:car-front" size="18" /></span><div><h2>Véhicules de la flotte</h2><p>Véhicules proposés dans l’encart « Flotte de véhicules » du Dispatch. L’import d’un JSON du garage remplace la liste (nom, plaque et modèle).</p></div></div>
+        <input ref="vehicleFileInput" type="file" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true" @change="importVehicles">
+        <button type="button" class="admin-button" :disabled="importingVehicles" @click="vehicleFileInput?.click()">
+          <Icon :name="importingVehicles ? 'lucide:loader-circle' : 'lucide:file-up'" size="14" :class="{ 'admin-spin': importingVehicles }" /> {{ importingVehicles ? 'Import…' : 'Importer un JSON' }}
+        </button>
+      </div>
+      <form class="admin-catalog-create" @submit.prevent="createVehicle">
+        <label><span>Nom du véhicule</span><input v-model="vehicleForm.name" required maxlength="64" placeholder="Ex. Ambulance"></label>
+        <label><span>Plaque d’immatriculation</span><input v-model="vehicleForm.plate" maxlength="16" placeholder="Facultative"></label>
+        <label><span>Modèle</span><input v-model="vehicleForm.model" maxlength="64" placeholder="Facultatif"></label>
+        <button class="admin-button admin-button--primary" type="submit" :disabled="savingVehicle || !vehicleForm.name.trim()">
+          <Icon :name="savingVehicle ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingVehicle }" /> {{ savingVehicle ? 'Création…' : 'Ajouter ce véhicule' }}
+        </button>
+      </form>
+      <form v-for="vehicle in vehicles" :key="vehicle.id" class="admin-row admin-catalog-row" @submit.prevent="saveVehicle(vehicle)">
+        <label><span class="sr-only">Nom du véhicule</span><input v-model="vehicle.name" required maxlength="64"></label>
+        <label><span class="sr-only">Plaque de {{ vehicle.name }}</span><input v-model="vehicle.plate" maxlength="16" placeholder="Sans plaque"></label>
+        <label><span class="sr-only">Modèle de {{ vehicle.name }}</span><input v-model="vehicle.model" maxlength="64" placeholder="Modèle inconnu"></label>
+        <div class="admin-row__actions">
+          <button type="submit" class="admin-button" :disabled="workingVehicleIds.includes(vehicle.id) || !vehicle.name.trim()">
+            <Icon name="lucide:save" size="14" /> Enregistrer
+          </button>
+          <button type="button" class="admin-button admin-button--danger" :disabled="workingVehicleIds.includes(vehicle.id)" @click="deleteVehicle(vehicle)">
+            <Icon name="lucide:trash-2" size="14" /> Supprimer
+          </button>
+        </div>
+      </form>
+      <div v-if="!vehicles.length" class="admin-empty">
+        <Icon name="lucide:car-front" size="21" />
+        <p>Aucun véhicule enregistré.</p>
+      </div>
+    </section>
+
+    <section id="admin-parking" v-show="activeAdminSection === 'parking'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-parking" tabindex="0">
+      <div class="admin-section__heading">
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:square-parking" size="18" /></span><div><h2>Emplacements de stationnement</h2><p>Lieux proposés pour la flotte. La liste n’est pas exhaustive : le Dispatch peut aussi saisir un lieu librement.</p></div></div>
+      </div>
+      <form class="admin-catalog-create admin-catalog-create--single" @submit.prevent="createSpot">
+        <label><span>Nom de l’emplacement</span><input v-model="spotForm.name" required maxlength="64" placeholder="Ex. Parking Hôpital"></label>
+        <button class="admin-button admin-button--primary" type="submit" :disabled="savingSpot || !spotForm.name.trim()">
+          <Icon :name="savingSpot ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingSpot }" /> {{ savingSpot ? 'Création…' : 'Ajouter cet emplacement' }}
+        </button>
+      </form>
+      <form v-for="spot in parkingSpots" :key="spot.id" class="admin-row admin-catalog-row admin-catalog-row--single" @submit.prevent="saveSpot(spot)">
+        <label><span class="sr-only">Nom de l’emplacement</span><input v-model="spot.name" required maxlength="64"></label>
+        <div class="admin-row__actions">
+          <button type="submit" class="admin-button" :disabled="workingSpotIds.includes(spot.id) || !spot.name.trim()">
+            <Icon name="lucide:save" size="14" /> Enregistrer
+          </button>
+          <button type="button" class="admin-button admin-button--danger" :disabled="workingSpotIds.includes(spot.id)" @click="deleteSpot(spot)">
+            <Icon name="lucide:trash-2" size="14" /> Supprimer
+          </button>
+        </div>
+      </form>
+      <div v-if="!parkingSpots.length" class="admin-empty">
+        <Icon name="lucide:square-parking" size="21" />
+        <p>Aucun emplacement enregistré.</p>
+      </div>
+    </section>
+
     <section id="admin-settings" v-show="activeAdminSection === 'settings'" class="admin-section admin-setting" role="tabpanel" aria-labelledby="admin-tab-settings" tabindex="0">
       <div class="admin-section__heading">
         <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:settings-2" size="18" /></span><div><h2>Paramètres généraux</h2><p>Contrôlez l’ouverture des nouvelles inscriptions.</p></div></div>
@@ -556,7 +868,15 @@ function statusLabel(status: string) {
 .admin-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }.admin-toggle span { display: grid; gap: 4px; }.admin-toggle strong { font-size: 12px; }.admin-toggle small { color: var(--dp-text-dim); font-size: 10px; }
 .admin-saved { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--dp-accent); font-size: 10px; }
 .admin-error { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }.admin-error span { flex: 1; }.admin-error button { color: inherit; }
+.admin-catalog-create { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; align-items: end; gap: 14px; margin-bottom: 8px; padding: 16px; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel-2); }
+.admin-catalog-create--single { grid-template-columns: minmax(160px, 1fr) auto; }
+.admin-catalog-create > label { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
+.admin-catalog-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; }
+.admin-catalog-row--single { grid-template-columns: minmax(160px, 1fr) auto; }
+.admin-catalog-row + .admin-catalog-row { margin-top: 9px; }
+.admin-catalog-create input, .admin-catalog-row input { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
+.admin-catalog-create input:focus, .admin-catalog-row input:focus { border-color: var(--dp-accent-line); outline: 0; }
 .admin-spin { animation: admin-spin 1s linear infinite; }@keyframes admin-spin { to { transform: rotate(360deg); } }
-@media (max-width: 800px) { .admin-header { align-items: flex-start; flex-direction: column; }.admin-overview { width: 100%; }.admin-count { flex: 1; }.admin-row { align-items: flex-start; flex-wrap: wrap; }.admin-role-create { grid-template-columns: 1fr; }.admin-role-create .admin-button { justify-self: start; }.admin-section__heading { align-items: flex-start; flex-direction: column; }.admin-search { width: 100%; } }
+@media (max-width: 800px) { .admin-header { align-items: flex-start; flex-direction: column; }.admin-overview { width: 100%; }.admin-count { flex: 1; }.admin-row { align-items: flex-start; flex-wrap: wrap; }.admin-role-create { grid-template-columns: 1fr; }.admin-role-create .admin-button { justify-self: start; }.admin-catalog-create, .admin-catalog-row { grid-template-columns: 1fr; }.admin-catalog-create .admin-button { justify-self: start; }.admin-section__heading { align-items: flex-start; flex-direction: column; }.admin-search { width: 100%; } }
 @media (max-width: 520px) { .admin-page { padding: 18px 14px; }.admin-header { padding: 20px 17px; }.admin-overview { gap: 6px; }.admin-count { min-width: 0; padding: 10px; }.admin-count span { font-size: 9px; }.admin-nav { gap: 3px; }.admin-nav button { gap: 6px; padding: 0 10px; }.admin-section { min-height: 250px; padding: 15px; }.admin-section__heading { gap: 12px; }.admin-row__identity { min-width: 100%; }.admin-role { flex: 1; }.admin-toggle { align-items: flex-start; }.admin-role-card__summary { gap: 8px; padding: 10px; }.admin-role-card__summary > small { max-width: 105px; overflow: hidden; text-overflow: ellipsis; }.admin-role-card__content { padding: 13px; }.admin-role-card__top { align-items: flex-start; flex-direction: column; } }
 </style>
