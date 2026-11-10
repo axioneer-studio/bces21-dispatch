@@ -428,7 +428,7 @@ async function deleteRadio(radio: DirectionRadio) {
           @keydown.esc="cancelSerial(radio, $event)"
         >
         <span class="direction-radio__holder" :class="{ 'direction-muted': !radio.employee_name }">
-          <span>{{ radio.employee_name ?? 'Non affectée' }}</span>
+          <span>{{ radio.employee_name ?? '-' }}</span>
           <span v-if="radio.is_direction" class="direction-grade__badge"><Icon name="lucide:radio-tower" size="11" /> Direction</span>
         </span>
         <span class="direction-radio__status" :data-status="radioStatusKey(radio)">{{ radioStatusLabel(radio) }}</span>
