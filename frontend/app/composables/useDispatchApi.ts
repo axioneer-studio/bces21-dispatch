@@ -11,7 +11,7 @@ function base(): string {
 async function req<T>(
   path: string,
   options: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     body?: Record<string, unknown>
     credentials?: 'include'
   } = {}
@@ -85,7 +85,7 @@ export async function unassignUser(slotId: number, employeeId: number) {
 
 export async function updateRadio(
   id: number,
-  patch: Partial<Pick<DispatchRadio, 'serial' | 'employee_id' | 'is_on' | 'is_loading'>>
+  patch: Partial<Pick<DispatchRadio, 'employee_id' | 'is_on' | 'is_loading'>>
 ) {
   return await req<DispatchRadio>(`/api/dispatch/radios/${id}`, {
     method: 'PATCH',

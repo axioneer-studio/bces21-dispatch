@@ -97,6 +97,8 @@ class Grade(Base):
     level: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     color: Mapped[str] = mapped_column(String(7), default="#46996d", nullable=False)
     permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    # Les employés de ce grade peuvent recevoir une radio Direction.
+    is_direction: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     employees: Mapped[list["Employee"]] = relationship(back_populates="grade")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False

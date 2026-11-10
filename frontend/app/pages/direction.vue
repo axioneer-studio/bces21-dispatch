@@ -13,11 +13,22 @@ interface Grade {
   level: number
   color: string
   permissions: string[]
+  is_direction: boolean
   employees_count: number
 }
 
+interface DirectionRadio {
+  id: number
+  serial: string
+  employee_id: number | null
+  employee_name: string | null
+  is_on: boolean
+  is_loading: boolean
+  is_direction: boolean
+}
+
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const [{ data: initialGrades }, { data: permissionOptions }] = await Promise.all([
+const [{ data: initialGrades }, { data: permissionOptions }, { data: initialRadios }] = await Promise.all([
   useAsyncData('direction-grades', () =>
     $fetch<Grade[]>('/api/direction/grades', { credentials: 'include', headers: requestHeaders })
   ),
@@ -26,8 +37,22 @@ const [{ data: initialGrades }, { data: permissionOptions }] = await Promise.all
       credentials: 'include',
       headers: requestHeaders
     })
+  ),
+  useAsyncData('direction-radios', () =>
+    $fetch<DirectionRadio[]>('/api/direction/radios', { credentials: 'include', headers: requestHeaders })
   )
 ])
+
+const directionSections = ['grades', 'radios'] as const
+const activeSection = ref<(typeof directionSections)[number]>('grades')
+
+function moveSectionTab(step: -1 | 1) {
+  const index = directionSections.indexOf(activeSection.value)
+  const next = directionSections[(index + step + directionSections.length) % directionSections.length]
+  if (!next) return
+  activeSection.value = next
+  nextTick(() => document.querySelector<HTMLElement>(`#direction-tab-${next}`)?.focus())
+}
 
 const grades = ref<Grade[]>(initialGrades.value ?? [])
 const editingId = ref<number | null>(null)
@@ -36,7 +61,7 @@ const deletingGradeId = ref<number | null>(null)
 const error = ref('')
 const gradeDialog = ref<HTMLDialogElement | null>(null)
 const gradeSearch = ref('')
-const form = reactive({ name: '', level: 1, color: '#46996d', permissions: [] as string[] })
+const form = reactive({ name: '', level: 1, color: '#46996d', permissions: [] as string[], is_direction: false })
 const visibleGrades = computed(() => {
   const query = gradeSearch.value.trim().toLocaleLowerCase('fr')
   if (!query) return grades.value
@@ -65,6 +90,7 @@ function resetForm() {
   form.level = 1
   form.color = '#46996d'
   form.permissions = []
+  form.is_direction = false
 }
 
 async function openGradeDialog(grade?: Grade) {
@@ -76,6 +102,7 @@ async function openGradeDialog(grade?: Grade) {
     form.level = grade.level
     form.color = grade.color
     form.permissions = [...grade.permissions]
+    form.is_direction = grade.is_direction
   }
   await nextTick()
   if (!gradeDialog.value?.open) gradeDialog.value?.showModal()
@@ -100,7 +127,8 @@ async function saveGrade() {
       name: form.name.trim(),
       level: Math.floor(form.level),
       color: form.color,
-      permissions: [...new Set(form.permissions)]
+      permissions: [...new Set(form.permissions)],
+      is_direction: form.is_direction
     }
     const saved = editingId.value
       ? await $fetch<Grade>(`/api/direction/grades/${editingId.value}`, {
@@ -140,6 +168,95 @@ async function deleteGrade(grade: Grade) {
     deletingGradeId.value = null
   }
 }
+
+// --- Radios : seule la Direction voit le numéro de série complet ---
+
+const radios = ref<DirectionRadio[]>(initialRadios.value ?? [])
+const radioForm = reactive({ serial: '' })
+const creatingRadio = ref(false)
+const busyRadioId = ref<number | null>(null)
+/** Numéro en cours de saisie, par radio. */
+const serialDrafts = reactive<Record<number, string>>({})
+const directionRadioCount = computed(() => radios.value.filter((radio) => radio.is_direction).length)
+
+const radioStatusLabel = (radio: DirectionRadio) =>
+  radio.is_on ? 'ON' : radio.is_loading ? 'Indisponible' : 'OFF'
+const radioStatusKey = (radio: DirectionRadio) =>
+  radio.is_on ? 'on' : radio.is_loading ? 'standby' : 'off'
+
+/** Recharge la liste : le tri par numéro de série est fait par le serveur. */
+async function refreshRadios() {
+  radios.value = await $fetch<DirectionRadio[]>('/api/direction/radios', { credentials: 'include' })
+}
+
+async function createRadio() {
+  const serial = radioForm.serial.trim()
+  if (creatingRadio.value || !serial) return
+  creatingRadio.value = true
+  error.value = ''
+  try {
+    await $fetch('/api/direction/radios', {
+      method: 'POST',
+      body: { serial },
+      credentials: 'include'
+    })
+    radioForm.serial = ''
+    await refreshRadios()
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Création de la radio impossible.')
+  } finally {
+    creatingRadio.value = false
+  }
+}
+
+async function updateRadio(radio: DirectionRadio, patch: Pick<DirectionRadio, 'serial'>) {
+  if (busyRadioId.value !== null) return false
+  busyRadioId.value = radio.id
+  error.value = ''
+  try {
+    await $fetch(`/api/direction/radios/${radio.id}`, { method: 'PATCH', body: patch, credentials: 'include' })
+    await refreshRadios()
+    return true
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Mise à jour de la radio impossible.')
+    return false
+  } finally {
+    busyRadioId.value = null
+  }
+}
+
+async function commitSerial(radio: DirectionRadio) {
+  const draft = serialDrafts[radio.id]
+  if (draft === undefined) return
+  const serial = draft.trim()
+  if (!serial || serial === radio.serial) {
+    delete serialDrafts[radio.id]
+    return
+  }
+  // Le brouillon reste affiché si le numéro est refusé (doublon…), pour le corriger.
+  if (await updateRadio(radio, { serial })) delete serialDrafts[radio.id]
+}
+
+function cancelSerial(radio: DirectionRadio, event: KeyboardEvent) {
+  delete serialDrafts[radio.id]
+  ;(event.target as HTMLInputElement).blur()
+}
+
+async function deleteRadio(radio: DirectionRadio) {
+  if (busyRadioId.value !== null) return
+  if (!window.confirm(`Supprimer la radio ${radio.serial} ?`)) return
+  busyRadioId.value = radio.id
+  error.value = ''
+  try {
+    await $fetch(`/api/direction/radios/${radio.id}`, { method: 'DELETE', credentials: 'include' })
+    radios.value = radios.value.filter((item) => item.id !== radio.id)
+    delete serialDrafts[radio.id]
+  } catch (cause) {
+    error.value = messageFromError(cause, 'Suppression de la radio impossible.')
+  } finally {
+    busyRadioId.value = null
+  }
+}
 </script>
 
 <template>
@@ -148,18 +265,31 @@ async function deleteGrade(grade: Grade) {
       <div>
         <p class="direction-eyebrow">BCES · ORGANISATION DU SERVICE</p>
         <h1>Direction</h1>
-        <p>Définissez la hiérarchie des grades et les capacités opérationnelles associées.</p>
+        <p>Définissez la hiérarchie des grades, les capacités opérationnelles associées et le parc de radios.</p>
       </div>
       <div class="direction-header__actions">
-        <div class="direction-overview" aria-label="Résumé de la hiérarchie">
+        <div v-if="activeSection === 'grades'" class="direction-overview" aria-label="Résumé de la hiérarchie">
           <div class="direction-count"><Icon name="lucide:shield" size="18" /><strong>{{ grades.length }}</strong><span>grades</span></div>
           <div class="direction-count direction-count--muted"><Icon name="lucide:users-round" size="18" /><strong>{{ assignedEmployeeCount }}</strong><span>agents classés</span></div>
         </div>
-        <button type="button" class="direction-button direction-button--primary direction-add" @click="openGradeDialog()">
+        <div v-else class="direction-overview" aria-label="Résumé des radios">
+          <div class="direction-count"><Icon name="lucide:radio" size="18" /><strong>{{ radios.length }}</strong><span>radios</span></div>
+          <div class="direction-count direction-count--muted"><Icon name="lucide:radio-tower" size="18" /><strong>{{ directionRadioCount }}</strong><span>radios Direction</span></div>
+        </div>
+        <button v-if="activeSection === 'grades'" type="button" class="direction-button direction-button--primary direction-add" @click="openGradeDialog()">
           <Icon name="lucide:plus" size="17" /> Ajouter un grade
         </button>
       </div>
     </header>
+
+    <nav class="direction-nav" role="tablist" aria-label="Sections de la Direction" @keydown.left.prevent="moveSectionTab(-1)" @keydown.right.prevent="moveSectionTab(1)">
+      <button id="direction-tab-grades" type="button" role="tab" :aria-selected="activeSection === 'grades'" aria-controls="direction-grades" :tabindex="activeSection === 'grades' ? 0 : -1" :class="{ 'is-active': activeSection === 'grades' }" @click="activeSection = 'grades'">
+        <Icon name="lucide:shield" size="16" /> Grades <span>{{ grades.length }}</span>
+      </button>
+      <button id="direction-tab-radios" type="button" role="tab" :aria-selected="activeSection === 'radios'" aria-controls="direction-radios" :tabindex="activeSection === 'radios' ? 0 : -1" :class="{ 'is-active': activeSection === 'radios' }" @click="activeSection = 'radios'">
+        <Icon name="lucide:radio" size="16" /> Radios <span>{{ radios.length }}</span>
+      </button>
+    </nav>
 
     <div v-if="error && !gradeDialog?.open" class="direction-error" role="alert">
       <Icon name="lucide:circle-alert" size="17" /><span>{{ error }}</span>
@@ -206,6 +336,10 @@ async function deleteGrade(grade: Grade) {
             <code>{{ form.color.toUpperCase() }}</code>
           </span>
         </label>
+        <label class="direction-check direction-grade-direction">
+          <input v-model="form.is_direction" type="checkbox">
+          <span>Fait partie de la Direction <small>(peut recevoir une radio Direction)</small></span>
+        </label>
         <fieldset>
           <legend>Permissions opérationnelles</legend>
           <label v-for="permission in permissionOptions" :key="permission.key">
@@ -225,7 +359,7 @@ async function deleteGrade(grade: Grade) {
       </form>
     </dialog>
 
-    <section class="direction-section">
+    <section id="direction-grades" v-show="activeSection === 'grades'" class="direction-section" role="tabpanel" aria-labelledby="direction-tab-grades">
       <div class="direction-section__heading">
         <div><h2>Hiérarchie des grades</h2><p>Les grades attribués à des employés ne peuvent être supprimés qu’après réattribution.</p></div>
         <label class="direction-search">
@@ -236,7 +370,7 @@ async function deleteGrade(grade: Grade) {
       <article v-for="grade in visibleGrades" :key="grade.id" class="direction-grade">
         <div class="direction-grade__level" :style="{ '--grade-color': grade.color }"><span>Niveau</span><strong>{{ grade.level }}</strong></div>
         <div class="direction-grade__main">
-          <div class="direction-grade__title"><span class="direction-grade__swatch" :style="{ backgroundColor: grade.color }"></span><h3>{{ grade.name }}</h3><code>{{ grade.color.toUpperCase() }}</code><span>{{ grade.employees_count }} employé{{ grade.employees_count > 1 ? 's' : '' }}</span></div>
+          <div class="direction-grade__title"><span class="direction-grade__swatch" :style="{ backgroundColor: grade.color }"></span><h3>{{ grade.name }}</h3><code>{{ grade.color.toUpperCase() }}</code><span v-if="grade.is_direction" class="direction-grade__badge"><Icon name="lucide:radio-tower" size="11" /> Direction</span><span>{{ grade.employees_count }} employé{{ grade.employees_count > 1 ? 's' : '' }}</span></div>
           <div class="direction-permissions">
             <span v-for="key in grade.permissions" :key="key">
               {{ permissionOptions?.find((permission) => permission.key === key)?.label ?? key }}
@@ -254,6 +388,57 @@ async function deleteGrade(grade: Grade) {
         <p>{{ gradeSearch ? 'Aucun grade ne correspond à cette recherche.' : 'Aucun grade n’est configuré.' }}</p>
         <button v-if="gradeSearch" type="button" class="direction-button" @click="gradeSearch = ''">Effacer la recherche</button>
         <button v-else type="button" class="direction-button direction-button--primary" @click="openGradeDialog()">Ajouter le premier grade</button>
+      </div>
+    </section>
+
+    <section id="direction-radios" v-show="activeSection === 'radios'" class="direction-section" role="tabpanel" aria-labelledby="direction-tab-radios">
+      <div class="direction-section__heading">
+        <div>
+          <h2>Parc de radios</h2>
+          <p>Le Dispatch n’affiche que les deux premiers caractères du numéro de série (ex. 0VXXXXX). L’affectation et l’état se gèrent depuis le Dispatch.</p>
+        </div>
+      </div>
+
+      <form class="direction-radio-create" @submit.prevent="createRadio">
+        <label>
+          <span>Numéro de série</span>
+          <input v-model="radioForm.serial" required maxlength="16" autocomplete="off" spellcheck="false" placeholder="Ex. 0Va4ZeS">
+        </label>
+        <button class="direction-button direction-button--primary" type="submit" :disabled="creatingRadio || !radioForm.serial.trim()">
+          <Icon :name="creatingRadio ? 'lucide:loader-circle' : 'lucide:plus'" size="15" :class="{ 'direction-spin': creatingRadio }" />
+          {{ creatingRadio ? 'Ajout…' : 'Ajouter la radio' }}
+        </button>
+      </form>
+
+      <div v-if="radios.length" class="direction-radio-cols" aria-hidden="true">
+        <span>Numéro de série</span><span>Porteur</span><span>État</span><span />
+      </div>
+      <article v-for="radio in radios" :key="radio.id" class="direction-radio">
+        <input
+          class="direction-radio__serial"
+          :value="serialDrafts[radio.id] ?? radio.serial"
+          maxlength="16"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Numéro de série"
+          :disabled="busyRadioId === radio.id"
+          @input="serialDrafts[radio.id] = ($event.target as HTMLInputElement).value"
+          @blur="commitSerial(radio)"
+          @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+          @keydown.esc="cancelSerial(radio, $event)"
+        >
+        <span class="direction-radio__holder" :class="{ 'direction-muted': !radio.employee_name }">
+          <span>{{ radio.employee_name ?? '-' }}</span>
+          <span v-if="radio.is_direction" class="direction-grade__badge"><Icon name="lucide:radio-tower" size="11" /> Direction</span>
+        </span>
+        <span class="direction-radio__status" :data-status="radioStatusKey(radio)">{{ radioStatusLabel(radio) }}</span>
+        <button type="button" class="direction-button direction-button--danger" :disabled="busyRadioId !== null" :aria-label="`Supprimer la radio ${radio.serial}`" @click="deleteRadio(radio)">
+          <Icon name="lucide:trash-2" size="14" />
+        </button>
+      </article>
+      <div v-if="!radios.length" class="direction-empty">
+        <Icon name="lucide:radio" size="21" />
+        <p>Aucune radio n’est enregistrée.</p>
       </div>
     </section>
   </main>
@@ -312,6 +497,36 @@ async function deleteGrade(grade: Grade) {
 .direction-dialog__footer .direction-button { min-height: 40px; padding: 0 14px; font-size: 11px; }
 .direction-dialog[open] { animation: direction-dialog-in .16s ease-out; }
 @keyframes direction-dialog-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(.99); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.direction-nav { display: flex; gap: 6px; width: min(1180px, 100%); margin: 0 auto 16px; padding: 7px; overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel); }
+.direction-nav button { display: inline-flex; min-height: 42px; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid transparent; border-radius: 9px; color: var(--dp-text-2); background: transparent; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; }
+.direction-nav button:hover { color: var(--dp-text); background: var(--dp-panel-2); }
+.direction-nav button.is-active { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
+.direction-nav button:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: -2px; }
+.direction-nav button span { display: grid; min-width: 20px; height: 20px; place-items: center; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text); background: var(--dp-panel-3); font-size: 9px; font-variant-numeric: tabular-nums; }
+.direction-nav button.is-active span { border-color: var(--dp-accent-line); color: var(--dp-accent); background: rgba(70, 153, 109, .13); }
+.direction-radio-create { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 18px; padding: 14px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); }
+.direction-radio-create > label:first-child { display: grid; flex: 1 1 220px; gap: 6px; color: var(--dp-text-2); font-size: 10px; font-weight: 650; }
+.direction-radio-create input:not([type='checkbox']), .direction-radio__serial { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 11px; color: var(--dp-text); background: var(--dp-bg); font-family: ui-monospace, 'SFMono-Regular', monospace; font-size: 12px; }
+.direction-radio-create input:focus-visible, .direction-radio__serial:focus-visible { outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; border-color: var(--dp-accent-line); }
+.direction-check { display: inline-flex; min-height: 38px; align-items: center; gap: 8px; color: var(--dp-text-2); font-size: 11px; cursor: pointer; }
+.direction-check input { accent-color: var(--dp-accent); }
+.direction-radio-cols, .direction-radio { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 1.4fr) 100px 40px; align-items: center; gap: 12px; }
+.direction-radio-cols { padding: 0 12px 8px; color: var(--dp-text-dim); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.direction-radio { padding: 10px 12px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); }
+.direction-radio + .direction-radio { margin-top: 8px; }
+.direction-radio__serial { min-height: 34px; background: transparent; border-color: transparent; }
+.direction-radio__serial:hover:not(:disabled) { border-color: var(--dp-line-strong); background: var(--dp-bg); }
+.direction-radio__holder { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--dp-text); font-size: 12px; font-weight: 600; }
+.direction-radio__holder > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.direction-radio__holder .direction-grade__badge { flex-shrink: 0; }
+.direction-radio__status { justify-self: start; padding: 4px 9px; border: 1px solid var(--dp-line); border-radius: 999px; color: var(--dp-text-dim); font-size: 10px; font-weight: 700; }
+.direction-radio__status[data-status='on'] { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
+.direction-radio__status[data-status='standby'] { border-color: var(--dp-warn-line); color: var(--dp-warn); background: var(--dp-warn-soft); }
+.direction-radio .direction-button { min-height: 34px; padding: 0; }
+.direction-form > label.direction-grade-direction { display: flex; grid-column: 1 / -1; min-height: 0; font-size: 11px; }
+.direction-grade-direction small { color: var(--dp-text-dim); font-weight: 400; }
+.direction-grade__badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--dp-info) 45%, transparent); border-radius: 999px; color: var(--dp-info); background: var(--dp-info-soft); font-size: 10px; font-weight: 650; }
+@media (max-width: 760px) { .direction-radio-cols { display: none; }.direction-radio { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }.direction-radio__serial, .direction-radio__holder { grid-column: 1 / -1; }.direction-radio .direction-button { width: 40px; } }
 .direction-error { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }.direction-error span { flex: 1; }.direction-error button { color: inherit; }.direction-spin { animation: direction-spin 1s linear infinite; }@keyframes direction-spin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) { .direction-page { padding: 22px 18px; }.direction-header { align-items: flex-start; flex-direction: column; }.direction-header__actions { width: 100%; flex-wrap: wrap; }.direction-overview { flex: 1; }.direction-count { flex: 1; }.direction-add { width: 100%; }.direction-section__heading { align-items: flex-start; flex-direction: column; }.direction-search { width: 100%; }.direction-grade { grid-template-columns: 48px minmax(0, 1fr); align-items: start; gap: 12px; padding: 13px; }.direction-grade__level { width: 48px; height: 48px; }.direction-actions { grid-column: 2; width: auto; justify-content: flex-start; padding-left: 0; }.direction-form { grid-template-columns: 1fr; }.direction-form fieldset { grid-column: auto; }.direction-dialog { width: calc(100vw - 20px); max-height: 92dvh; }.direction-dialog__header { grid-template-columns: 36px minmax(0, 1fr) 32px; gap: 9px; }.direction-dialog__icon { width: 36px; height: 36px; }.direction-dialog__footer { flex-direction: column-reverse; }.direction-dialog__footer > button { width: 100%; } }
 </style>
