@@ -413,6 +413,13 @@ async def unassign_user(
     a = result.scalar_one_or_none()
     if a:
         await db.delete(a)
+        # L'employé passe « Hors service BCES » : sa radio s'éteint automatiquement.
+        radio = await db.scalar(
+            select(DispatchRadio).where(DispatchRadio.employee_id == employee_id).limit(1)
+        )
+        if radio is not None and (radio.is_on or radio.is_loading):
+            radio.is_on = False
+            radio.is_loading = False
         await db.commit()
     result = await db.execute(
         select(DispatchSlot)
