@@ -400,8 +400,8 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   display: flex;
   flex: 0 1 auto;
   flex-direction: column;
-  max-height: 40%;
-  min-height: 170px;
+  max-height: 200px;
+  min-height: 150px;
   border-top: 1px solid var(--dp-line);
 }
 
