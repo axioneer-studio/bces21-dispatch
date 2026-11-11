@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { assignUser, createSlot, fetchSnapshot, saveDispatchNote, unassignUser } from '~/composables/useDispatchApi'
+import { assignUser, createFleetEntry, createSlot, fetchSnapshot, saveDispatchNote, unassignUser } from '~/composables/useDispatchApi'
 import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
@@ -153,6 +153,19 @@ async function addIntervention() {
   }
 }
 
+const addingFleetEntry = ref(false)
+async function addFleetEntry() {
+  if (addingFleetEntry.value) return
+  addingFleetEntry.value = true
+  try {
+    await createFleetEntry()
+  } catch {
+    toast.error('Ajout de la ligne impossible.')
+  } finally {
+    addingFleetEntry.value = false
+  }
+}
+
 async function saveNote() {
   if (savingNote.value || !noteDirty.value) return
   savingNote.value = true
@@ -263,7 +276,10 @@ async function finishNoteEdit() {
       </section>
 
       <aside class="z z--radio">
-        <RadioPanel :radios="snapshot.radios" :agents="agents" />
+        <RadioPanel
+          :radios="snapshot.radios"
+          :agents="agents"
+        />
       </aside>
 
       <section v-if="hopital" class="z z--hopital">
@@ -340,11 +356,22 @@ async function finishNoteEdit() {
           <header class="z__head">
             <Icon name="lucide:car-front" size="12" />
             <span>Flotte de véhicules</span>
+            <button
+              type="button"
+              class="z__plus"
+              :disabled="addingFleetEntry"
+              title="Ajouter une ligne"
+              aria-label="Ajouter une ligne à la flotte"
+              @click="addFleetEntry"
+            >
+              <Icon name="lucide:plus" size="13" />
+            </button>
           </header>
-          <div class="dp__placeholder">
-            <Icon name="lucide:construction" size="18" />
-            <span>Gestion de la flotte à venir</span>
-          </div>
+          <FleetPanel
+            :entries="snapshot.fleet"
+            :vehicles="snapshot.vehicles"
+            :parking-spots="snapshot.parking_spots"
+          />
         </section>
 
         <section class="z z--notes">
@@ -436,18 +463,6 @@ async function finishNoteEdit() {
   gap: 4px;
   min-width: 0;
   min-height: 0;
-}
-
-.dp__placeholder {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px;
-  color: var(--dp-text-dim);
-  font-size: 11px;
-  text-align: center;
 }
 
 .dp__note-status {

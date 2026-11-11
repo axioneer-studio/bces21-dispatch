@@ -37,7 +37,9 @@ def _employee_out(employee: Employee, *, include_hr_details: bool = False) -> Em
         last_name=employee.last_name,
         phone=employee.phone,
         email=employee.email if include_hr_details else None,
-        arrival_date=employee.arrival_date if include_hr_details else None,
+        # Date d'arrivée visible du Dispatch : elle sert à l'ancienneté
+        # (tri de la réserve et des radios Direction).
+        arrival_date=employee.arrival_date,
         competencies=competencies if isinstance(competencies, list) else [],
         is_active=employee.is_active,
         account_user_id=employee.account_user_id,
@@ -46,6 +48,7 @@ def _employee_out(employee: Employee, *, include_hr_details: bool = False) -> Em
         grade_name=employee.grade.name if employee.grade else None,
         grade_level=employee.grade.level if employee.grade else None,
         grade_color=employee.grade.color if employee.grade else None,
+        grade_is_direction=bool(employee.grade and employee.grade.is_direction),
         grade_permissions=parse_grade_permissions(
             employee.grade.permissions if employee.grade else None
         ),

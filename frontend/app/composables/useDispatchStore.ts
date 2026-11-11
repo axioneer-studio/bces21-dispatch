@@ -26,9 +26,11 @@ export interface DispatchAssignment {
 
 export interface DispatchRadio {
   id: number
+  /** Masqué par le serveur : 2 premiers caractères puis des X (0Va4ZeS → 0VXXXXX). */
   serial: string
   employee_id: number | null
   is_on: boolean
+  /** État « Indisponible » : en service mais indisponible à la radio. */
   is_loading: boolean
   frequency: string
   common_frequency: string
@@ -47,11 +49,34 @@ export interface DispatchState {
   updated_at: string
 }
 
+export interface FleetEntry {
+  id: number
+  vehicle_id: number | null
+  location: string
+  note: string
+  order: number
+}
+
+export interface Vehicle {
+  id: number
+  name: string
+  plate: string | null
+  model: string | null
+}
+
+export interface ParkingSpot {
+  id: number
+  name: string
+}
+
 export interface DispatchSnapshot {
   slots: DispatchSlot[]
   radios: DispatchRadio[]
   state: DispatchState
   note: string
+  fleet: FleetEntry[]
+  vehicles: Vehicle[]
+  parking_spots: ParkingSpot[]
 }
 
 interface PendingEmployeeMove {
@@ -76,7 +101,10 @@ export const useDispatchStore = () => {
     slots: [],
     radios: [],
     state: emptyState(),
-    note: ''
+    note: '',
+    fleet: [],
+    vehicles: [],
+    parking_spots: []
   }))
   const pendingMoves = useState<Record<string, PendingEmployeeMove>>(
     'dispatch-pending-moves',
