@@ -279,6 +279,7 @@ async function finishNoteEdit() {
         <RadioPanel
           :radios="snapshot.radios"
           :agents="agents"
+          :pool="pool"
         />
       </aside>
 

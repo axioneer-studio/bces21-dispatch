@@ -9,6 +9,8 @@ import { updateRadio } from '~/composables/useDispatchApi'
 const props = defineProps<{
   radios: DispatchRadio[]
   agents: Agent[]
+  /** Employés dans la réserve « Hors service BCES » : leurs radios sont verrouillées OFF. */
+  pool: Agent[]
 }>()
 
 const toast = useAppToast()
@@ -196,6 +198,10 @@ function noCandidateMessage(radio: DispatchRadio): string {
 
 const isAssigned = (r: DispatchRadio) => r.employee_id !== null
 
+const poolIds = computed(() => new Set(props.pool.map((agent) => agent.id)))
+const employeeInPool = (radio: DispatchRadio) =>
+  radio.employee_id !== null && poolIds.value.has(radio.employee_id)
+
 const STATUS_OPTIONS: { value: RadioStatus; label: string }[] = [
   { value: 'on', label: 'ON' },
   { value: 'standby', label: 'Indisponible' },
@@ -213,6 +219,12 @@ function apiError(error: unknown, fallback: string): string {
 async function setStatus(radio: DispatchRadio, status: RadioStatus) {
   closeMenu()
   if (status === radioStatus(radio)) return
+  if (employeeInPool(radio)) {
+    toast.warning(
+      'Employé hors service BCES : la radio reste éteinte.'
+    )
+    return
+  }
   if (status !== 'off' && !isAssigned(radio)) {
     toast.warning('Affectez la radio à un employé avant de l’allumer.')
     return
@@ -359,7 +371,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
             class="rp__doctor-item rp__status-item"
             :class="{ 'rp__doctor-item--active': radioStatus(menuRadio) === option.value }"
             :data-status="option.value"
-            :disabled="option.value !== 'off' && !isAssigned(menuRadio)"
+            :disabled="option.value !== 'off' && (employeeInPool(menuRadio) || !isAssigned(menuRadio))"
             @click="setStatus(menuRadio, option.value)"
           >
             <Icon v-if="option.value === 'on'" name="lucide:check" size="10" />
