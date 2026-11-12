@@ -3,7 +3,7 @@ import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
 definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Ressources humaines · BCES' })
+useHead({ title: 'Ressources humaines • BCES' })
 
 interface AccountOption {
   id: number

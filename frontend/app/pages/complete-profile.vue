@@ -1,5 +1,5 @@
 <script setup lang="ts">
-useHead({ title: 'Active ton compte' })
+useHead({ title: 'Activation de compte • BCES' })
 
 const config = useRuntimeConfig()
 const route = useRoute()

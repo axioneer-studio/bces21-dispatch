@@ -1,5 +1,5 @@
 <script setup lang="ts">
-useHead({ title: 'BCES Connexion' })
+useHead({ title: 'Connexion • BCES' })
 
 const config = useRuntimeConfig()
 const toast = useAppToast()
