@@ -43,18 +43,6 @@ interface AppSettings {
   registration_open: boolean
 }
 
-/** « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services. */
-type FrequencyKind = 'radio' | 'shared'
-
-interface FrequencySetting {
-  kind: FrequencyKind
-  /** `null` tant qu'aucune fréquence n'a été réglée ou tirée. */
-  current: string | null
-  /** Bornes incluses, `null` tant qu'elles ne sont pas réglées. */
-  min: number | null
-  max: number | null
-}
-
 interface FleetVehicle {
   id: number
   name: string
@@ -91,8 +79,7 @@ const [
   { data: initialRequests },
   { data: initialSettings },
   { data: initialVehicles },
-  { data: initialParkingSpots },
-  { data: initialFrequencies }
+  { data: initialParkingSpots }
 ] =
   await Promise.all([
     useAsyncData('admin-users', () =>
@@ -118,9 +105,6 @@ const [
     ),
     useAsyncData('admin-parking-spots', () =>
       $fetch<ParkingSpot[]>('/api/admin/parking-spots', { credentials: 'include', headers: requestHeaders })
-    ),
-    useAsyncData('admin-frequencies', () =>
-      $fetch<FrequencySetting[]>('/api/admin/frequencies', { credentials: 'include', headers: requestHeaders })
     )
   ])
 
@@ -371,134 +355,6 @@ async function saveSettings() {
     savingSettings.value = false
   }
 }
-
-// --- Fréquences radio : [borne basse] < [fréquence actuelle] < [borne haute] ---
-
-type FrequencyField = 'min' | 'current' | 'max'
-type FrequencyForm = Record<FrequencyField, string>
-
-const FREQUENCY_LABELS: Record<FrequencyKind, string> = {
-  radio: 'Fréquence Radio BCES',
-  shared: 'Fréquence Radio Commune'
-}
-const FREQUENCY_FIELDS: { field: FrequencyField; label: string }[] = [
-  { field: 'min', label: 'Borne basse' },
-  { field: 'current', label: 'Fréquence actuelle' },
-  { field: 'max', label: 'Borne haute' }
-]
-
-const formFromSetting = (setting: FrequencySetting): FrequencyForm => ({
-  min: setting.min?.toString() ?? '',
-  current: setting.current ?? '',
-  max: setting.max?.toString() ?? ''
-})
-
-const frequencySettings = ref<FrequencySetting[]>(initialFrequencies.value ?? [])
-const frequencyForms = reactive<Partial<Record<FrequencyKind, FrequencyForm>>>(
-  Object.fromEntries(frequencySettings.value.map((setting) => [setting.kind, formFromSetting(setting)]))
-)
-const frequencyErrors = reactive<Partial<Record<FrequencyKind, string>>>({})
-/** Ligne en cours de saisie : le rafraîchissement en direct ne l'écrase pas. */
-const editingFrequency = ref<FrequencyKind | null>(null)
-const savingFrequency = ref<FrequencyKind | null>(null)
-
-/** N'accepte que des chiffres (5 au maximum). */
-function onFrequencyInput(kind: FrequencyKind, field: FrequencyField, event: Event) {
-  const input = event.target as HTMLInputElement
-  const digits = input.value.replace(/\D/g, '').slice(0, 5)
-  input.value = digits
-  const form = frequencyForms[kind]
-  if (form) form[field] = digits
-  delete frequencyErrors[kind]
-}
-
-/** Bornes obligatoires ; la fréquence actuelle est facultative (vide : « Aucune » sur le Dispatch). */
-function frequencyProblem(form: FrequencyForm): string {
-  if (!form.min || !form.max) return 'Renseignez les deux bornes.'
-  const [low, high] = [Number(form.min), Number(form.max)]
-  if (low > high) return 'La borne basse doit être inférieure ou égale à la borne haute.'
-  if (form.current) {
-    const current = Number(form.current)
-    if (current < low || current > high) return `La fréquence doit être comprise entre ${low} et ${high} (incluses).`
-  }
-  return ''
-}
-
-/** Enregistre la ligne quand le focus la quitte (ou sur Entrée), si elle a changé. */
-async function saveFrequency(kind: FrequencyKind) {
-  editingFrequency.value = null
-  const form = frequencyForms[kind]
-  const saved = frequencySettings.value.find((setting) => setting.kind === kind)
-  if (!form || !saved) return
-  const savedForm = formFromSetting(saved)
-  if (form.min === savedForm.min && form.current === savedForm.current && form.max === savedForm.max) return
-  const problem = frequencyProblem(form)
-  if (problem) {
-    frequencyErrors[kind] = problem
-    return
-  }
-  savingFrequency.value = kind
-  try {
-    const updated = await $fetch<FrequencySetting>(`/api/admin/frequencies/${kind}`, {
-      method: 'PUT',
-      body: { min: Number(form.min), current: form.current ? Number(form.current) : null, max: Number(form.max) },
-      credentials: 'include'
-    })
-    frequencySettings.value = frequencySettings.value.map((setting) => (setting.kind === kind ? updated : setting))
-    frequencyForms[kind] = formFromSetting(updated)
-    delete frequencyErrors[kind]
-  } catch (cause) {
-    frequencyErrors[kind] = messageFromError(cause, 'Enregistrement de la fréquence impossible.')
-  } finally {
-    savingFrequency.value = null
-  }
-}
-
-function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
-  // Le focus passe d'un champ à l'autre de la même ligne : on attend la sortie de la ligne.
-  if ((event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) return
-  saveFrequency(kind)
-}
-
-/**
- * Suit les changements faits depuis le Dispatch (double-clic) : rechargement à
- * l'ouverture de l'onglet, au retour sur la fenêtre et toutes les 5 s tant que
- * l'onglet est affiché. Une ligne en cours de saisie, d'enregistrement ou en
- * erreur n'est pas écrasée.
- */
-async function refreshFrequencies() {
-  try {
-    const latest = await $fetch<FrequencySetting[]>('/api/admin/frequencies', { credentials: 'include' })
-    frequencySettings.value = latest
-    for (const setting of latest) {
-      const busy = editingFrequency.value === setting.kind
-        || savingFrequency.value === setting.kind
-        || Boolean(frequencyErrors[setting.kind])
-      if (!busy) frequencyForms[setting.kind] = formFromSetting(setting)
-    }
-  } catch {
-    // Rafraîchissement silencieux : on réessaiera au prochain passage.
-  }
-}
-
-let frequencyTimer: ReturnType<typeof setInterval> | undefined
-const refreshVisibleFrequencies = () => {
-  if (activeAdminSection.value === 'settings' && document.visibilityState === 'visible') refreshFrequencies()
-}
-
-watch(activeAdminSection, (section) => {
-  if (section === 'settings') refreshFrequencies()
-})
-
-onMounted(() => {
-  frequencyTimer = setInterval(refreshVisibleFrequencies, 5000)
-  window.addEventListener('focus', refreshVisibleFrequencies)
-})
-
-onBeforeUnmount(() => {
-  if (frequencyTimer) clearInterval(frequencyTimer)
-  window.removeEventListener('focus', refreshVisibleFrequencies)
-})
 
 async function withWorking(ids: Ref<number[]>, id: number, task: () => Promise<void>) {
   if (ids.value.includes(id)) return
@@ -947,44 +803,6 @@ function statusLabel(status: string) {
       </label>
       <span v-if="savingSettings" class="admin-muted">Enregistrement…</span>
       <span v-else class="admin-saved"><Icon name="lucide:check" size="13" /> Paramètre synchronisé</span>
-
-      <div class="admin-frequencies">
-        <div>
-          <strong>Fréquences radio</strong>
-          <small>Bornes incluses. Un double-clic sur une fréquence dans le Dispatch en tire une nouvelle au hasard entre ces bornes.</small>
-        </div>
-        <div
-          v-for="setting in frequencySettings"
-          :key="setting.kind"
-          class="admin-frequency"
-          @focusin="editingFrequency = setting.kind"
-          @focusout="onFrequencyFocusOut(setting.kind, $event)"
-        >
-          <span class="admin-frequency__label">{{ FREQUENCY_LABELS[setting.kind] }}</span>
-          <div class="admin-frequency__fields">
-            <template v-for="(item, index) in FREQUENCY_FIELDS" :key="item.field">
-              <span v-if="index > 0" class="admin-frequency__sep" aria-hidden="true">&lt;</span>
-              <input
-                class="admin-frequency__input"
-                :class="{ 'admin-frequency__input--current': item.field === 'current', 'admin-frequency__input--invalid': frequencyErrors[setting.kind] }"
-                type="text"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                maxlength="5"
-                autocomplete="off"
-                :value="frequencyForms[setting.kind]?.[item.field] ?? ''"
-                :placeholder="item.field === 'current' ? 'Aucune' : '?'"
-                :aria-label="`${FREQUENCY_LABELS[setting.kind]} : ${item.label}`"
-                :disabled="savingFrequency === setting.kind"
-                @input="onFrequencyInput(setting.kind, item.field, $event)"
-                @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
-              >
-            </template>
-            <Icon v-if="savingFrequency === setting.kind" name="lucide:loader-circle" size="14" class="admin-spin" />
-          </div>
-          <p v-if="frequencyErrors[setting.kind]" class="admin-frequency__error" role="alert">{{ frequencyErrors[setting.kind] }}</p>
-        </div>
-      </div>
     </section>
   </main>
 </template>
@@ -1049,19 +867,6 @@ function statusLabel(status: string) {
 .admin-empty { display: grid; min-height: 170px; justify-items: center; align-content: center; gap: 10px; padding: 24px; border: 1px dashed var(--dp-line-strong); border-radius: 14px; color: var(--dp-text-dim); text-align: center; font-size: 12px; }.admin-empty p { margin: 0; }
 .admin-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }.admin-toggle span { display: grid; gap: 4px; }.admin-toggle strong { font-size: 12px; }.admin-toggle small { color: var(--dp-text-dim); font-size: 10px; }
 .admin-saved { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--dp-accent); font-size: 10px; }
-.admin-frequencies { display: grid; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--dp-line); }
-.admin-frequencies > div:first-child { display: grid; gap: 4px; }.admin-frequencies strong { font-size: 12px; }.admin-frequencies small { color: var(--dp-text-dim); font-size: 10px; }
-.admin-frequency { display: grid; grid-template-columns: minmax(160px, 220px) auto; align-items: center; gap: 6px 16px; }
-.admin-frequency__label { color: var(--dp-text-2); font-size: 11px; font-weight: 650; }
-.admin-frequency__fields { display: flex; align-items: center; gap: 8px; }
-.admin-frequency__sep { color: var(--dp-text-dim); font-size: 12px; font-weight: 700; }
-.admin-frequency__input { width: 64px; min-height: 36px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 8px; color: var(--dp-text-2); background: var(--dp-bg); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
-.admin-frequency__input--current { width: 76px; border-color: var(--dp-accent-line); color: var(--dp-text); font-weight: 700; }
-.admin-frequency__input:focus { border-color: var(--dp-accent-line); outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; }
-.admin-frequency__input--invalid { border-color: var(--dp-danger); }
-.admin-frequency__input:disabled { opacity: .6; cursor: wait; }
-.admin-frequency__error { grid-column: 2; margin: 0; color: var(--dp-danger); font-size: 10px; }
-@media (max-width: 520px) { .admin-frequency { grid-template-columns: 1fr; }.admin-frequency__error { grid-column: 1; } }
 .admin-error { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }.admin-error span { flex: 1; }.admin-error button { color: inherit; }
 .admin-catalog-create { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; align-items: end; gap: 14px; margin-bottom: 8px; padding: 16px; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel-2); }
 .admin-catalog-create--single { grid-template-columns: minmax(160px, 1fr) auto; }

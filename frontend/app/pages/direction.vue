@@ -27,8 +27,30 @@ interface DirectionRadio {
   is_direction: boolean
 }
 
+/** « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services. */
+type FrequencyKind = 'radio' | 'shared'
+
+interface FrequencySetting {
+  kind: FrequencyKind
+  current: string | null
+  min: number | null
+  max: number | null
+}
+
+type FrequencyField = 'min' | 'max'
+type FrequencyForm = Record<FrequencyField, string>
+
+const FREQUENCY_LABELS: Record<FrequencyKind, string> = {
+  radio: 'Fréquence Radio BCES',
+  shared: 'Fréquence Radio Commune'
+}
+const FREQUENCY_FIELDS: { field: FrequencyField; label: string }[] = [
+  { field: 'min', label: 'Borne basse' },
+  { field: 'max', label: 'Borne haute' }
+]
+
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const [{ data: initialGrades }, { data: permissionOptions }, { data: initialRadios }] = await Promise.all([
+const [{ data: initialGrades }, { data: permissionOptions }, { data: initialRadios }, { data: initialFrequencies }] = await Promise.all([
   useAsyncData('direction-grades', () =>
     $fetch<Grade[]>('/api/direction/grades', { credentials: 'include', headers: requestHeaders })
   ),
@@ -40,10 +62,13 @@ const [{ data: initialGrades }, { data: permissionOptions }, { data: initialRadi
   ),
   useAsyncData('direction-radios', () =>
     $fetch<DirectionRadio[]>('/api/direction/radios', { credentials: 'include', headers: requestHeaders })
+  ),
+  useAsyncData('direction-frequencies', () =>
+    $fetch<FrequencySetting[]>('/api/direction/frequencies', { credentials: 'include', headers: requestHeaders })
   )
 ])
 
-const directionSections = ['grades', 'radios'] as const
+const directionSections = ['grades', 'radios', 'frequencies'] as const
 const activeSection = ref<(typeof directionSections)[number]>('grades')
 
 function moveSectionTab(step: -1 | 1) {
@@ -257,6 +282,73 @@ async function deleteRadio(radio: DirectionRadio) {
     busyRadioId.value = null
   }
 }
+
+// --- Fréquences : bornes et valeur actuelle ---
+
+const frequencySettings = ref<FrequencySetting[]>(initialFrequencies.value ?? [])
+const frequencyForms = reactive<Partial<Record<FrequencyKind, FrequencyForm>>>(
+  Object.fromEntries(frequencySettings.value.map((setting) => [setting.kind, formFromSetting(setting)]))
+)
+const frequencyErrors = reactive<Partial<Record<FrequencyKind, string>>>({})
+const editingFrequency = ref<FrequencyKind | null>(null)
+const savingFrequency = ref<FrequencyKind | null>(null)
+
+function formFromSetting(setting: FrequencySetting): FrequencyForm {
+  return {
+    min: setting.min?.toString() ?? '',
+    max: setting.max?.toString() ?? ''
+  }
+}
+
+function onFrequencyInput(kind: FrequencyKind, field: FrequencyField, event: Event) {
+  const input = event.target as HTMLInputElement
+  const digits = input.value.replace(/\D/g, '').slice(0, 5)
+  input.value = digits
+  const form = frequencyForms[kind]
+  if (form) form[field] = digits
+  delete frequencyErrors[kind]
+}
+
+function frequencyProblem(form: FrequencyForm): string {
+  if (!form.min || !form.max) return 'Renseignez les deux bornes.'
+  const [low, high] = [Number(form.min), Number(form.max)]
+  if (low > high) return 'La borne basse doit être inférieure ou égale à la borne haute.'
+  return ''
+}
+
+async function saveFrequency(kind: FrequencyKind) {
+  editingFrequency.value = null
+  const form = frequencyForms[kind]
+  const saved = frequencySettings.value.find((setting) => setting.kind === kind)
+  if (!form || !saved) return
+  const savedForm = formFromSetting(saved)
+  if (form.min === savedForm.min && form.max === savedForm.max) return
+  const problem = frequencyProblem(form)
+  if (problem) {
+    frequencyErrors[kind] = problem
+    return
+  }
+  savingFrequency.value = kind
+  try {
+    const updated = await $fetch<FrequencySetting>(`/api/direction/frequencies/${kind}`, {
+      method: 'PUT',
+      body: { min: Number(form.min), max: Number(form.max) },
+      credentials: 'include'
+    })
+    frequencySettings.value = frequencySettings.value.map((setting) => (setting.kind === kind ? updated : setting))
+    frequencyForms[kind] = formFromSetting(updated)
+    delete frequencyErrors[kind]
+  } catch (cause) {
+    frequencyErrors[kind] = messageFromError(cause, 'Enregistrement de la fréquence impossible.')
+  } finally {
+    savingFrequency.value = null
+  }
+}
+
+function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
+  if ((event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) return
+  saveFrequency(kind)
+}
 </script>
 
 <template>
@@ -272,9 +364,12 @@ async function deleteRadio(radio: DirectionRadio) {
           <div class="direction-count"><Icon name="lucide:shield" size="18" /><strong>{{ grades.length }}</strong><span>grades</span></div>
           <div class="direction-count direction-count--muted"><Icon name="lucide:users-round" size="18" /><strong>{{ assignedEmployeeCount }}</strong><span>agents classés</span></div>
         </div>
-        <div v-else class="direction-overview" aria-label="Résumé des radios">
+        <div v-else-if="activeSection === 'radios'" class="direction-overview" aria-label="Résumé des radios">
           <div class="direction-count"><Icon name="lucide:radio" size="18" /><strong>{{ radios.length }}</strong><span>radios</span></div>
           <div class="direction-count direction-count--muted"><Icon name="lucide:radio-tower" size="18" /><strong>{{ directionRadioCount }}</strong><span>radios Direction</span></div>
+        </div>
+        <div v-else class="direction-overview" aria-label="Résumé des fréquences">
+          <div class="direction-count"><Icon name="lucide:radio" size="18" /><strong>{{ frequencySettings.length }}</strong><span>fréquences</span></div>
         </div>
         <button v-if="activeSection === 'grades'" type="button" class="direction-button direction-button--primary direction-add" @click="openGradeDialog()">
           <Icon name="lucide:plus" size="17" /> Ajouter un grade
@@ -288,6 +383,9 @@ async function deleteRadio(radio: DirectionRadio) {
       </button>
       <button id="direction-tab-radios" type="button" role="tab" :aria-selected="activeSection === 'radios'" aria-controls="direction-radios" :tabindex="activeSection === 'radios' ? 0 : -1" :class="{ 'is-active': activeSection === 'radios' }" @click="activeSection = 'radios'">
         <Icon name="lucide:radio" size="16" /> Radios <span>{{ radios.length }}</span>
+      </button>
+      <button id="direction-tab-frequencies" type="button" role="tab" :aria-selected="activeSection === 'frequencies'" aria-controls="direction-frequencies" :tabindex="activeSection === 'frequencies' ? 0 : -1" :class="{ 'is-active': activeSection === 'frequencies' }" @click="activeSection = 'frequencies'">
+        <Icon name="lucide:radio" size="16" /> Fréquences <span>{{ frequencySettings.length }}</span>
       </button>
     </nav>
 
@@ -441,6 +539,50 @@ async function deleteRadio(radio: DirectionRadio) {
         <p>Aucune radio n’est enregistrée.</p>
       </div>
     </section>
+
+    <section id="direction-frequencies" v-show="activeSection === 'frequencies'" class="direction-section" role="tabpanel" aria-labelledby="direction-tab-frequencies">
+      <div class="direction-section__heading">
+        <div>
+          <h2>Fréquences radio</h2>
+          <p>Définissez les bornes min/max de chaque fréquence. Dans le Dispatch, double-cliquez sur une fréquence pour la saisir ou en générer une aléatoirement dans cette plage.</p>
+        </div>
+      </div>
+      <div
+        v-for="setting in frequencySettings"
+        :key="setting.kind"
+        class="direction-frequency"
+        @focusin="editingFrequency = setting.kind"
+        @focusout="onFrequencyFocusOut(setting.kind, $event)"
+      >
+        <span class="direction-frequency__label">{{ FREQUENCY_LABELS[setting.kind] }}</span>
+        <div class="direction-frequency__fields">
+          <template v-for="(item, index) in FREQUENCY_FIELDS" :key="item.field">
+            <span v-if="index > 0" class="direction-frequency__sep" aria-hidden="true">&lt;</span>
+            <input
+              class="direction-frequency__input"
+              :class="{ 'direction-frequency__input--current': item.field === 'current', 'direction-frequency__input--invalid': frequencyErrors[setting.kind] }"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="5"
+              autocomplete="off"
+              :value="frequencyForms[setting.kind]?.[item.field] ?? ''"
+              :placeholder="item.field === 'current' ? 'Aucune' : '?'"
+              :aria-label="`${FREQUENCY_LABELS[setting.kind]} : ${item.label}`"
+              :disabled="savingFrequency === setting.kind"
+              @input="onFrequencyInput(setting.kind, item.field, $event)"
+              @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+            >
+          </template>
+          <Icon v-if="savingFrequency === setting.kind" name="lucide:loader-circle" size="14" class="direction-spin" />
+        </div>
+        <p v-if="frequencyErrors[setting.kind]" class="direction-frequency__error" role="alert">{{ frequencyErrors[setting.kind] }}</p>
+      </div>
+      <div v-if="!frequencySettings.length" class="direction-empty">
+        <Icon name="lucide:radio" size="21" />
+        <p>Aucune fréquence configurée.</p>
+      </div>
+    </section>
   </main>
 </template>
 
@@ -528,5 +670,17 @@ async function deleteRadio(radio: DirectionRadio) {
 .direction-grade__badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--dp-info) 45%, transparent); border-radius: 999px; color: var(--dp-info); background: var(--dp-info-soft); font-size: 10px; font-weight: 650; }
 @media (max-width: 760px) { .direction-radio-cols { display: none; }.direction-radio { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }.direction-radio__serial, .direction-radio__holder { grid-column: 1 / -1; }.direction-radio .direction-button { width: 40px; } }
 .direction-error { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }.direction-error span { flex: 1; }.direction-error button { color: inherit; }.direction-spin { animation: direction-spin 1s linear infinite; }@keyframes direction-spin { to { transform: rotate(360deg); } }
+
+.direction-frequency { display: grid; grid-template-columns: minmax(160px, 220px) auto; align-items: center; gap: 6px 16px; margin-bottom: 12px; padding: 10px 14px; border: 1px solid var(--dp-line); border-radius: 9px; background: var(--dp-panel-2); }
+.direction-frequency__label { color: var(--dp-text-2); font-size: 11px; font-weight: 650; }
+.direction-frequency__fields { display: flex; align-items: center; gap: 8px; }
+.direction-frequency__sep { color: var(--dp-text-dim); font-size: 12px; font-weight: 700; }
+.direction-frequency__input { width: 64px; min-height: 36px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 8px; color: var(--dp-text-2); background: var(--dp-bg); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.direction-frequency__input--current { width: 76px; border-color: var(--dp-accent-line); color: var(--dp-text); font-weight: 700; }
+.direction-frequency__input:focus { border-color: var(--dp-accent-line); outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; }
+.direction-frequency__input--invalid { border-color: var(--dp-danger); }
+.direction-frequency__input:disabled { opacity: .6; cursor: wait; }
+.direction-frequency__error { grid-column: 1 / -1; margin: 6px 0 0; color: var(--dp-danger); font-size: 10px; }
+
 @media (max-width: 760px) { .direction-page { padding: 22px 18px; }.direction-header { align-items: flex-start; flex-direction: column; }.direction-header__actions { width: 100%; flex-wrap: wrap; }.direction-overview { flex: 1; }.direction-count { flex: 1; }.direction-add { width: 100%; }.direction-section__heading { align-items: flex-start; flex-direction: column; }.direction-search { width: 100%; }.direction-grade { grid-template-columns: 48px minmax(0, 1fr); align-items: start; gap: 12px; padding: 13px; }.direction-grade__level { width: 48px; height: 48px; }.direction-actions { grid-column: 2; width: auto; justify-content: flex-start; padding-left: 0; }.direction-form { grid-template-columns: 1fr; }.direction-form fieldset { grid-column: auto; }.direction-dialog { width: calc(100vw - 20px); max-height: 92dvh; }.direction-dialog__header { grid-template-columns: 36px minmax(0, 1fr) 32px; gap: 9px; }.direction-dialog__icon { width: 36px; height: 36px; }.direction-dialog__footer { flex-direction: column-reverse; }.direction-dialog__footer > button { width: 100%; } }
 </style>

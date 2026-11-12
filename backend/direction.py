@@ -8,12 +8,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from deps import require_page_access
 from dispatch import push_employees_changed, push_snapshot, sorted_radios
+from frequency_settings import (
+    FREQUENCY_KINDS,
+    LABELS,
+    current_frequency,
+    read_bounds,
+    set_current_frequency,
+    write_bounds,
+)
 from grade_permissions import GRADE_PERMISSION_CATALOG
-from models import DispatchRadio, Employee, Grade, User
+from models import DispatchRadio, DispatchState, Employee, Grade, User
 from schemas import (
     DirectionRadioCreateRequest,
     DirectionRadioOut,
     DirectionRadioUpdateRequest,
+    FrequencyKind,
+    FrequencySettingOut,
+    FrequencySettingUpdateRequest,
     GradeCreateRequest,
     GradeOut,
     GradeUpdateRequest,
@@ -263,3 +274,57 @@ async def delete_radio(
     await db.commit()
     await push_snapshot(db)
     return MessageResponse(message="Radio supprimée.")
+
+
+# --- Fréquences radio : bornes et valeur actuelle (gérées par la Direction) ---
+
+async def _direction_state(db: AsyncSession) -> DispatchState:
+    state = await db.get(DispatchState, 1)
+    if state is None:
+        state = DispatchState(id=1)
+        db.add(state)
+        await db.flush()
+    return state
+
+
+async def _frequency_setting_out(db: AsyncSession, state: DispatchState, kind: FrequencyKind) -> FrequencySettingOut:
+    bounds = await read_bounds(db, kind)
+    return FrequencySettingOut(
+        kind=kind,
+        current=current_frequency(state, kind),
+        min=bounds.min,
+        max=bounds.max,
+    )
+
+
+@router.get("/frequencies", response_model=list[FrequencySettingOut])
+async def list_frequencies(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("direction")),
+):
+    state = await _direction_state(db)
+    await db.commit()
+    return [await _frequency_setting_out(db, state, kind) for kind in FREQUENCY_KINDS]
+
+
+@router.put("/frequencies/{kind}", response_model=FrequencySettingOut)
+async def update_frequency(
+    kind: FrequencyKind,
+    payload: FrequencySettingUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_page_access("direction")),
+):
+    state = await _direction_state(db)
+    # On ne met à jour les bornes que si elles sont explicitement fournies.
+    if payload.min is not None or payload.max is not None:
+        current_bounds = await read_bounds(db, kind)
+        await write_bounds(
+            db,
+            kind,
+            payload.min if payload.min is not None else current_bounds.min,
+            payload.max if payload.max is not None else current_bounds.max,
+        )
+    set_current_frequency(state, kind, payload.current)
+    await db.commit()
+    await push_snapshot(db)
+    return await _frequency_setting_out(db, state, kind)
