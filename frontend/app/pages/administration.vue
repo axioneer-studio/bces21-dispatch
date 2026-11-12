@@ -26,6 +26,7 @@ interface AppUser {
   role_id: number | null
   role_name: string | null
   is_super_admin: boolean
+  super_admin_enabled: boolean
   created_at: string
 }
 
@@ -634,7 +635,7 @@ function statusLabel(status: string) {
       <article v-for="user in filteredUsers" :key="user.id" class="admin-row">
         <div class="admin-row__identity">
           <strong>{{ user.first_name || user.discord_username }} {{ user.last_name || '' }}</strong>
-          <small>{{ user.discord_username }} <span class="admin-status" :class="`admin-status--${user.status}`">{{ statusLabel(user.status) }}</span><span v-if="user.is_super_admin" class="admin-super-admin"><Icon name="lucide:shield-check" size="12" /> Super-admin</span></small>
+          <small>{{ user.discord_username }} <span class="admin-status" :class="`admin-status--${user.status}`">{{ statusLabel(user.status) }}</span><span v-if="user.is_super_admin" class="admin-super-admin" :class="{ 'admin-super-admin--off': !user.super_admin_enabled }" :title="user.super_admin_enabled ? undefined : 'Droits super-admin désactivés par l’utilisateur'"><Icon :name="user.super_admin_enabled ? 'lucide:shield-check' : 'lucide:shield-off'" size="12" /> {{ user.super_admin_enabled ? 'Super-admin' : 'Super-admin désactivé' }}</span></small>
         </div>
         <label class="admin-role">
           <span class="sr-only">Rôle applicatif de {{ user.discord_username }}</span>
@@ -841,6 +842,7 @@ function statusLabel(status: string) {
 .admin-status--pending { border-color: var(--dp-warn-line); color: var(--dp-warn); background: var(--dp-warn-soft); }
 .admin-status--disabled, .admin-status--rejected { color: var(--dp-text-dim); background: var(--dp-panel-3); }
 .admin-super-admin { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; color: var(--dp-accent); }
+.admin-super-admin--off { color: var(--dp-text-dim); }
 .admin-role, .admin-role-card__top > label { display: grid; min-width: 150px; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
 .admin-role select, .admin-role-create input:not([type='checkbox']), .admin-role-card input:not([type='checkbox']) { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
 .admin-row__actions { display: flex; flex-wrap: wrap; gap: 6px; }

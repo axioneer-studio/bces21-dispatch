@@ -3,7 +3,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,7 @@ from fleet import router as fleet_router
 from human_resources import router as human_resources_router
 from grade_permissions import parse_grade_permissions
 from models import Employee, Grade, User
-from schemas import HealthResponse, UserResponse
+from schemas import HealthResponse, SuperAdminToggleRequest, UserResponse
 from status_sync import status_sync_loop
 
 logging.basicConfig(
@@ -96,6 +96,26 @@ async def me(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
+    return await _me_response(db, user)
+
+
+@app.patch("/api/me/super-admin", response_model=UserResponse)
+async def toggle_own_super_admin(
+    payload: SuperAdminToggleRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    # Statut réel, pas les droits actifs : un super-admin désactivé doit
+    # toujours pouvoir se réactiver.
+    if not user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Réservé aux super-admins.")
+    user.super_admin_enabled = payload.enabled
+    await db.commit()
+    await db.refresh(user)
+    return await _me_response(db, user)
+
+
+async def _me_response(db: AsyncSession, user: User) -> UserResponse:
     response = UserResponse.model_validate(user)
     try:
         pages = json.loads(user.role.pages) if user.role else []
@@ -109,7 +129,9 @@ async def me(
     return response.model_copy(
         update={
             "role_name": user.role.name if user.role else None,
-            "is_super_admin": user.is_super_admin,
+            "is_super_admin": user.has_super_admin_rights,
+            "super_admin_available": user.is_super_admin,
+            "super_admin_enabled": user.super_admin_enabled,
             "page_access": pages if isinstance(pages, list) else [],
             "app_permissions": parse_app_permissions(
                 user.role.permissions if user.role else None

@@ -60,6 +60,7 @@ def _admin_user_out(user: User) -> AdminUserOut:
         role_id=user.role_id,
         role_name=user.role.name if user.role else None,
         is_super_admin=user.is_super_admin,
+        super_admin_enabled=user.super_admin_enabled,
         created_at=user.created_at,
     )
 
@@ -164,6 +165,8 @@ async def update_super_admin(
         and not user_has_page_access(target, "administration")
     ):
         await _ensure_another_admin_remains(db, target)
+    if payload.is_super_admin and not target.is_super_admin:
+        target.super_admin_enabled = True
     target.is_super_admin = payload.is_super_admin
     await db.commit()
     return MessageResponse(message="Droits super-admin mis à jour.")

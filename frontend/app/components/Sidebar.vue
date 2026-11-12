@@ -12,6 +12,8 @@ const { data: currentUser } = await useAsyncData('sidebar-current-user', async (
   try {
     return await $fetch<{
       is_super_admin: boolean
+      super_admin_available: boolean
+      super_admin_enabled: boolean
       page_access: string[]
     }>('/api/me', { credentials: 'include', headers: requestHeaders })
   } catch {
@@ -103,6 +105,43 @@ watch(settingsOpen, (open) => {
   }
 })
 
+// --- Bouton « Superadmin » : le super-admin coupe ou rétablit ses propres droits ---
+
+const toast = useAppToast()
+const route = useRoute()
+const togglingSuperAdmin = ref(false)
+const superAdminEnabled = computed(() => Boolean(currentUser.value?.super_admin_enabled))
+const superAdminLabel = computed(() =>
+  superAdminEnabled.value
+    ? 'Superadmin activé : cliquer pour n’avoir que les accès de votre rôle'
+    : 'Superadmin désactivé : cliquer pour récupérer tous les accès'
+)
+
+/**
+ * Un seul changement à la fois : le bouton reste grisé, avec un indicateur de
+ * chargement, du premier clic jusqu'au rechargement de la page. Il ne redevient
+ * cliquable qu'en cas d'erreur.
+ */
+async function toggleSuperAdmin() {
+  if (togglingSuperAdmin.value) return
+  togglingSuperAdmin.value = true
+  try {
+    currentUser.value = await $fetch<NonNullable<typeof currentUser.value>>('/api/me/super-admin', {
+      method: 'PATCH',
+      body: { enabled: !superAdminEnabled.value },
+      credentials: 'include'
+    })
+  } catch {
+    toast.error('Changement du mode superadmin impossible.')
+    togglingSuperAdmin.value = false
+    return
+  }
+  // Rechargement complet : menus, pages et accès sont tous recalculés, et
+  // la page actuelle redirige si le rôle seul n'y donne pas accès.
+  // `force` : sans lui, un second clic dans les 10 s est ignoré (anti-boucle).
+  reloadNuxtApp({ path: route.fullPath, force: true })
+}
+
 async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
   await navigateTo('/')
@@ -177,6 +216,26 @@ async function logout() {
           </li>
         </ul>
       </div>
+      <button
+        v-if="currentUser?.super_admin_available"
+        type="button"
+        class="sidebar__link sidebar__superadmin"
+        :class="{ 'sidebar__superadmin--off': !superAdminEnabled }"
+        role="switch"
+        :aria-checked="superAdminEnabled"
+        :aria-label="togglingSuperAdmin ? 'Changement du mode superadmin en cours' : superAdminLabel"
+        :aria-busy="togglingSuperAdmin"
+        :title="togglingSuperAdmin ? 'Changement en cours…' : superAdminLabel"
+        :disabled="togglingSuperAdmin"
+        @click="toggleSuperAdmin"
+      >
+        <Icon v-if="togglingSuperAdmin" name="lucide:loader-circle" size="20" class="sidebar__spin" />
+        <Icon v-else :name="superAdminEnabled ? 'lucide:shield-check' : 'lucide:shield-off'" size="20" />
+        <template v-if="expanded">
+          <span class="sidebar__label">{{ togglingSuperAdmin ? 'Changement…' : 'Superadmin' }}</span>
+          <span v-if="!togglingSuperAdmin" class="sidebar__switch" aria-hidden="true" />
+        </template>
+      </button>
       <button
         type="button"
         class="sidebar__link sidebar__link--button"
@@ -397,5 +456,64 @@ async function logout() {
 .sidebar__link--button:hover {
   color: #ec8a86;
   background: rgba(210, 85, 79, 0.10);
+}
+
+/* Activé : vert comme les liens actifs ; désactivé : gris, bouclier barré. */
+.sidebar__superadmin {
+  color: var(--dp-accent);
+}
+
+.sidebar__superadmin--off {
+  color: var(--dp-text-dim);
+}
+
+/* En cours : grisé et sans effet de survol, jusqu'au rechargement. */
+.sidebar__superadmin:disabled,
+.sidebar__superadmin:disabled:hover {
+  color: var(--dp-text-dim);
+  background: transparent;
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.sidebar__spin {
+  animation: sidebar-spin 0.9s linear infinite;
+}
+
+@keyframes sidebar-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sidebar__switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 14px;
+  border: 1px solid var(--dp-accent-line);
+  border-radius: 999px;
+  background: var(--dp-accent-soft);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar__switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dp-accent);
+  transition: left 0.15s ease, background 0.15s ease;
+}
+
+.sidebar__superadmin--off .sidebar__switch {
+  border-color: var(--dp-line-strong);
+  background: transparent;
+}
+
+.sidebar__superadmin--off .sidebar__switch::after {
+  left: 2px;
+  background: var(--dp-text-dim);
 }
 </style>

@@ -31,7 +31,7 @@ def parse_grade_permissions(value: str | None) -> list[str]:
 async def user_has_grade_permission(
     user: User, db: AsyncSession, permission: str
 ) -> bool:
-    if user.is_super_admin:
+    if user.has_super_admin_rights:
         return True
     permissions = await db.scalar(
         select(Grade.permissions)
