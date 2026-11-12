@@ -386,22 +386,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 <template>
   <main class="agenda-page">
     <header class="agenda-header">
-      <div class="agenda-heading">
-        <div class="agenda-heading__icon">
-          <Icon name="lucide:calendar-days" size="19" />
-        </div>
-        <div>
-          <p class="agenda-heading__eyebrow">BCES · ORGANISATION</p>
-          <h1>Agenda partagé</h1>
-        </div>
+      <div class="agenda-header__brand">
+        <span class="agenda-header__title">Agenda</span>
       </div>
-      <div class="agenda-header__actions">
-        <span class="agenda-header__status">
-          <span :class="{ 'is-loading': loading, 'is-error': loadError }"></span>
+      <div class="agenda-header__group">
+        <span class="agenda-header__chip agenda-header__chip--status">
+          <span class="agenda-header__chip-dot" :class="{ 'agenda-header__chip-dot--loading': loading, 'agenda-header__chip-dot--error': loadError }" aria-hidden="true"></span>
           {{ loading ? 'Synchronisation…' : loadError ? 'Indisponible' : 'À jour' }}
         </span>
+        <span class="agenda-header__chip agenda-header__chip--info">
+          <Icon name="lucide:calendar" size="12" />
+          <strong>{{ events.length }}</strong> événement{{ events.length > 1 ? 's' : '' }}
+        </span>
+      </div>
+      <div class="agenda-header__actions">
         <button v-if="canManageEvents" class="agenda-create agenda-create--header" type="button" @click="openEditor()">
-          <Icon name="lucide:plus" size="17" />
+          <Icon name="lucide:plus" size="15" />
           <span class="agenda-create__label">Créer un événement</span>
         </button>
       </div>
@@ -760,30 +760,74 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 .agenda-header {
   display: flex;
-  flex: 0 0 72px;
+  flex: 0 0 52px;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px;
   padding: 0 30px;
   border-bottom: 1px solid var(--agenda-border);
   background: var(--agenda-surface);
+  flex-wrap: wrap;
 }
 
-.agenda-heading,
+.agenda-header__brand {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.agenda-header__title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--agenda-accent);
+}
+
+.agenda-header__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agenda-header__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 0;
+  background: rgba(101, 189, 137, 0.10);
+  border: 1px solid rgba(101, 189, 137, 0.40);
+  color: var(--agenda-text);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agenda-header__chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--agenda-accent);
+  box-shadow: 0 0 10px rgba(101, 189, 137, 0.4);
+}
+
+.agenda-header__chip-dot--loading {
+  background: #d3a85e;
+  box-shadow: 0 0 10px rgba(211, 168, 94, 0.35);
+}
+
+.agenda-header__chip-dot--error {
+  background: #e27872;
+  box-shadow: 0 0 10px rgba(226, 120, 114, 0.3);
+}
+
 .agenda-header__actions {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
-
-.agenda-heading { gap: 13px; }
-.agenda-heading__icon { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid rgba(101, 189, 137, .2); border-radius: 11px; color: var(--agenda-accent); background: rgba(101, 189, 137, .1); }
-.agenda-heading__eyebrow { margin: 0 0 2px; color: var(--agenda-dim); font-size: 9px; font-weight: 750; letter-spacing: .14em; }
-.agenda-heading h1 { font-size: 18px; font-weight: 650; letter-spacing: -.025em; }
-.agenda-header__actions { gap: 20px; }
-.agenda-header__status { display: flex; align-items: center; gap: 8px; color: var(--agenda-muted); font-size: 11px; }
-.agenda-header__status > span { width: 7px; height: 7px; border-radius: 50%; background: var(--agenda-accent); box-shadow: 0 0 10px rgba(101, 189, 137, .4); }
-.agenda-header__status > span.is-loading { background: #d3a85e; box-shadow: 0 0 10px rgba(211, 168, 94, .35); }
-.agenda-header__status > span.is-error { background: #e27872; box-shadow: 0 0 10px rgba(226, 120, 114, .3); }
 
 .agenda-create {
   display: inline-flex;
@@ -987,7 +1031,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 @media (max-width: 760px) {
   .agenda-page { height: auto; min-height: 100%; overflow: visible; }
-  .agenda-header { flex-basis: 62px; padding: 0 15px; }
+  .agenda-header { flex-basis: 52px; padding: 0 15px; }
   .agenda-heading { gap: 9px; }
   .agenda-heading__icon { width: 33px; height: 33px; }
   .agenda-heading__eyebrow { font-size: 8px; }

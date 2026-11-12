@@ -29,6 +29,9 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(16), default="active", nullable=False, index=True)
     competencies: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Interrupteur du super-admin lui-même (bouton « Superadmin ») : désactivé,
+    # il garde son statut mais n'a plus que les accès de son rôle et de son grade.
+    super_admin_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     role_id: Mapped[Optional[int]] = mapped_column(ForeignKey("roles.id", ondelete="SET NULL"), nullable=True)
     role: Mapped[Optional["Role"]] = relationship(back_populates="users", lazy="selectin")
 
@@ -45,6 +48,11 @@ class User(Base):
         onupdate=utcnow,
         nullable=False,
     )
+
+    @property
+    def has_super_admin_rights(self) -> bool:
+        """Super-admin dont les droits sont actifs : à utiliser pour tout contrôle d'accès."""
+        return self.is_super_admin and self.super_admin_enabled
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

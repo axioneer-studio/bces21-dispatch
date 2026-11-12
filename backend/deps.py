@@ -49,7 +49,7 @@ def require_page_access(page: str):
 
 
 def user_has_page_access(user: User, page: str) -> bool:
-    if user.is_super_admin:
+    if user.has_super_admin_rights:
         return True
     if user.role is None:
         return False
@@ -76,7 +76,7 @@ def require_any_page_access(*pages: str):
 
 
 async def require_super_admin(user: User = Depends(get_current_user)) -> User:
-    if not user.is_super_admin:
+    if not user.has_super_admin_rights:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Droits super-admin requis.",
@@ -85,7 +85,7 @@ async def require_super_admin(user: User = Depends(get_current_user)) -> User:
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.is_super_admin or user_has_page_access(user, "administration"):
+    if user_has_page_access(user, "administration"):
         return user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

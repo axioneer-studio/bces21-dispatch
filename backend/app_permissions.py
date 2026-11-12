@@ -25,7 +25,7 @@ def parse_app_permissions(value: str | None) -> list[str]:
 
 
 def user_has_app_permission(user: User, permission: str) -> bool:
-    if user.is_super_admin:
+    if user.has_super_admin_rights:
         return True
     return bool(
         user.role

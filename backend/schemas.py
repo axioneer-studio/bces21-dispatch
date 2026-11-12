@@ -55,7 +55,11 @@ class UserResponse(BaseModel):
     created_at: datetime
     role_id: Optional[int] = None
     role_name: Optional[str] = None
+    # Droits super-admin actifs : faux quand le super-admin les a désactivés.
     is_super_admin: bool = False
+    # Statut super-admin, actif ou non : affiche le bouton « Superadmin ».
+    super_admin_available: bool = False
+    super_admin_enabled: bool = True
     page_access: list[str] = Field(default_factory=list)
     app_permissions: list[str] = Field(default_factory=list)
     grade_permissions: list[str] = Field(default_factory=list)
@@ -366,6 +370,10 @@ class SuperAdminUpdateRequest(BaseModel):
     is_super_admin: bool
 
 
+class SuperAdminToggleRequest(BaseModel):
+    enabled: bool
+
+
 class AdminUserOut(BaseModel):
     id: int
     discord_username: str
@@ -375,6 +383,7 @@ class AdminUserOut(BaseModel):
     role_id: Optional[int]
     role_name: Optional[str]
     is_super_admin: bool
+    super_admin_enabled: bool = True
     created_at: datetime
 
 
