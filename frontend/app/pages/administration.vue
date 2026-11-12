@@ -48,7 +48,8 @@ type FrequencyKind = 'radio' | 'shared'
 
 interface FrequencySetting {
   kind: FrequencyKind
-  current: string
+  /** `null` tant qu'aucune fréquence n'a été réglée ou tirée. */
+  current: string | null
   /** Bornes incluses, `null` tant qu'elles ne sont pas réglées. */
   min: number | null
   max: number | null
@@ -388,7 +389,7 @@ const FREQUENCY_FIELDS: { field: FrequencyField; label: string }[] = [
 
 const formFromSetting = (setting: FrequencySetting): FrequencyForm => ({
   min: setting.min?.toString() ?? '',
-  current: setting.current,
+  current: setting.current ?? '',
   max: setting.max?.toString() ?? ''
 })
 

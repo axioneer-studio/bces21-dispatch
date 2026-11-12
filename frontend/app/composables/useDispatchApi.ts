@@ -113,7 +113,7 @@ export async function updateRadio(
 
 /** Tire une nouvelle fréquence au hasard entre les bornes réglées dans Paramètres. */
 export async function randomizeFrequency(kind: FrequencyKind) {
-  return await req<{ kind: FrequencyKind; current: string; min: number | null; max: number | null }>(
+  return await req<{ kind: FrequencyKind; current: string | null; min: number | null; max: number | null }>(
     `/api/dispatch/frequencies/${kind}/random`,
     { method: 'POST' }
   )

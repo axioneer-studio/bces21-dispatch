@@ -13,7 +13,7 @@ from schemas import FrequencyBounds, FrequencyKind
 FREQUENCY_KINDS: tuple[FrequencyKind, ...] = ("radio", "shared")
 
 # Colonne de l'état du Dispatch qui contient la fréquence actuelle.
-STATE_COLUMNS: dict[FrequencyKind, str] = {"radio": "freq_147", "shared": "freq_570"}
+STATE_COLUMNS: dict[FrequencyKind, str] = {"radio": "freq_bces", "shared": "freq_shared"}
 
 LABELS: dict[FrequencyKind, str] = {
     "radio": "Fréquence Radio BCES",
@@ -55,7 +55,7 @@ async def write_bounds(db: AsyncSession, kind: FrequencyKind, low: int, high: in
             setting.value = str(value)
 
 
-def current_frequency(state: DispatchState, kind: FrequencyKind) -> str:
+def current_frequency(state: DispatchState, kind: FrequencyKind) -> str | None:
     return getattr(state, STATE_COLUMNS[kind])
 
 

@@ -43,10 +43,10 @@ async def _setting_out(db: AsyncSession, state: DispatchState, kind: FrequencyKi
     )
 
 
-def _random_frequency(low: int, high: int, current: str) -> int:
+def _random_frequency(low: int, high: int, current: str | None) -> int:
     """Nombre entre les bornes (incluses), différent de l'actuel s'il y a le choix."""
     try:
-        current_value = int(current)
+        current_value = int(current) if current is not None else None
     except ValueError:
         current_value = None
     if high == low or current_value is None or not low <= current_value <= high:

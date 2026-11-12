@@ -465,8 +465,8 @@ d'employés.
 | `application_settings` | Paramètres généraux configurés dans Administration |
 | `dispatch_slots` | Créneaux : `kind`, `title`, `status`, `zip_code`, `location`, `type_label`, `order` |
 | `dispatch_employee_assignments` | Affectations : `slot_id` → `employee_id`, `order` (cascade `DELETE`) |
-| `dispatch_radios` | Radios : `serial`, `employee_id`, `is_on`, `is_loading`, `frequency`, `common_frequency`, `is_direction` |
-| `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_147`, `freq_570`, `radio_codes` |
+| `dispatch_radios` | Radios : `serial`, `employee_id`, `is_on`, `is_loading`, `is_direction` |
+| `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_bces`, `freq_shared` (fréquences actuelles, vides tant qu'elles ne sont pas réglées ; bornes dans `application_settings`), `radio_codes` |
 
 ### Créneaux amorcés
 

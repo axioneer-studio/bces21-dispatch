@@ -32,8 +32,6 @@ export interface DispatchRadio {
   is_on: boolean
   /** État « Indisponible » : en service mais indisponible à la radio. */
   is_loading: boolean
-  frequency: string
-  common_frequency: string
   is_direction: boolean
   order: number
   updated_at: string
@@ -43,8 +41,10 @@ export interface DispatchState {
   hospital_status: 'ouvert' | 'ferme' | 'nuit'
   lses_status: string
   safd_status: string
-  freq_147: string
-  freq_570: string
+  /** Fréquence BCES actuelle ; `null` tant qu'elle n'a pas été réglée ou tirée. */
+  freq_bces: string | null
+  /** Fréquence commune actuelle, partagée avec les autres services ; `null` si non réglée. */
+  freq_shared: string | null
   radio_codes: string
   updated_at: string
 }
@@ -100,8 +100,8 @@ const emptyState = (): DispatchState => ({
   hospital_status: 'ouvert',
   lses_status: 'ferme',
   safd_status: 'disponible',
-  freq_147: '147',
-  freq_570: '570',
+  freq_bces: null,
+  freq_shared: null,
   radio_codes: '',
   updated_at: new Date().toISOString()
 })

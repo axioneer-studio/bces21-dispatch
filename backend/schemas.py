@@ -407,7 +407,8 @@ class FrequencyBounds(BaseModel):
 
 class FrequencySettingOut(FrequencyBounds):
     kind: FrequencyKind
-    current: str
+    # `None` tant qu'aucune fréquence n'a été réglée ou tirée.
+    current: Optional[str] = None
 
 
 class FrequencySettingUpdateRequest(BaseModel):
@@ -515,8 +516,6 @@ class RadioOut(BaseModel):
     employee_id: Optional[int]
     is_on: bool
     is_loading: bool
-    frequency: str
-    common_frequency: str
     is_direction: bool
     order: int
     updated_at: datetime
@@ -588,8 +587,9 @@ class StateOut(BaseModel):
     hospital_status: str
     lses_status: str
     safd_status: str
-    freq_147: str
-    freq_570: str
+    # `None` tant qu'aucune fréquence n'a été réglée ou tirée (« Aucune » sur le Dispatch).
+    freq_bces: Optional[str] = None
+    freq_shared: Optional[str] = None
     radio_codes: str
     updated_at: datetime
 

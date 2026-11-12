@@ -29,9 +29,15 @@ const canResetDispatch = computed(() =>
 
 // --- Fréquences : double-clic pour en tirer une nouvelle entre les bornes de Paramètres ---
 
+/** « 147 MHz », ou « Aucune » tant que la fréquence n'est pas enregistrée en base. */
+const frequencyText = (value: string | null) => {
+  const digits = value?.replace(/\s*MHz$/i, '').trim()
+  return digits ? `${digits} MHz` : 'Aucune'
+}
+
 const frequencies = computed(() => [
-  { kind: 'radio' as const, label: 'Radio', value: state.value.freq_147.replace(/\s*MHz$/i, '') },
-  { kind: 'shared' as const, label: 'Radio commune', value: state.value.freq_570.replace(/\s*MHz$/i, '') }
+  { kind: 'radio' as const, label: 'Radio', value: frequencyText(state.value.freq_bces) },
+  { kind: 'shared' as const, label: 'Radio commune', value: frequencyText(state.value.freq_shared) }
 ])
 /** Tirage en cours : les deux fréquences restent inactives jusqu'à la réponse. */
 const randomizingFrequency = ref<FrequencyKind | null>(null)
@@ -47,7 +53,7 @@ async function randomize(kind: FrequencyKind, label: string) {
   randomizingFrequency.value = kind
   try {
     const result = await randomizeFrequency(kind)
-    toast.success(`Nouvelle fréquence « ${label} » : ${result.current} MHz.`)
+    toast.success(`Nouvelle fréquence « ${label} » : ${frequencyText(result.current)}.`)
   } catch (error) {
     const detail = (error as { data?: { detail?: unknown } } | null)?.data?.detail
     toast.error(typeof detail === 'string' && detail ? detail : 'Changement de fréquence impossible.')
@@ -149,7 +155,7 @@ const safdLabel = computed(() =>
           size="14"
           :class="{ dh__spin: randomizingFrequency === frequency.kind }"
         />
-        {{ frequency.label }} : <strong>{{ frequency.value }} MHz</strong>
+        {{ frequency.label }} : <strong>{{ frequency.value }}</strong>
       </button>
     </div>
 
