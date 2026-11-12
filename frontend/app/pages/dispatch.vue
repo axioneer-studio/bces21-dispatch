@@ -4,7 +4,7 @@ import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
 definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Dispatch BCES' })
+useHead({ title: 'Dispatch • BCES' })
 
 interface DispatchUser {
   is_super_admin: boolean

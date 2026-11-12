@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Agenda partagé · BCES' })
+useHead({ title: 'Agenda • BCES' })
 
 type View = 'day' | 'week' | 'month' | 'year' | 'agenda'
 type EventItem = {

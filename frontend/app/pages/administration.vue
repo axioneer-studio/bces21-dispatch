@@ -2,7 +2,7 @@
 import type { Ref } from 'vue'
 
 definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Administration · BCES' })
+useHead({ title: 'Administration • BCES' })
 
 interface AppRole {
   id: number

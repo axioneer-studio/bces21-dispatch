@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Accès refusé · BCES' })
+useHead({ title: 'Accès refusé • BCES' })
 </script>
 
 <template>

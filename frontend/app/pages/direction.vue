@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Direction · BCES' })
+useHead({ title: 'Direction • BCES' })
 
 interface GradePermission {
   key: string
