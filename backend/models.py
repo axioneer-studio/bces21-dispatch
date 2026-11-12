@@ -184,10 +184,6 @@ class DispatchRadio(Base):
     )
     is_on: Mapped[bool] = mapped_column(default=False, nullable=False)
     is_loading: Mapped[bool] = mapped_column(default=False, nullable=False)
-    frequency: Mapped[str] = mapped_column(String(16), default="147", nullable=False)
-    common_frequency: Mapped[str] = mapped_column(
-        String(16), default="570", nullable=False
-    )
     is_direction: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -208,12 +204,10 @@ class DispatchState(Base):
     safd_status: Mapped[str] = mapped_column(
         String(16), default="disponible", nullable=False
     )
-    freq_147: Mapped[str] = mapped_column(
-        String(16), default="147", nullable=False
-    )
-    freq_570: Mapped[str] = mapped_column(
-        String(16), default="570", nullable=False
-    )
+    # Fréquences actuelles : BCES et commune (partagée avec les autres services).
+    # Vides tant qu'elles n'ont pas été réglées (Paramètres) ou tirées (Dispatch).
+    freq_bces: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    freq_shared: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     radio_codes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False

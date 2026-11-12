@@ -17,8 +17,11 @@ class Base(DeclarativeBase):
     pass
 
 
-def _frequency_value(value: str) -> str:
-    return re.sub(r"\s*MHz\s*$", "", value, flags=re.IGNORECASE).strip()
+def _frequency_value(value: str | None) -> str | None:
+    """Retire un éventuel « MHz » ; une fréquence vide reste vide (affichée « Aucune »)."""
+    if value is None:
+        return None
+    return re.sub(r"\s*MHz\s*$", "", value, flags=re.IGNORECASE).strip() or None
 
 
 _settings = get_settings()
@@ -140,7 +143,36 @@ async def _run_vehicle_migrations(conn) -> None:
             pass
 
 
+_DISPATCH_STATE_RENAMES = [
+    ("freq_147", "freq_bces"),
+    ("freq_570", "freq_shared"),
+]
+
+# Chaque instruction échoue sans effet si elle a déjà été appliquée, si la base
+# est neuve (create_all crée directement le bon schéma) ou si le moteur ne la
+# connaît pas (SQLite n'a pas d'ALTER COLUMN).
+_DISPATCH_FREQUENCY_STATEMENTS = [
+    # Fréquences actuelles : aucune valeur par défaut, vides tant qu'elles ne sont pas réglées.
+    *(f"ALTER TABLE dispatch_state RENAME COLUMN {old} TO {new}" for old, new in _DISPATCH_STATE_RENAMES),
+    *(
+        f"ALTER TABLE dispatch_state ALTER COLUMN {column} {change}"
+        for column in ("freq_bces", "freq_shared")
+        for change in ("DROP DEFAULT", "DROP NOT NULL")
+    ),
+    # La table des radios ne contient que la liste des radios, sans fréquence.
+    "ALTER TABLE dispatch_radios DROP COLUMN frequency",
+    "ALTER TABLE dispatch_radios DROP COLUMN common_frequency",
+]
+
+
 async def _run_dispatch_migrations(conn) -> None:
+    for stmt in _DISPATCH_FREQUENCY_STATEMENTS:
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
+
     try:
         async with conn.begin_nested():
             await conn.execute(
@@ -271,14 +303,10 @@ async def init_db() -> None:
             session.add(DispatchState(id=1))
             await session.flush()
 
-        for radio in (await session.execute(select(DispatchRadio))).scalars():
-            radio.frequency = _frequency_value(radio.frequency)
-            radio.common_frequency = _frequency_value(radio.common_frequency)
-
         state = await session.get(DispatchState, 1)
         if state:
-            state.freq_147 = _frequency_value(state.freq_147)
-            state.freq_570 = _frequency_value(state.freq_570)
+            state.freq_bces = _frequency_value(state.freq_bces)
+            state.freq_shared = _frequency_value(state.freq_shared)
 
         if await session.get(DispatchNote, 1) is None:
             session.add(DispatchNote(id=1, content=""))

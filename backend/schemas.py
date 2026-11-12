@@ -2,7 +2,7 @@ import re
 from datetime import date, datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 _NAME_PATTERN = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' \-]+$")
@@ -394,6 +394,44 @@ class ApplicationSettingsUpdateRequest(BaseModel):
     registration_open: bool
 
 
+# « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services.
+FrequencyKind = Literal["radio", "shared"]
+
+
+class FrequencyBounds(BaseModel):
+    """Bornes incluses ; `None` tant qu'elles n'ont pas été réglées dans Paramètres."""
+
+    min: Optional[int] = None
+    max: Optional[int] = None
+
+
+class FrequencySettingOut(FrequencyBounds):
+    kind: FrequencyKind
+    # `None` tant qu'aucune fréquence n'a été réglée ou tirée.
+    current: Optional[str] = None
+
+
+class FrequencySettingUpdateRequest(BaseModel):
+    # Facultatives : si absentes, les bornes existantes sont conservées.
+    min: Optional[int] = Field(default=None, ge=0, le=99999)
+    # Facultative : vide, la fréquence reste « Aucune » jusqu'au premier tirage.
+    current: Optional[int] = Field(default=None, ge=0, le=99999)
+    max: Optional[int] = Field(default=None, ge=0, le=99999)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "FrequencySettingUpdateRequest":
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError("La borne basse doit être inférieure ou égale à la borne haute.")
+        if (
+            self.current is not None
+            and self.min is not None
+            and self.max is not None
+            and not self.min <= self.current <= self.max
+        ):
+            raise ValueError("La fréquence doit être comprise entre les deux bornes.")
+        return self
+
+
 class PendingUserItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -485,8 +523,6 @@ class RadioOut(BaseModel):
     employee_id: Optional[int]
     is_on: bool
     is_loading: bool
-    frequency: str
-    common_frequency: str
     is_direction: bool
     order: int
     updated_at: datetime
@@ -558,8 +594,9 @@ class StateOut(BaseModel):
     hospital_status: str
     lses_status: str
     safd_status: str
-    freq_147: str
-    freq_570: str
+    # `None` tant qu'aucune fréquence n'a été réglée ou tirée (« Aucune » sur le Dispatch).
+    freq_bces: Optional[str] = None
+    freq_shared: Optional[str] = None
     radio_codes: str
     updated_at: datetime
 
@@ -716,6 +753,8 @@ class DispatchSnapshot(BaseModel):
     fleet: list[FleetEntryOut] = Field(default_factory=list)
     vehicles: list[VehicleOut] = Field(default_factory=list)
     parking_spots: list[ParkingSpotOut] = Field(default_factory=list)
+    # Bornes des fréquences, pour le message de confirmation du tirage aléatoire.
+    frequency_bounds: dict[FrequencyKind, FrequencyBounds] = Field(default_factory=dict)
 
 
 class DispatchResetRequest(BaseModel):

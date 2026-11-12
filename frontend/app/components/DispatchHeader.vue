@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { resetAssignments, updateState } from '~/composables/useDispatchApi'
+import type { FrequencyKind } from '~/composables/useDispatchStore'
+import FrequencyPicker from '~/components/FrequencyPicker.vue'
 
 const props = defineProps<{
   canResetAssignments: boolean
@@ -25,6 +27,48 @@ const canResetDispatch = computed(() =>
   state.value.hospital_status !== 'ferme' ||
   (props.canDeleteInterventions && dynamicInterventions.value.length > 0)
 )
+
+// --- Fréquences : double-clic pour ouvrir le popup de saisie / tirage aléatoire ---
+
+/** « 147 MHz », ou « Aucune » tant que la fréquence n'est pas enregistrée en base. */
+const frequencyText = (value: string | null) => {
+  const digits = value?.replace(/\s*MHz$/i, '').trim()
+  return digits ? `${digits} MHz` : 'Aucune'
+}
+
+const frequencies = computed(() => [
+  { kind: 'radio' as const, label: 'Radio', value: frequencyText(state.value.freq_bces) },
+  { kind: 'shared' as const, label: 'Radio commune', value: frequencyText(state.value.freq_shared) }
+])
+
+/** Popup de fréquence : quel type est en cours d'édition. */
+const editingFrequencyKind = ref<FrequencyKind | null>(null)
+
+/** Bornes pour le type de fréquence en cours d'édition. */
+const editingBounds = computed(() => {
+  if (!editingFrequencyKind.value) return { min: null, max: null }
+  return snapshot.value.frequency_bounds[editingFrequencyKind.value] ?? { min: null, max: null }
+})
+
+/** Fréquence actuelle pour le type en cours d'édition. */
+const editingCurrent = computed(() => {
+  if (!editingFrequencyKind.value) return null
+  return editingFrequencyKind.value === 'radio' ? state.value.freq_bces : state.value.freq_shared
+})
+
+function openFrequencyPicker(kind: FrequencyKind) {
+  editingFrequencyKind.value = kind
+}
+
+function closeFrequencyPicker() {
+  editingFrequencyKind.value = null
+}
+
+async function onFrequencyUpdated(kind: FrequencyKind, value: string | null) {
+  // La mise à jour est gérée par le composant FrequencyPicker via l'API Direction.
+  // On recharge le snapshot via le WebSocket (broadcast) ou on attend la prochaine réception.
+  closeFrequencyPicker()
+}
 
 watch(
   () => state.value.hospital_status,
@@ -104,14 +148,23 @@ const safdLabel = computed(() =>
     </div>
 
     <div class="dh__group dh__freqs">
-      <span class="dh__chip dh__chip--freq">
-        <Icon name="lucide:radio" size="14" />
-        Radio : <strong>{{ state.freq_147.replace(/\s*MHz$/i, '') }} MHz</strong>
-      </span>
-      <span class="dh__chip dh__chip--freq">
-        <Icon name="lucide:radio" size="14" />
-        Radio commune : <strong>{{ state.freq_570.replace(/\s*MHz$/i, '') }} MHz</strong>
-      </span>
+      <button
+        v-for="frequency in frequencies"
+        :key="frequency.kind"
+        type="button"
+        class="dh__chip dh__chip--freq"
+        :disabled="editingFrequencyKind !== null"
+        :aria-busy="editingFrequencyKind === frequency.kind"
+        :title="`Double-cliquer pour choisir ou générer une nouvelle ${frequency.label.toLowerCase()}`"
+        @dblclick="openFrequencyPicker(frequency.kind)"
+      >
+        <Icon
+          :name="editingFrequencyKind === frequency.kind ? 'lucide:loader-circle' : 'lucide:radio'"
+          size="14"
+          :class="{ dh__spin: editingFrequencyKind === frequency.kind }"
+        />
+        {{ frequency.label }} : <strong>{{ frequency.value }}</strong>
+      </button>
     </div>
 
     <div class="dh__group">
@@ -185,10 +238,20 @@ const safdLabel = computed(() =>
         aria-labelledby="dh-reset-title"
         aria-describedby="dh-reset-description"
       >
-        <h2 id="dh-reset-title">Réinitialiser le Dispatch ?</h2>
-        <p id="dh-reset-description">
-          Les employés affectés seront remis dans « Hors service BCES », les radios ON ou indisponibles passeront OFF et l’hôpital sera fermé.
-        </p>
+        <div class="dh-modal__header">
+          <div class="dh-modal__icon">
+            <Icon name="lucide:alert-triangle" size="18" />
+          </div>
+          <div>
+            <h2 id="dh-reset-title">Réinitialiser le Dispatch ?</h2>
+            <p id="dh-reset-description">
+              Les employés affectés seront remis dans « Hors service BCES », les radios ON ou indisponibles passeront OFF et l’hôpital sera fermé.
+            </p>
+          </div>
+          <button type="button" class="dh-modal__close" aria-label="Fermer" @click="resetDialogOpen = false">
+            <Icon name="lucide:x" size="16" />
+          </button>
+        </div>
         <label v-if="props.canDeleteInterventions" class="dh-modal__option">
           <input v-model="deleteInterventions" type="checkbox">
           <span>
@@ -207,6 +270,17 @@ const safdLabel = computed(() =>
         </div>
       </section>
     </div>
+
+    <FrequencyPicker
+      v-if="editingFrequencyKind"
+      :kind="editingFrequencyKind"
+      :label="editingFrequencyKind === 'radio' ? 'Radio' : 'Radio commune'"
+      :current="editingCurrent"
+      :min="editingBounds.min"
+      :max="editingBounds.max"
+      @update:current="onFrequencyUpdated"
+      @close="closeFrequencyPicker"
+    />
   </Teleport>
 </template>
 
@@ -311,7 +385,21 @@ const safdLabel = computed(() =>
   background: rgba(0, 0, 0, 0.30);
   border-color: rgba(255, 255, 255, 0.08);
   color: var(--dp-text);
-  cursor: default;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  /* Le double-clic ne sélectionne pas le texte. */
+  user-select: none;
+}
+
+.dh__chip--freq:hover:not(:disabled) {
+  border-color: var(--dp-line-strong);
+}
+
+.dh__chip--freq:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .dh__chip--freq strong {
@@ -406,36 +494,89 @@ const safdLabel = computed(() =>
   z-index: 1000;
   display: grid;
   place-items: center;
-  padding: 18px;
-  background: rgba(0, 0, 0, 0.68);
+  padding: 24px;
+  background: rgba(5, 8, 11, 0.72);
+  backdrop-filter: blur(8px);
+  animation: dh-overlay-in 0.22s ease-out;
 }
 
 .dh-modal__panel {
-  width: min(440px, 100%);
-  padding: 20px;
+  width: min(460px, 94%);
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--dp-line-strong);
   background: var(--dp-panel);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  border-radius: 16px;
+  overflow: hidden;
+  animation: dh-panel-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dh-modal__panel h2 {
+.dh-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--dp-line);
+  background: var(--dp-panel-2);
+}
+
+.dh-modal__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--dp-danger-line);
+  border-radius: 10px;
+  color: var(--dp-danger);
+  background: var(--dp-danger-soft);
+  flex-shrink: 0;
+}
+
+.dh-modal__header > div {
+  min-width: 0;
+}
+
+.dh-modal__header h2 {
   margin: 0;
   color: var(--dp-text);
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.dh-modal__panel > p {
-  margin: 10px 0 16px;
+.dh-modal__header p {
+  margin: 3px 0 0;
   color: var(--dp-text-2);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.4;
+}
+
+.dh-modal__close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--dp-line);
+  color: var(--dp-text-2);
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dh-modal__close:hover {
+  color: var(--dp-text);
+  background: var(--dp-panel-3);
+  border-color: var(--dp-line-strong);
 }
 
 .dh-modal__option {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 11px;
+  gap: 10px;
+  padding: 12px 16px;
   border: 1px solid var(--dp-line);
   color: var(--dp-text);
   background: var(--dp-panel-2);
@@ -443,14 +584,14 @@ const safdLabel = computed(() =>
 }
 
 .dh-modal__option input {
-  margin-top: 2px;
+  margin-top: 3px;
   accent-color: var(--dp-danger);
 }
 
 .dh-modal__option span {
   display: grid;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .dh-modal__option small {
@@ -461,22 +602,31 @@ const safdLabel = computed(() =>
 .dh-modal__actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--dp-line);
+  background: var(--dp-panel-2);
 }
 
 .dh-modal__actions button {
   display: inline-flex;
-  min-height: 34px;
   align-items: center;
   gap: 6px;
-  padding: 0 11px;
+  min-height: 40px;
+  padding: 0 16px;
   border: 1px solid var(--dp-line);
   color: var(--dp-text-2);
   background: transparent;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dh-modal__actions button:hover:not(:disabled) {
+  border-color: var(--dp-line-strong);
+  color: var(--dp-text);
+  background: var(--dp-panel-3);
 }
 
 .dh-modal__actions .dh-modal__confirm {
@@ -485,8 +635,23 @@ const safdLabel = computed(() =>
   background: var(--dp-danger);
 }
 
+.dh-modal__actions .dh-modal__confirm:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
 .dh-modal__actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+@keyframes dh-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dh-panel-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 </style>

@@ -20,6 +20,7 @@ from deps import get_current_user
 from dispatch import router as dispatch_router
 from direction import router as direction_router
 from fleet import router as fleet_router
+from frequencies import router as frequencies_router
 from human_resources import router as human_resources_router
 from grade_permissions import parse_grade_permissions
 from models import Employee, Grade, User
@@ -126,4 +127,5 @@ app.include_router(agents_router)
 app.include_router(agenda_router)
 app.include_router(dispatch_router)
 app.include_router(fleet_router)
+app.include_router(frequencies_router)
 app.include_router(human_resources_router)
