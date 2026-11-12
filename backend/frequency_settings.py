@@ -59,5 +59,5 @@ def current_frequency(state: DispatchState, kind: FrequencyKind) -> str | None:
     return getattr(state, STATE_COLUMNS[kind])
 
 
-def set_current_frequency(state: DispatchState, kind: FrequencyKind, value: int) -> None:
-    setattr(state, STATE_COLUMNS[kind], str(value))
+def set_current_frequency(state: DispatchState, kind: FrequencyKind, value: int | None) -> None:
+    setattr(state, STATE_COLUMNS[kind], None if value is None else str(value))

@@ -413,14 +413,15 @@ class FrequencySettingOut(FrequencyBounds):
 
 class FrequencySettingUpdateRequest(BaseModel):
     min: int = Field(ge=0, le=99999)
-    current: int = Field(ge=0, le=99999)
+    # Facultative : vide, la fréquence reste « Aucune » jusqu'au premier tirage.
+    current: Optional[int] = Field(default=None, ge=0, le=99999)
     max: int = Field(ge=0, le=99999)
 
     @model_validator(mode="after")
     def _ordered(self) -> "FrequencySettingUpdateRequest":
         if self.min > self.max:
             raise ValueError("La borne basse doit être inférieure ou égale à la borne haute.")
-        if not self.min <= self.current <= self.max:
+        if self.current is not None and not self.min <= self.current <= self.max:
             raise ValueError("La fréquence doit être comprise entre les deux bornes.")
         return self
 

@@ -412,11 +412,15 @@ function onFrequencyInput(kind: FrequencyKind, field: FrequencyField, event: Eve
   delete frequencyErrors[kind]
 }
 
+/** Bornes obligatoires ; la fréquence actuelle est facultative (vide : « Aucune » sur le Dispatch). */
 function frequencyProblem(form: FrequencyForm): string {
-  if (!form.min || !form.current || !form.max) return 'Remplissez les trois champs.'
-  const [low, current, high] = [Number(form.min), Number(form.current), Number(form.max)]
+  if (!form.min || !form.max) return 'Renseignez les deux bornes.'
+  const [low, high] = [Number(form.min), Number(form.max)]
   if (low > high) return 'La borne basse doit être inférieure ou égale à la borne haute.'
-  if (current < low || current > high) return `La fréquence doit être comprise entre ${low} et ${high} (incluses).`
+  if (form.current) {
+    const current = Number(form.current)
+    if (current < low || current > high) return `La fréquence doit être comprise entre ${low} et ${high} (incluses).`
+  }
   return ''
 }
 
@@ -437,7 +441,7 @@ async function saveFrequency(kind: FrequencyKind) {
   try {
     const updated = await $fetch<FrequencySetting>(`/api/admin/frequencies/${kind}`, {
       method: 'PUT',
-      body: { min: Number(form.min), current: Number(form.current), max: Number(form.max) },
+      body: { min: Number(form.min), current: form.current ? Number(form.current) : null, max: Number(form.max) },
       credentials: 'include'
     })
     frequencySettings.value = frequencySettings.value.map((setting) => (setting.kind === kind ? updated : setting))
@@ -969,7 +973,7 @@ function statusLabel(status: string) {
                 maxlength="5"
                 autocomplete="off"
                 :value="frequencyForms[setting.kind]?.[item.field] ?? ''"
-                :placeholder="item.field === 'current' ? '—' : '?'"
+                :placeholder="item.field === 'current' ? 'Aucune' : '?'"
                 :aria-label="`${FREQUENCY_LABELS[setting.kind]} : ${item.label}`"
                 :disabled="savingFrequency === setting.kind"
                 @input="onFrequencyInput(setting.kind, item.field, $event)"
