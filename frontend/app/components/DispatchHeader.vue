@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { resetAssignments, updateState } from '~/composables/useDispatchApi'
+import { randomizeFrequency, resetAssignments, updateState } from '~/composables/useDispatchApi'
+import type { FrequencyKind } from '~/composables/useDispatchStore'
 
 const props = defineProps<{
   canResetAssignments: boolean
@@ -25,6 +26,35 @@ const canResetDispatch = computed(() =>
   state.value.hospital_status !== 'ferme' ||
   (props.canDeleteInterventions && dynamicInterventions.value.length > 0)
 )
+
+// --- Fréquences : double-clic pour en tirer une nouvelle entre les bornes de Paramètres ---
+
+const frequencies = computed(() => [
+  { kind: 'radio' as const, label: 'Radio', value: state.value.freq_147.replace(/\s*MHz$/i, '') },
+  { kind: 'shared' as const, label: 'Radio commune', value: state.value.freq_570.replace(/\s*MHz$/i, '') }
+])
+/** Tirage en cours : les deux fréquences restent inactives jusqu'à la réponse. */
+const randomizingFrequency = ref<FrequencyKind | null>(null)
+
+async function randomize(kind: FrequencyKind, label: string) {
+  if (randomizingFrequency.value !== null) return
+  const bounds = snapshot.value.frequency_bounds[kind]
+  if (bounds?.min == null || bounds.max == null) {
+    toast.warning(`Réglez d’abord les bornes de la fréquence « ${label} » dans Administration → Paramètres.`)
+    return
+  }
+  if (!window.confirm(`Générer une nouvelle fréquence « ${label} » au hasard, entre ${bounds.min} et ${bounds.max} ?`)) return
+  randomizingFrequency.value = kind
+  try {
+    const result = await randomizeFrequency(kind)
+    toast.success(`Nouvelle fréquence « ${label} » : ${result.current} MHz.`)
+  } catch (error) {
+    const detail = (error as { data?: { detail?: unknown } } | null)?.data?.detail
+    toast.error(typeof detail === 'string' && detail ? detail : 'Changement de fréquence impossible.')
+  } finally {
+    randomizingFrequency.value = null
+  }
+}
 
 watch(
   () => state.value.hospital_status,
@@ -104,14 +134,23 @@ const safdLabel = computed(() =>
     </div>
 
     <div class="dh__group dh__freqs">
-      <span class="dh__chip dh__chip--freq">
-        <Icon name="lucide:radio" size="14" />
-        Radio : <strong>{{ state.freq_147.replace(/\s*MHz$/i, '') }} MHz</strong>
-      </span>
-      <span class="dh__chip dh__chip--freq">
-        <Icon name="lucide:radio" size="14" />
-        Radio commune : <strong>{{ state.freq_570.replace(/\s*MHz$/i, '') }} MHz</strong>
-      </span>
+      <button
+        v-for="frequency in frequencies"
+        :key="frequency.kind"
+        type="button"
+        class="dh__chip dh__chip--freq"
+        :disabled="randomizingFrequency !== null"
+        :aria-busy="randomizingFrequency === frequency.kind"
+        :title="`Double-cliquer pour générer une nouvelle ${frequency.label.toLowerCase()}`"
+        @dblclick="randomize(frequency.kind, frequency.label)"
+      >
+        <Icon
+          :name="randomizingFrequency === frequency.kind ? 'lucide:loader-circle' : 'lucide:radio'"
+          size="14"
+          :class="{ dh__spin: randomizingFrequency === frequency.kind }"
+        />
+        {{ frequency.label }} : <strong>{{ frequency.value }} MHz</strong>
+      </button>
     </div>
 
     <div class="dh__group">
@@ -311,7 +350,21 @@ const safdLabel = computed(() =>
   background: rgba(0, 0, 0, 0.30);
   border-color: rgba(255, 255, 255, 0.08);
   color: var(--dp-text);
-  cursor: default;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  /* Le double-clic ne sélectionne pas le texte. */
+  user-select: none;
+}
+
+.dh__chip--freq:hover:not(:disabled) {
+  border-color: var(--dp-line-strong);
+}
+
+.dh__chip--freq:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .dh__chip--freq strong {

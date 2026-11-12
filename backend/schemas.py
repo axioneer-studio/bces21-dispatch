@@ -2,7 +2,7 @@ import re
 from datetime import date, datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 _NAME_PATTERN = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' \-]+$")
@@ -394,6 +394,36 @@ class ApplicationSettingsUpdateRequest(BaseModel):
     registration_open: bool
 
 
+# « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services.
+FrequencyKind = Literal["radio", "shared"]
+
+
+class FrequencyBounds(BaseModel):
+    """Bornes incluses ; `None` tant qu'elles n'ont pas été réglées dans Paramètres."""
+
+    min: Optional[int] = None
+    max: Optional[int] = None
+
+
+class FrequencySettingOut(FrequencyBounds):
+    kind: FrequencyKind
+    current: str
+
+
+class FrequencySettingUpdateRequest(BaseModel):
+    min: int = Field(ge=0, le=99999)
+    current: int = Field(ge=0, le=99999)
+    max: int = Field(ge=0, le=99999)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "FrequencySettingUpdateRequest":
+        if self.min > self.max:
+            raise ValueError("La borne basse doit être inférieure ou égale à la borne haute.")
+        if not self.min <= self.current <= self.max:
+            raise ValueError("La fréquence doit être comprise entre les deux bornes.")
+        return self
+
+
 class PendingUserItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -716,6 +746,8 @@ class DispatchSnapshot(BaseModel):
     fleet: list[FleetEntryOut] = Field(default_factory=list)
     vehicles: list[VehicleOut] = Field(default_factory=list)
     parking_spots: list[ParkingSpotOut] = Field(default_factory=list)
+    # Bornes des fréquences, pour le message de confirmation du tirage aléatoire.
+    frequency_bounds: dict[FrequencyKind, FrequencyBounds] = Field(default_factory=dict)
 
 
 class DispatchResetRequest(BaseModel):

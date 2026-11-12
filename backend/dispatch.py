@@ -12,6 +12,7 @@ from auth.session import decode_token, get_session_cookie_name
 from config import get_settings
 from database import SessionLocal, get_db
 from deps import require_page_access, user_has_page_access
+from frequency_settings import read_all_bounds
 from grade_permissions import require_grade_permission, user_has_grade_permission
 from models import (
     DispatchAssignment,
@@ -129,6 +130,9 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
         "fleet": [FleetEntryOut.model_validate(f).model_dump(mode="json") for f in fleet],
         "vehicles": [VehicleOut.model_validate(v).model_dump(mode="json") for v in vehicles],
         "parking_spots": [ParkingSpotOut.model_validate(p).model_dump(mode="json") for p in parking_spots],
+        "frequency_bounds": {
+            kind: bounds.model_dump(mode="json") for kind, bounds in (await read_all_bounds(db)).items()
+        },
     }
 
 

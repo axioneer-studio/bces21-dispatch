@@ -1,5 +1,5 @@
 import { $fetch } from 'ofetch'
-import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState, FleetEntry } from './useDispatchStore'
+import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState, FleetEntry, FrequencyKind } from './useDispatchStore'
 
 const config = () => useRuntimeConfig()
 
@@ -109,6 +109,14 @@ export async function updateRadio(
     method: 'PATCH',
     body: patch
   })
+}
+
+/** Tire une nouvelle fréquence au hasard entre les bornes réglées dans Paramètres. */
+export async function randomizeFrequency(kind: FrequencyKind) {
+  return await req<{ kind: FrequencyKind; current: string; min: number | null; max: number | null }>(
+    `/api/dispatch/frequencies/${kind}/random`,
+    { method: 'POST' }
+  )
 }
 
 export async function updateState(

@@ -69,6 +69,15 @@ export interface ParkingSpot {
   name: string
 }
 
+/** « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services. */
+export type FrequencyKind = 'radio' | 'shared'
+
+/** Bornes incluses, `null` tant qu'elles ne sont pas réglées dans Administration → Paramètres. */
+export interface FrequencyBounds {
+  min: number | null
+  max: number | null
+}
+
 export interface DispatchSnapshot {
   slots: DispatchSlot[]
   radios: DispatchRadio[]
@@ -77,6 +86,7 @@ export interface DispatchSnapshot {
   fleet: FleetEntry[]
   vehicles: Vehicle[]
   parking_spots: ParkingSpot[]
+  frequency_bounds: Partial<Record<FrequencyKind, FrequencyBounds>>
 }
 
 interface PendingEmployeeMove {
@@ -104,7 +114,8 @@ export const useDispatchStore = () => {
     note: '',
     fleet: [],
     vehicles: [],
-    parking_spots: []
+    parking_spots: [],
+    frequency_bounds: {}
   }))
   const pendingMoves = useState<Record<string, PendingEmployeeMove>>(
     'dispatch-pending-moves',
