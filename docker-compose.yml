@@ -43,9 +43,10 @@ services:
       S3_BUCKET: ${S3_BUCKET:?Set S3_BUCKET in the Coolify environment}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in the Coolify environment}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in the Coolify environment}
-      # Clé Fernet (base64, 32 octets) auto-générée par Coolify à la création du projet.
-      SERVICE_REALBASE64_64_GOOGLE_SA_KEY: /
-      GOOGLE_SA_ENCRYPTION_KEY: ${SERVICE_REALBASE64_64_GOOGLE_SA_KEY}
+      # Clé Fernet (base64, 32 octets) pour chiffrer le JSON du compte de service sur S3.
+      # À définir dans les Environment Variables de Coolify. Générer avec :
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      GOOGLE_SA_ENCRYPTION_KEY: ${GOOGLE_SA_ENCRYPTION_KEY:?Set GOOGLE_SA_ENCRYPTION_KEY in the Coolify environment}
       STATUS_SYNC_INTERVAL_SECONDS: "10"
     expose:
       - "8000"
