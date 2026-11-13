@@ -37,9 +37,16 @@ services:
       PROFILE_DEADLINE_SECONDS: "86400"
       CLEANUP_INTERVAL_SECONDS: "1800"
 
-      # Google Sheets
-      STATUS_SHEET_CSV_URL: https://docs.google.com/spreadsheets/d/1A1gxOho_roNwxTtcbiEpLGSWbD8JUasMDu4NL-zdcbw/export?format=csv&gid=0
-      STATUS_SYNC_INTERVAL_SECONDS: "30"
+      # Google Sheets : stockage S3 des credentials du compte de service + chiffrement
+      S3_ENDPOINT: ${S3_ENDPOINT:?Set S3_ENDPOINT in the Coolify environment}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:?Set S3_BUCKET in the Coolify environment}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in the Coolify environment}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in the Coolify environment}
+      # Clé Fernet (base64, 32 octets) auto-générée par Coolify à la création du projet.
+      SERVICE_REALBASE64_64_GOOGLE_SA_KEY: /
+      GOOGLE_SA_ENCRYPTION_KEY: ${SERVICE_REALBASE64_64_GOOGLE_SA_KEY}
+      STATUS_SYNC_INTERVAL_SECONDS: "10"
     expose:
       - "8000"
     volumes:

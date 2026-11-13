@@ -16,17 +16,31 @@ const emit = defineEmits<{
   'employee-remove': [employeeId: number, slotId: number]
 }>()
 
-const assigned = computed(() =>
-  sortAgentsByGradeAndArrival(
+const assigned = computed(() => {
+  const byEmployee = new Map(
+    (props.slot?.assignments ?? []).map((assignment) => [assignment.employee_id, assignment])
+  )
+  return sortAgentsByGradeAndArrival(
     (props.slot?.assignments ?? [])
       .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
       .filter((agent): agent is Agent => Boolean(agent))
-  )
-)
+  ).sort((a, b) => {
+    // La case centrale respecte l'ordre d'affectation (order), pas le tri par grade.
+    if (props.slot?.kind === 'centrale') {
+      const orderA = byEmployee.get(a.id)?.order ?? 0
+      const orderB = byEmployee.get(b.id)?.order ?? 0
+      return orderA - orderB
+    }
+    return 0
+  })
+})
 
 const isPool = computed(() => props.pool !== undefined)
 const displayedAgents = computed(() =>
-  sortAgentsByGradeAndArrival(props.pool ?? assigned.value)
+  // La case centrale respecte l'ordre d'affectation (order) tel quel.
+  props.pool !== undefined || props.slot?.kind !== 'centrale'
+    ? sortAgentsByGradeAndArrival(props.pool ?? assigned.value)
+    : assigned.value
 )
 const emptyMessage = computed(() => {
   const messages: Record<string, string> = {

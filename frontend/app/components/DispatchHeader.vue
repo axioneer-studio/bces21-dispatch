@@ -16,6 +16,7 @@ const hospitalMenu = ref<boolean>(false)
 const resettingAssignments = ref(false)
 const resetDialogOpen = ref(false)
 const deleteInterventions = ref(false)
+
 const dynamicInterventions = computed(() =>
   snapshot.value.slots.filter(
     (slot) => slot.kind === 'intervention' || slot.kind === 'consultation'
@@ -135,9 +136,27 @@ const lsesClass = computed(() => {
   }
 })
 
-const safdLabel = computed(() =>
-  state.value.safd_status === 'disponible' ? 'Disponibles' : 'Indisponibles'
-)
+const safdLabel = computed(() => {
+  switch (state.value.safd_status) {
+    case 'disponible':
+      return 'Disponibles'
+    case 'indisponible':
+      return 'Indisponibles'
+    default:
+      return "C'est bugué"
+  }
+})
+
+const safdClass = computed(() => {
+  switch (state.value.safd_status) {
+    case 'disponible':
+      return 'dh__chip--on'
+    case 'indisponible':
+      return 'dh__chip--off'
+    default:
+      return 'dh__chip--bug'
+  }
+})
 
 </script>
 
@@ -203,7 +222,7 @@ const safdLabel = computed(() =>
     <div class="dh__group">
       <span
         class="dh__chip dh__chip--readonly"
-        :class="state.safd_status === 'disponible' ? 'dh__chip--on' : 'dh__chip--off'"
+        :class="safdClass"
       >
         <Icon name="lucide:truck" size="14" />
         SAFD : <strong>{{ safdLabel }}</strong>
@@ -375,6 +394,24 @@ const safdLabel = computed(() =>
 
 .dh__chip--bug strong {
   color: #e8c878;
+}
+
+.dh__chip--syncing {
+  background: rgba(0, 150, 255, 0.15);
+  border-color: rgba(0, 150, 255, 0.45);
+  color: #6fb4ff;
+}
+
+.dh__chip--success {
+  background: rgba(70, 153, 109, 0.15);
+  border-color: rgba(70, 153, 109, 0.45);
+  color: #46996d;
+}
+
+.dh__chip--error {
+  background: rgba(210, 85, 79, 0.15);
+  border-color: rgba(210, 85, 79, 0.45);
+  color: #ec8a86;
 }
 
 .dh__chip--readonly {
