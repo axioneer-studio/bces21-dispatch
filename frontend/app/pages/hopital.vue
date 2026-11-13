@@ -71,6 +71,4 @@ function moveSectionTab(step: -1 | 1) {
 .hospital-section__heading { margin-bottom: 18px; }
 .hospital-section h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
 .hospital-section__heading p { margin: 6px 0 0; color: var(--dp-text-2); font-size: 13px; line-height: 1.6; }
-.hospital-empty { display: grid; min-height: 170px; justify-items: center; align-content: center; gap: 9px; padding: 24px; border: 1px dashed var(--dp-line-strong); border-radius: 14px; color: var(--dp-text-dim); text-align: center; font-size: 12px; }
-.hospital-empty p { margin: 0; }
 </style>

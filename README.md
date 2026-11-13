@@ -57,8 +57,8 @@ interventions et des radios, avec authentification Discord OAuth2.
 
 ### Hôpital (`/hopital`)
 
-- Page ouverte à tous les comptes connectés, avec trois onglets : Chambres,
-  Morgue et Stock.
+- Page ouverte à tous les comptes connectés, avec deux onglets : Chambres et
+  Morgue.
 - Chambres : des chambres contenant des lits. Un lit est créé vide ; tout compte
   connecté y affecte un patient (nom, accident, date d’arrivée, raison de sa
   présence), indique si les soins sont faits et si les forces de l’ordre sont
@@ -147,7 +147,7 @@ bces21-dispatch/
 │   ├── server/routes/favicon.ico.ts
 │   ├── public/         # logo, fond, robots.txt
 │   └── app/
-│       ├── pages/      # /, /dashboard, /dispatch, /hopital, /agenda, RH, profil
+│       ├── pages/      # /, /dashboard, /dispatch, /hopital, /stock, /agenda, RH, profil
 │       ├── middleware/ # contrôle global des accès aux pages
 │       ├── layouts/    # default, dispatch
 │       ├── components/ # 14 composants auto-importés
@@ -549,7 +549,8 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 | `/` | `app/pages/index.vue` | Connexion Discord, gestion des erreurs `?error=` / `?status=pending` |
 | `/dashboard` | `app/pages/dashboard.vue` | KPI du roster et service en cours |
 | `/dispatch` | `app/pages/dispatch.vue` | Plateau de dispatch temps réel |
-| `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres, Morgue et Stock, ouverts à tous les comptes connectés |
+| `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres et Morgue, ouverts à tous les comptes connectés |
+| `/stock` | `app/pages/stock.vue` | Stock du BCES (à venir) |
 | `/agenda` | `app/pages/agenda.vue` | Agenda partagé |
 | `/ressources-humaines` | `app/pages/ressources-humaines.vue` | Employés, rôles et accès (selon les droits) |
 | `/complete-profile` | `app/pages/complete-profile.vue` | Formulaire prénom RP / nom RP / téléphone avec compte à rebours |
