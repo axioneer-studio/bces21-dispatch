@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app_permissions import parse_app_permissions, require_app_permission, user_has_app_permission
 from database import get_db
 from deps import get_current_user
+from hospital_access import FORENSIC_PERMISSION, is_direction, linked_employee
 from models import Employee, MorgueEntry, User, utcnow
 from schemas import (
     MessageResponse,
@@ -25,8 +26,6 @@ from schemas import (
     MorgueExaminerRequest,
     MorgueOut,
 )
-
-FORENSIC_PERMISSION = "hospital.forensic"
 
 router = APIRouter(prefix="/api/hospital/morgue", tags=["hospital"])
 
@@ -41,25 +40,17 @@ def _entry_out(entry: MorgueEntry) -> MorgueEntryOut:
     )
 
 
-async def _linked_employee(db: AsyncSession, user: User) -> Employee | None:
-    return await db.scalar(select(Employee).where(Employee.account_user_id == user.id))
-
-
-def _is_direction(employee: Employee | None) -> bool:
-    return bool(employee and employee.grade and employee.grade.is_direction)
-
-
 async def _can_manage_autopsy(db: AsyncSession, user: User) -> bool:
     if user_has_app_permission(user, FORENSIC_PERMISSION):
         return True
-    return _is_direction(await _linked_employee(db, user))
+    return is_direction(await linked_employee(db, user))
 
 
 async def _require_autopsy_rights(db: AsyncSession, user: User) -> tuple[bool, Employee | None]:
     """Vérifie que le compte est légiste ou Direction ; renvoie s'il est légiste et sa tuile."""
     is_forensic = user_has_app_permission(user, FORENSIC_PERMISSION)
-    employee = await _linked_employee(db, user)
-    if not is_forensic and not _is_direction(employee):
+    employee = await linked_employee(db, user)
+    if not is_forensic and not is_direction(employee):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Seuls les médecins légistes et la Direction peuvent renseigner l’autopsie et le légiste.",

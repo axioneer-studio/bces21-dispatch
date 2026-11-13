@@ -1,9 +1,9 @@
 """Chambres de l'hôpital et leurs lits.
 
 Tout compte connecté affecte un patient à un lit, met à jour sa fiche et libère
-le lit. Seuls les rôles ayant la permission `hospital.manage` (« Gérer
-l'hôpital ») ajoutent, renomment et suppriment les chambres et les lits, ainsi
-que la liste des raisons proposées.
+le lit. Seuls la Direction et les rôles ayant la permission `hospital.manage`
+(« Gérer l'hôpital ») ajoutent, renomment et suppriment les chambres et les lits,
+ainsi que la liste des raisons proposées.
 """
 
 import re
@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_permissions import require_app_permission, user_has_app_permission
 from database import get_db
 from deps import get_current_user
+from hospital_access import require_hospital_manage, user_can_manage_hospital
 from models import HospitalBed, HospitalBedReason, HospitalRoom, User
 from schemas import (
     HospitalBedFlagsRequest,
@@ -28,11 +28,10 @@ from schemas import (
     MessageResponse,
 )
 
-MANAGE_PERMISSION = "hospital.manage"
 _BED_LABEL = re.compile(r"^Lit (\d+)$")
 
 router = APIRouter(prefix="/api/hospital", tags=["hospital"])
-require_manage = require_app_permission(MANAGE_PERMISSION)
+require_manage = require_hospital_manage
 
 
 async def _get_room(db: AsyncSession, room_id: int) -> HospitalRoom:
@@ -91,7 +90,7 @@ async def get_rooms(
     return HospitalRoomsOut(
         rooms=[HospitalRoomOut.model_validate(room) for room in rooms],
         reasons=[HospitalBedReasonOut.model_validate(reason) for reason in reasons],
-        can_manage=user_has_app_permission(user, MANAGE_PERMISSION),
+        can_manage=await user_can_manage_hospital(db, user),
     )
 
 

@@ -63,9 +63,10 @@ interventions et des radios, avec authentification Discord OAuth2.
   connecté y affecte un patient (nom, accident, date d’arrivée, raison de sa
   présence), indique si les soins sont faits et si les forces de l’ordre sont
   à prévenir ou déjà prévenues, puis libère le lit. La raison se choisit dans
-  une liste, ou se saisit avec « Autre… ». Seuls les rôles ayant la permission
-  applicative « Gérer l’hôpital » ajoutent, renomment et suppriment les
-  chambres et les lits, ainsi que les raisons de la liste.
+  une liste, ou se saisit avec « Autre… ». Seuls la Direction (grade Direction,
+  par défaut) et les rôles ayant la permission applicative « Gérer l’hôpital »
+  ajoutent, renomment et suppriment les chambres et les lits, ainsi que les
+  raisons de la liste.
 - Morgue : défunts pris en charge, avec date du décès, identité, appartenance
   connue, informations communicables ou non, autopsie, médecin légiste,
   contacts d’urgence et possibilité de récupération par les proches. Un corps
@@ -425,6 +426,9 @@ permission ; un compte en attente reçoit un `403`.
 > pilotés par la synchronisation Google Sheet.
 
 ### Hôpital
+
+> « `hospital.manage` » ci-dessous : permission applicative « Gérer l’hôpital »,
+> ou grade Direction, qui l’a par défaut.
 
 | Méthode | Chemin | Description |
 |---|---|---|
