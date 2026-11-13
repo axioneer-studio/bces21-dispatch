@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
     @property
+    def effective_google_sa_encryption_key(self) -> str:
+        return self.google_sa_encryption_key.strip()
+
+    @property
     def discord_scope_list(self) -> list[str]:
         return [scope.strip() for scope in self.discord_scopes.split(",") if scope.strip()]
 
