@@ -75,6 +75,16 @@ def require_any_page_access(*pages: str):
     return dependency
 
 
+async def require_role(user: User = Depends(get_current_user)) -> User:
+    """Compte ayant un rôle (ou super-admin) : condition des pages ouvertes à tous."""
+    if user.has_super_admin_rights or user.role_id is not None:
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Aucun rôle ne vous donne accès à l’application.",
+    )
+
+
 async def require_super_admin(user: User = Depends(get_current_user)) -> User:
     if not user.has_super_admin_rights:
         raise HTTPException(

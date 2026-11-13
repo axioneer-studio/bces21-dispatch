@@ -340,8 +340,9 @@ class HospitalBedReason(Base):
 
 
 class MorgueEntry(Base):
-    """Un défunt pris en charge par la morgue : corps en cellule réfrigérée, ou urne
-    une fois incinéré. L'incinération est réservée aux médecins légistes."""
+    """Un défunt pris en charge par la morgue : corps en cellule réfrigérée, puis
+    urne s'il est incinéré, ou cercueil s'il y est mis. Les deux sont réservés aux
+    médecins légistes, après l'autopsie, et s'excluent l'un l'autre."""
 
     __tablename__ = "morgue_entries"
 
@@ -358,5 +359,6 @@ class MorgueEntry(Base):
     emergency_contacts: Mapped[str] = mapped_column(String(500), default="", nullable=False)
     recoverable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     incinerated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    coffined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

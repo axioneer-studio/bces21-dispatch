@@ -14,6 +14,7 @@ const { data: currentUser } = await useAsyncData('sidebar-current-user', async (
       is_super_admin: boolean
       super_admin_available: boolean
       super_admin_enabled: boolean
+      role_name: string | null
       page_access: string[]
     }>('/api/me', { credentials: 'include', headers: requestHeaders })
   } catch {
@@ -52,14 +53,15 @@ const items: NavItem[] = [
   { to: '/administration', label: 'Administration', icon: 'lucide:settings-2', page: 'administration' }
 ]
 
-/** Pages ouvertes à tous les comptes connectés, sans case à cocher dans les rôles. */
+/** Pages ouvertes à tout compte ayant un rôle, sans case à cocher dans les rôles. */
 const PUBLIC_PAGES = new Set(['agenda', 'hospital', 'stock'])
 
-const visibleItems = computed(() => items.filter((item) =>
-  PUBLIC_PAGES.has(item.page)
-    ? Boolean(currentUser.value)
-    : currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
-))
+const visibleItems = computed(() => items.filter((item) => {
+  const user = currentUser.value
+  if (!user) return false
+  if (user.is_super_admin) return true
+  return PUBLIC_PAGES.has(item.page) ? Boolean(user.role_name) : user.page_access.includes(item.page)
+}))
 
 function setMode(next: SidebarMode) {
   mode.value = next

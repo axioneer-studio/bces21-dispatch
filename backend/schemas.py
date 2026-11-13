@@ -931,6 +931,7 @@ class MorgueEntryOut(BaseModel):
     emergency_contacts: str
     recoverable: bool
     incinerated_at: Optional[datetime]
+    coffined_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 
@@ -939,7 +940,8 @@ class MorgueOut(BaseModel):
     entries: list[MorgueEntryOut]
     examiners: list[MorgueExaminerOut]
     can_manage_autopsy: bool
-    can_incinerate: bool
+    # Médecin légiste : incinération et mise en cercueil.
+    is_forensic: bool
 
 
 class HospitalRoomRequest(BaseModel):

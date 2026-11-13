@@ -11,6 +11,22 @@ interface MorgueEntry {
   emergency_contacts: string
   recoverable: boolean
   incinerated_at: string | null
+  coffined_at: string | null
+}
+
+/** Corps en cellule réfrigérée, puis urne (incinéré) ou cercueil, qui s'excluent. */
+type MorgueState = 'body' | 'urn' | 'coffin'
+
+const STATES: Record<MorgueState, { label: string; icon: string; order: number; removeLabel: string }> = {
+  body: { label: 'Cellule réfrigérée', icon: 'lucide:snowflake', order: 0, removeLabel: 'le corps' },
+  coffin: { label: 'Cercueil', icon: 'lucide:cross', order: 1, removeLabel: 'le cercueil' },
+  urn: { label: 'Urne', icon: 'lucide:amphora', order: 2, removeLabel: 'l’urne' }
+}
+
+function entryState(entry: MorgueEntry): MorgueState {
+  if (entry.incinerated_at) return 'urn'
+  if (entry.coffined_at) return 'coffin'
+  return 'body'
 }
 
 interface MorgueExaminer {
@@ -22,7 +38,7 @@ interface MorgueData {
   entries: MorgueEntry[]
   examiners: MorgueExaminer[]
   can_manage_autopsy: boolean
-  can_incinerate: boolean
+  is_forensic: boolean
 }
 
 const props = defineProps<{ active: boolean }>()
@@ -33,10 +49,11 @@ const entries = ref<MorgueEntry[]>([])
 const examiners = ref<MorgueExaminer[]>([])
 /** Légistes et Direction : seuls à renseigner l'autopsie et le légiste. */
 const canManageAutopsy = ref(false)
-const canIncinerate = ref(false)
+/** Médecins légistes : seuls à incinérer ou à mettre en cercueil. */
+const isForensic = ref(false)
 const loaded = ref(false)
 const loadError = ref('')
-/** Défunt en cours d'enregistrement, d'incinération ou de retrait. */
+/** Défunt en cours d'enregistrement, d'incinération, de mise en cercueil ou de retrait. */
 const busyId = ref<number | null>(null)
 
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -51,16 +68,19 @@ const form = reactive({
   emergency_contacts: ''
 })
 
-/** Corps en cellule d'abord, puis urnes ; chacun du décès le plus ancien au plus récent. */
+/** Corps en cellule, puis cercueils, puis urnes ; chacun du décès le plus ancien au plus récent. */
 const sortedEntries = computed(() =>
   [...entries.value].sort((a, b) =>
-    Number(a.incinerated_at !== null) - Number(b.incinerated_at !== null)
+    STATES[entryState(a)].order - STATES[entryState(b)].order
     || a.death_date.localeCompare(b.death_date)
     || a.id - b.id
   )
 )
-const bodyCount = computed(() => entries.value.filter((entry) => entry.incinerated_at === null).length)
-const urnCount = computed(() => entries.value.length - bodyCount.value)
+const counts = computed(() => {
+  const result: Record<MorgueState, number> = { body: 0, coffin: 0, urn: 0 }
+  for (const entry of entries.value) result[entryState(entry)] += 1
+  return result
+})
 
 const affiliationOptions = computed(() =>
   [...new Set(entries.value.map((entry) => entry.affiliation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'))
@@ -101,7 +121,7 @@ async function load() {
     entries.value = data.entries
     examiners.value = data.examiners
     canManageAutopsy.value = data.can_manage_autopsy
-    canIncinerate.value = data.can_incinerate
+    isForensic.value = data.is_forensic
     loadError.value = ''
   } catch (cause) {
     loadError.value = messageFromError(cause, 'Impossible de charger la morgue.')
@@ -229,19 +249,34 @@ function entryLabel(entry: MorgueEntry) {
   return entry.identity ? `« ${entry.identity} »` : 'ce défunt non identifié'
 }
 
-async function incinerate(entry: MorgueEntry) {
+const FINAL_ACTIONS = {
+  incinerate: {
+    confirm: (label: string) => `Procéder à l’incinération de ${label} ? Le corps sera remplacé par une urne. C’est définitif.`,
+    success: 'Incinération enregistrée.',
+    failure: 'Impossible d’enregistrer l’incinération.'
+  },
+  coffin: {
+    confirm: (label: string) => `Mettre ${label} en cercueil ? C’est définitif.`,
+    success: 'Mise en cercueil enregistrée.',
+    failure: 'Impossible d’enregistrer la mise en cercueil.'
+  }
+} as const
+
+/** Incinération ou mise en cercueil : définitives, après l'autopsie, réservées aux légistes. */
+async function finalize(entry: MorgueEntry, action: keyof typeof FINAL_ACTIONS) {
   if (busyId.value !== null) return
-  if (!window.confirm(`Procéder à l’incinération de ${entryLabel(entry)} ? Le corps sera remplacé par une urne.`)) return
+  const texts = FINAL_ACTIONS[action]
+  if (!window.confirm(texts.confirm(entryLabel(entry)))) return
   busyId.value = entry.id
   try {
-    const saved = await $fetch<MorgueEntry>(`/api/hospital/morgue/${entry.id}/incinerate`, {
+    const saved = await $fetch<MorgueEntry>(`/api/hospital/morgue/${entry.id}/${action}`, {
       method: 'POST',
       credentials: 'include'
     })
     entries.value = entries.value.map((item) => item.id === entry.id ? saved : item)
-    toast.success('Incinération enregistrée.')
+    toast.success(texts.success)
   } catch (cause) {
-    toast.error(messageFromError(cause, 'Impossible d’enregistrer l’incinération.'))
+    toast.error(messageFromError(cause, texts.failure))
   } finally {
     busyId.value = null
   }
@@ -249,13 +284,13 @@ async function incinerate(entry: MorgueEntry) {
 
 async function remove(entry: MorgueEntry) {
   if (busyId.value !== null) return
-  const what = entry.incinerated_at ? 'l’urne de' : 'le corps de'
-  if (!window.confirm(`Retirer ${what} ${entryLabel(entry)} de la morgue ?`)) return
+  const what = STATES[entryState(entry)].removeLabel
+  if (!window.confirm(`Retirer ${what} de ${entryLabel(entry)} de la morgue ?`)) return
   busyId.value = entry.id
   try {
     await $fetch(`/api/hospital/morgue/${entry.id}`, { method: 'DELETE', credentials: 'include' })
     entries.value = entries.value.filter((item) => item.id !== entry.id)
-    toast.success(entry.incinerated_at ? 'Urne retirée de la morgue.' : 'Corps retiré de la morgue.')
+    toast.success('Défunt retiré de la morgue.')
   } catch (cause) {
     toast.error(messageFromError(cause, 'Impossible de retirer ce défunt.'))
   } finally {
@@ -268,8 +303,9 @@ async function remove(entry: MorgueEntry) {
   <div class="morgue">
     <div class="morgue__toolbar">
       <div class="morgue__counts" aria-label="Résumé de la morgue">
-        <span class="morgue__count"><span class="morgue__shape morgue__shape--body" aria-hidden="true"></span><strong>{{ bodyCount }}</strong> corps en cellule</span>
-        <span class="morgue__count"><span class="morgue__shape morgue__shape--urn" aria-hidden="true"></span><strong>{{ urnCount }}</strong> urne{{ urnCount > 1 ? 's' : '' }}</span>
+        <span class="morgue__count"><span class="morgue__shape morgue__shape--body" aria-hidden="true"></span><strong>{{ counts.body }}</strong> corps en cellule</span>
+        <span class="morgue__count"><span class="morgue__shape morgue__shape--coffin" aria-hidden="true"></span><strong>{{ counts.coffin }}</strong> cercueil{{ counts.coffin > 1 ? 's' : '' }}</span>
+        <span class="morgue__count"><span class="morgue__shape morgue__shape--urn" aria-hidden="true"></span><strong>{{ counts.urn }}</strong> urne{{ counts.urn > 1 ? 's' : '' }}</span>
       </div>
       <button type="button" class="morgue-button morgue-button--primary" @click="openDialog()">
         <Icon name="lucide:plus" size="16" /> Ajouter un défunt
@@ -285,13 +321,13 @@ async function remove(entry: MorgueEntry) {
         v-for="entry in sortedEntries"
         :key="entry.id"
         class="morgue-case"
-        :class="entry.incinerated_at ? 'morgue-case--urn' : 'morgue-case--body'"
+        :class="`morgue-case--${entryState(entry)}`"
         :aria-busy="busyId === entry.id"
       >
         <header class="morgue-case__head">
           <span class="morgue-case__kind">
-            <Icon :name="entry.incinerated_at ? 'lucide:amphora' : 'lucide:snowflake'" size="13" />
-            {{ entry.incinerated_at ? 'Urne' : 'Cellule réfrigérée' }}
+            <Icon :name="STATES[entryState(entry)].icon" size="13" />
+            {{ STATES[entryState(entry)].label }}
           </span>
           <time :datetime="entry.death_date" title="Date du décès">{{ formatDate(entry.death_date) }}</time>
         </header>
@@ -316,7 +352,7 @@ async function remove(entry: MorgueEntry) {
           <dt><Icon name="lucide:microscope" size="12" /> Autopsie</dt>
           <dd>
             <button
-              v-if="canManageAutopsy"
+              v-if="canManageAutopsy && entryState(entry) === 'body'"
               type="button"
               class="morgue-case__badge morgue-case__toggle"
               :class="entry.autopsy_done ? 'is-ok' : 'is-muted'"
@@ -337,7 +373,7 @@ async function remove(entry: MorgueEntry) {
           <dt><Icon name="lucide:stethoscope" size="12" /> Légiste</dt>
           <dd>
             <select
-              v-if="canManageAutopsy"
+              v-if="canManageAutopsy && entryState(entry) === 'body'"
               class="morgue-case__select"
               :value="entry.examiner_id ?? ''"
               :disabled="busyId !== null"
@@ -367,25 +403,28 @@ async function remove(entry: MorgueEntry) {
           {{ entry.recoverable ? 'Récupérable par les proches' : 'Non récupérable' }}
         </button>
 
+        <template v-if="isForensic && entryState(entry) === 'body'">
+          <div v-if="entry.autopsy_done" class="morgue-case__actions">
+            <button type="button" class="morgue-button morgue-button--warn" :disabled="busyId !== null" @click="finalize(entry, 'incinerate')">
+              <Icon name="lucide:flame" size="13" /> Incinérer
+            </button>
+            <button type="button" class="morgue-button morgue-button--coffin" :disabled="busyId !== null" @click="finalize(entry, 'coffin')">
+              <Icon name="lucide:cross" size="13" /> Cercueil
+            </button>
+          </div>
+          <p v-else class="morgue-case__hint"><Icon name="lucide:info" size="12" /> Autopsie requise avant l’incinération ou la mise en cercueil.</p>
+        </template>
+
         <footer class="morgue-case__actions">
           <button type="button" class="morgue-button" :disabled="busyId !== null" @click="openDialog(entry)">
             <Icon name="lucide:pencil" size="13" /> Modifier
           </button>
           <button
-            v-if="canIncinerate && !entry.incinerated_at"
-            type="button"
-            class="morgue-button morgue-button--warn"
-            :disabled="busyId !== null"
-            @click="incinerate(entry)"
-          >
-            <Icon :name="busyId === entry.id ? 'lucide:loader-circle' : 'lucide:flame'" size="13" :class="{ 'morgue-spin': busyId === entry.id }" /> Incinérer
-          </button>
-          <button
             type="button"
             class="morgue-button morgue-button--danger"
             :disabled="busyId !== null"
-            :aria-label="entry.incinerated_at ? 'Retirer l’urne' : 'Retirer le corps'"
-            :title="entry.incinerated_at ? 'Retirer l’urne' : 'Retirer le corps'"
+            :aria-label="`Retirer ${STATES[entryState(entry)].removeLabel}`"
+            :title="`Retirer ${STATES[entryState(entry)].removeLabel}`"
             @click="remove(entry)"
           >
             <Icon name="lucide:log-out" size="13" /> Retirer
@@ -451,6 +490,10 @@ async function remove(entry: MorgueEntry) {
 .morgue__shape { display: inline-block; flex-shrink: 0; border: 1.5px solid currentColor; }
 .morgue__shape--body { width: 18px; height: 11px; border-radius: 2px; color: var(--dp-info); }
 .morgue__shape--urn { width: 11px; height: 15px; border-radius: 6px 6px 3px 3px; color: var(--dp-warn); }
+.morgue__shape--coffin { width: 11px; height: 17px; border: 0; background: var(--coffin); clip-path: var(--coffin-shape); }
+
+/* Bois du cercueil, et sa silhouette : épaules larges, tête et pied plus étroits. */
+.morgue { --coffin: #c08b5c; --coffin-soft: rgba(192, 139, 92, .14); --coffin-line: rgba(192, 139, 92, .5); --coffin-shape: polygon(26% 0, 74% 0, 100% 15%, 90% 100%, 10% 100%, 0 15%); }
 
 /* Toutes les cases ont la même taille, qu'elles contiennent un corps ou une urne. */
 .morgue__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); grid-auto-rows: 1fr; gap: 14px; }
@@ -469,6 +512,12 @@ async function remove(entry: MorgueEntry) {
 .morgue-case__kind { display: inline-flex; align-items: center; gap: 5px; text-transform: uppercase; }
 .morgue-case--body .morgue-case__kind { color: var(--dp-info); }
 .morgue-case--urn .morgue-case__kind { color: var(--dp-warn); }
+/* Cercueil : silhouette découpée, bord en bois. Le fond de la case est le bord ; le
+   pseudo-élément, en retrait, porte le fond intérieur. */
+.morgue-case--coffin { isolation: isolate; padding: 34px 11% 22px; border: 0; background: var(--coffin-line); clip-path: var(--coffin-shape); }
+.morgue-case--coffin::before { content: ''; position: absolute; inset: 1.5px; z-index: -1; clip-path: var(--coffin-shape); background: linear-gradient(180deg, var(--coffin-soft), transparent 40%), var(--dp-panel-2); }
+.morgue-case--coffin .morgue-case__kind { color: var(--coffin); }
+.morgue-case__hint { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 0; color: var(--dp-text-dim); font-size: 10px; text-align: center; }
 .morgue-case__identity { margin: 0; overflow-wrap: anywhere; text-align: center; color: var(--dp-text); font-size: 14px; font-weight: 700; }
 .morgue-case__identity.is-unknown { color: var(--dp-text-dim); font-style: italic; font-weight: 600; }
 .morgue-case__affiliation { align-self: center; max-width: 100%; overflow: hidden; padding: 3px 9px; border: 1px solid hsl(var(--affiliation-hue) 55% 55% / .5); border-radius: 999px; color: hsl(var(--affiliation-hue) 70% 72%); background: hsl(var(--affiliation-hue) 55% 45% / .16); font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
@@ -504,6 +553,7 @@ async function remove(entry: MorgueEntry) {
 .morgue-button--primary { min-height: 40px; padding: 0 14px; border-color: transparent; color: #0c1710; background: var(--dp-accent); font-size: 11px; }
 .morgue-button--primary:hover:not(:disabled) { filter: brightness(1.08); color: #0c1710; background: var(--dp-accent); }
 .morgue-button--warn { border-color: var(--dp-warn-line); color: var(--dp-warn); background: var(--dp-warn-soft); }
+.morgue-button--coffin { border-color: var(--coffin-line); color: var(--coffin); background: var(--coffin-soft); }
 .morgue-button--danger { color: var(--dp-danger); background: var(--dp-danger-soft); }
 
 .morgue__empty { display: grid; min-height: 170px; justify-items: center; align-content: center; gap: 9px; padding: 24px; border: 1px dashed var(--dp-line-strong); border-radius: 14px; color: var(--dp-text-dim); text-align: center; font-size: 12px; }

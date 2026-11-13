@@ -1,10 +1,12 @@
-"""Morgue de l'hôpital : corps en cellule réfrigérée et urnes des défunts incinérés.
+"""Morgue de l'hôpital : corps en cellule réfrigérée, urnes et cercueils.
 
 Tout compte connecté consulte, ajoute, modifie et retire les défunts. L'autopsie
 et le légiste ne se renseignent que par un médecin légiste (permission de rôle
 `hospital.forensic`) ou par la Direction (grade `is_direction`) ; le légiste qui
-déclare l'autopsie devient le légiste du défunt. Seuls les légistes procèdent à
-l'incinération.
+déclare l'autopsie devient le légiste du défunt.
+
+Seuls les légistes incinèrent un corps ou le mettent en cercueil, une fois
+l'autopsie faite. Les deux s'excluent, et figent ensuite l'autopsie et le légiste.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app_permissions import parse_app_permissions, require_app_permission, user_has_app_permission
 from database import get_db
-from deps import get_current_user
+from deps import get_current_user, require_role
 from hospital_access import FORENSIC_PERMISSION, is_direction, linked_employee
 from models import Employee, MorgueEntry, User, utcnow
 from schemas import (
@@ -27,7 +29,7 @@ from schemas import (
     MorgueOut,
 )
 
-router = APIRouter(prefix="/api/hospital/morgue", tags=["hospital"])
+router = APIRouter(prefix="/api/hospital/morgue", tags=["hospital"], dependencies=[Depends(require_role)])
 
 
 def _employee_name(employee: Employee) -> str:
@@ -83,6 +85,19 @@ async def _get_entry(db: AsyncSession, entry_id: int) -> MorgueEntry:
     return entry
 
 
+def _ensure_in_cell(entry: MorgueEntry) -> None:
+    """Refuse toute action réservée à un corps encore en cellule réfrigérée."""
+    if entry.incinerated_at is not None:
+        raise HTTPException(status_code=409, detail="Ce défunt a déjà été incinéré.")
+    if entry.coffined_at is not None:
+        raise HTTPException(status_code=409, detail="Ce défunt a déjà été mis en cercueil.")
+
+
+def _ensure_autopsy_done(entry: MorgueEntry) -> None:
+    if not entry.autopsy_done:
+        raise HTTPException(status_code=409, detail="L’autopsie doit être faite avant.")
+
+
 @router.get("", response_model=MorgueOut)
 async def get_morgue(
     user: User = Depends(get_current_user),
@@ -99,7 +114,7 @@ async def get_morgue(
             for employee in (await _examiners(db) if can_manage_autopsy else [])
         ],
         can_manage_autopsy=can_manage_autopsy,
-        can_incinerate=user_has_app_permission(user, FORENSIC_PERMISSION),
+        is_forensic=user_has_app_permission(user, FORENSIC_PERMISSION),
     )
 
 
@@ -142,6 +157,7 @@ async def set_autopsy(
     du défunt ; la Direction peut la déclarer sans en devenir le légiste."""
     is_forensic, employee = await _require_autopsy_rights(db, user)
     entry = await _get_entry(db, entry_id)
+    _ensure_in_cell(entry)
     entry.autopsy_done = payload.done
     if not payload.done:
         entry.examiner_id = None
@@ -162,6 +178,7 @@ async def set_examiner(
     """Change le légiste du défunt, parmi les employés au rôle de légiste."""
     await _require_autopsy_rights(db, user)
     entry = await _get_entry(db, entry_id)
+    _ensure_in_cell(entry)
     if payload.examiner_id is not None and payload.examiner_id != entry.examiner_id:
         if payload.examiner_id not in {employee.id for employee in await _examiners(db)}:
             raise HTTPException(
@@ -181,9 +198,24 @@ async def incinerate_entry(
     db: AsyncSession = Depends(get_db),
 ):
     entry = await _get_entry(db, entry_id)
-    if entry.incinerated_at is not None:
-        raise HTTPException(status_code=409, detail="Ce défunt a déjà été incinéré.")
+    _ensure_in_cell(entry)
+    _ensure_autopsy_done(entry)
     entry.incinerated_at = utcnow()
+    await db.commit()
+    await db.refresh(entry)
+    return _entry_out(entry)
+
+
+@router.post("/{entry_id}/coffin", response_model=MorgueEntryOut)
+async def coffin_entry(
+    entry_id: int,
+    _: User = Depends(require_app_permission(FORENSIC_PERMISSION)),
+    db: AsyncSession = Depends(get_db),
+):
+    entry = await _get_entry(db, entry_id)
+    _ensure_in_cell(entry)
+    _ensure_autopsy_done(entry)
+    entry.coffined_at = utcnow()
     await db.commit()
     await db.refresh(entry)
     return _entry_out(entry)
