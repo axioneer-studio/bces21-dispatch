@@ -120,6 +120,7 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   refreshTimer = setInterval(refresh, 10_000)
   window.addEventListener('focus', refresh)
+  refresh()
 })
 onBeforeUnmount(() => {
   clearInterval(refreshTimer)
@@ -127,7 +128,7 @@ onBeforeUnmount(() => {
 })
 watch(() => props.active, (active) => {
   if (active) refresh()
-}, { immediate: true })
+})
 
 function openDialog(entry?: MorgueEntry) {
   editingId.value = entry?.id ?? null
@@ -451,27 +452,26 @@ async function remove(entry: MorgueEntry) {
 .morgue__shape--body { width: 18px; height: 11px; border-radius: 2px; color: var(--dp-info); }
 .morgue__shape--urn { width: 11px; height: 15px; border-radius: 6px 6px 3px 3px; color: var(--dp-warn); }
 
-.morgue__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); align-items: start; gap: 14px; }
+/* Toutes les cases ont la même taille, qu'elles contiennent un corps ou une urne. */
+.morgue__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); grid-auto-rows: 1fr; gap: 14px; }
 
-.morgue-case { position: relative; display: grid; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--dp-line); background: var(--dp-panel-2); transition: border-color .16s ease, opacity .16s ease; }
+.morgue-case { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--dp-line); background: var(--dp-panel-2); transition: border-color .16s ease, opacity .16s ease; }
 .morgue-case[aria-busy='true'] { opacity: .6; }
 /* Corps : porte de cellule réfrigérée, angles droits et poignée en haut. */
 .morgue-case--body { border-radius: 6px; border-top: 4px solid var(--dp-info); padding-top: 18px; background: linear-gradient(180deg, var(--dp-info-soft), transparent 46%), var(--dp-panel-2); }
 .morgue-case--body::before { content: ''; position: absolute; top: 7px; left: 50%; width: 42px; height: 4px; transform: translateX(-50%); border-radius: 2px; background: color-mix(in srgb, var(--dp-info) 55%, transparent); }
 /* Urne : sommet en arche, bord doré. */
 .morgue-case--urn { border-color: var(--dp-warn-line); border-radius: 120px 120px 14px 14px; padding-top: 34px; background: radial-gradient(ellipse at 50% 0, var(--dp-warn-soft), transparent 62%), var(--dp-panel-2); }
-.morgue-case--urn .morgue-case__head { justify-content: center; flex-direction: column; gap: 3px; }
-.morgue-case--urn .morgue-case__identity { text-align: center; }
-.morgue-case--urn .morgue-case__affiliation { justify-self: center; }
 
-.morgue-case__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--dp-text-dim); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+/* En-tête, identité et appartenance centrés, pour un corps comme pour une urne. */
+.morgue-case__head { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--dp-text-dim); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
 .morgue-case__head time { color: var(--dp-text); font-size: 12px; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .morgue-case__kind { display: inline-flex; align-items: center; gap: 5px; text-transform: uppercase; }
 .morgue-case--body .morgue-case__kind { color: var(--dp-info); }
 .morgue-case--urn .morgue-case__kind { color: var(--dp-warn); }
-.morgue-case__identity { margin: 0; overflow-wrap: anywhere; color: var(--dp-text); font-size: 14px; font-weight: 700; }
+.morgue-case__identity { margin: 0; overflow-wrap: anywhere; text-align: center; color: var(--dp-text); font-size: 14px; font-weight: 700; }
 .morgue-case__identity.is-unknown { color: var(--dp-text-dim); font-style: italic; font-weight: 600; }
-.morgue-case__affiliation { justify-self: start; max-width: 100%; overflow: hidden; padding: 3px 9px; border: 1px solid hsl(var(--affiliation-hue) 55% 55% / .5); border-radius: 999px; color: hsl(var(--affiliation-hue) 70% 72%); background: hsl(var(--affiliation-hue) 55% 45% / .16); font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.morgue-case__affiliation { align-self: center; max-width: 100%; overflow: hidden; padding: 3px 9px; border: 1px solid hsl(var(--affiliation-hue) 55% 55% / .5); border-radius: 999px; color: hsl(var(--affiliation-hue) 70% 72%); background: hsl(var(--affiliation-hue) 55% 45% / .16); font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .morgue-case__affiliation--none { border-color: var(--dp-line); color: var(--dp-text-dim); background: transparent; font-weight: 500; }
 /* Une ligne par information : libellé à gauche, valeur à droite, toutes alignées. */
 .morgue-case__rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 7px 12px; margin: 0; padding: 10px 0; border-top: 1px solid var(--dp-line); border-bottom: 1px solid var(--dp-line); }
@@ -489,7 +489,8 @@ async function remove(entry: MorgueEntry) {
 .morgue-case__toggle:hover:not(:disabled), .morgue-case__recovery:hover:not(:disabled) { filter: brightness(1.2); border-color: var(--dp-line-strong); }
 .morgue-case__toggle:focus-visible, .morgue-case__recovery:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: 2px; }
 .morgue-case__toggle:disabled, .morgue-case__recovery:disabled { cursor: wait; }
-.morgue-case__recovery { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 6px 8px; border: 1px solid transparent; border-radius: 7px; font: inherit; font-size: 10px; font-weight: 700; }
+/* Récupération et boutons calés en bas de la case. */
+.morgue-case__recovery { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; margin: auto 0 0; padding: 6px 8px; border: 1px solid transparent; border-radius: 7px; font: inherit; font-size: 10px; font-weight: 700; }
 .morgue-case__recovery.is-ok { color: var(--dp-accent); background: var(--dp-accent-soft); }
 .morgue-case__recovery.is-ko { color: var(--dp-danger); background: var(--dp-danger-soft); }
 /* Boutons de même largeur sur une seule ligne. */

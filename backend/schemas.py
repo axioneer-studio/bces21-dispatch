@@ -940,3 +940,101 @@ class MorgueOut(BaseModel):
     examiners: list[MorgueExaminerOut]
     can_manage_autopsy: bool
     can_incinerate: bool
+
+
+class HospitalRoomRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _room_name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom de la chambre")
+
+
+class HospitalBedReasonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _reason_name(cls, value: str) -> str:
+        return _clean_required(value, "La raison")
+
+
+PoliceStatus = Literal["none", "to_notify", "notified"]
+
+
+class HospitalPatientRequest(BaseModel):
+    """Affectation d'un patient à un lit, ou mise à jour de sa fiche."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    patient_name: str = Field(min_length=1, max_length=120)
+    accident: str = Field(default="", max_length=200)
+    arrival_date: date
+    police_status: PoliceStatus = "none"
+    reason: str = Field(default="", max_length=64)
+
+    @field_validator("patient_name")
+    @classmethod
+    def _patient_name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du patient")
+
+    @field_validator("accident", "reason")
+    @classmethod
+    def _trim_patient_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class HospitalBedFlagsRequest(BaseModel):
+    """Soins et forces de l'ordre, changés d'un clic sur la case du lit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    care_done: Optional[bool] = None
+    police_status: Optional[PoliceStatus] = None
+
+    @field_validator("care_done", "police_status")
+    @classmethod
+    def _flag_required_when_sent(cls, value, info: ValidationInfo):
+        if value is None:
+            raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
+        return value
+
+
+class HospitalBedOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    room_id: int
+    label: str
+    patient_name: Optional[str]
+    accident: str
+    arrival_date: Optional[date]
+    care_done: bool
+    police_status: PoliceStatus
+    reason: str
+
+
+class HospitalRoomOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    beds: list[HospitalBedOut]
+
+
+class HospitalBedReasonOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class HospitalRoomsOut(BaseModel):
+    rooms: list[HospitalRoomOut]
+    reasons: list[HospitalBedReasonOut]
+    can_manage: bool

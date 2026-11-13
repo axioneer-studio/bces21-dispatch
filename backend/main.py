@@ -22,6 +22,7 @@ from direction import router as direction_router
 from fleet import router as fleet_router
 from frequencies import router as frequencies_router
 from human_resources import router as human_resources_router
+from hospital_rooms import router as hospital_rooms_router
 from morgue import router as morgue_router
 from grade_permissions import parse_grade_permissions
 from models import Employee, Grade, User
@@ -152,4 +153,5 @@ app.include_router(dispatch_router)
 app.include_router(fleet_router)
 app.include_router(frequencies_router)
 app.include_router(human_resources_router)
+app.include_router(hospital_rooms_router)
 app.include_router(morgue_router)

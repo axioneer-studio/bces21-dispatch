@@ -53,7 +53,8 @@ function moveSectionTab(step: -1 | 1) {
         <h2>{{ section.title }}</h2>
         <p>{{ section.description }}</p>
       </div>
-      <MorguePanel v-if="section.key === 'morgue'" :active="activeSection === 'morgue'" />
+      <RoomsPanel v-if="section.key === 'rooms'" :active="activeSection === 'rooms'" />
+      <MorguePanel v-else-if="section.key === 'morgue'" :active="activeSection === 'morgue'" />
       <div v-else class="hospital-empty">
         <Icon :name="section.icon" size="21" />
         <p>À venir.</p>

@@ -59,6 +59,13 @@ interventions et des radios, avec authentification Discord OAuth2.
 
 - Page ouverte à tous les comptes connectés, avec trois onglets : Chambres,
   Morgue et Stock.
+- Chambres : des chambres contenant des lits. Un lit est créé vide ; tout compte
+  connecté y affecte un patient (nom, accident, date d’arrivée, raison de sa
+  présence), indique si les soins sont faits et si les forces de l’ordre sont
+  à prévenir ou déjà prévenues, puis libère le lit. La raison se choisit dans
+  une liste, ou se saisit avec « Autre… ». Seuls les rôles ayant la permission
+  applicative « Gérer l’hôpital » ajoutent, renomment et suppriment les
+  chambres et les lits, ainsi que les raisons de la liste.
 - Morgue : défunts pris en charge, avec date du décès, identité, appartenance
   connue, informations communicables ou non, autopsie, médecin légiste,
   contacts d’urgence et possibilité de récupération par les proches. Un corps
@@ -421,6 +428,17 @@ permission ; un compte en attente reçoit un `403`.
 
 | Méthode | Chemin | Description |
 |---|---|---|
+| `GET` | `/api/hospital/rooms` | Chambres et leurs lits, raisons proposées, et droit de gestion du compte connecté |
+| `POST` | `/api/hospital/rooms` | Ajoute une chambre (`hospital.manage`) |
+| `PATCH` | `/api/hospital/rooms/{id}` | Renomme une chambre (`hospital.manage`) |
+| `DELETE` | `/api/hospital/rooms/{id}` | Supprime une chambre et ses lits, s’ils sont tous libres (`hospital.manage`) |
+| `POST` | `/api/hospital/rooms/{id}/beds` | Ajoute un lit vide à la chambre (`hospital.manage`) |
+| `DELETE` | `/api/hospital/beds/{id}` | Supprime un lit libre (`hospital.manage`) |
+| `PUT` | `/api/hospital/beds/{id}/patient` | Affecte un patient au lit ou met à jour sa fiche (compte connecté) |
+| `PATCH` | `/api/hospital/beds/{id}/flags` | Soins faits, forces de l’ordre à prévenir (compte connecté) |
+| `DELETE` | `/api/hospital/beds/{id}/patient` | Libère le lit (compte connecté) |
+| `POST` | `/api/hospital/bed-reasons` | Ajoute une raison proposée (`hospital.manage`) |
+| `DELETE` | `/api/hospital/bed-reasons/{id}` | Supprime une raison proposée (`hospital.manage`) |
 | `GET` | `/api/hospital/morgue` | Défunts, et droits du compte connecté sur l’autopsie et l’incinération |
 | `POST` | `/api/hospital/morgue` | Ajoute un défunt (compte connecté) |
 | `PATCH` | `/api/hospital/morgue/{id}` | Modifie la fiche d’un défunt et sa récupération (compte connecté) |
@@ -494,6 +512,9 @@ d'employés.
 | `dispatch_slots` | Créneaux : `kind`, `title`, `status`, `zip_code`, `location`, `type_label`, `order` |
 | `dispatch_employee_assignments` | Affectations : `slot_id` → `employee_id`, `order` (cascade `DELETE`) |
 | `dispatch_radios` | Radios : `serial`, `employee_id`, `is_on`, `is_loading`, `is_direction` |
+| `hospital_rooms` | Chambres de l’hôpital : `name`, `order` |
+| `hospital_beds` | Lits : `room_id` → `hospital_rooms` (cascade), `label`, puis le patient : `patient_name` (vide si le lit est libre), `accident`, `arrival_date`, `care_done`, `police_status` (`none` \| `to_notify` \| `notified`), `reason` |
+| `hospital_bed_reasons` | Raisons proposées pour la présence d’un patient dans un lit |
 | `morgue_entries` | Défunts de la morgue : `death_date`, `identity`, `affiliation`, `info_shareable`, `autopsy_done`, `examiner_id` → `employees`, `emergency_contacts`, `recoverable`, `incinerated_at` (vide tant que le corps est en cellule) |
 | `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_bces`, `freq_shared` (fréquences actuelles, vides tant qu'elles ne sont pas réglées ; bornes dans `application_settings`), `radio_codes` |
 
@@ -553,6 +574,7 @@ permissions sont aussi contrôlées par les dépendances FastAPI.
 | `InterventionCard.vue` | Carte d'intervention (statut, code postal, agents) |
 | `AgentTile.vue` | Tuile agent compacte (nom, compétences, indicatif radio) |
 | `RadioPanel.vue` | Colonne radios (marche/arrêt, série, agent, fréquences) |
+| `RoomsPanel.vue` | Onglet Chambres de la page Hôpital : chambres, lits, affectation des patients, raisons proposées |
 | `MorguePanel.vue` | Onglet Morgue de la page Hôpital : cases des corps et des urnes, ajout, modification, incinération, retrait |
 | `StatusPicker.vue` | Liste déroulante statuts + lieux |
 | `ZipPicker.vue` | Saisie du code postal (validation différée 400 ms) |
