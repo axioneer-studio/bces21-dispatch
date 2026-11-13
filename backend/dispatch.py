@@ -122,17 +122,15 @@ async def _sync_employee_to_google_sheets() -> None:
             name_cell = str(settings.get("write_name_cell") or "A1")
             phone_cell = str(settings.get("write_phone_cell") or "B1")
 
-            await service.write_values(
-                values=[[first_employee_name]],
-                range_name=name_cell,
+            # Nom + téléphone en UNE seule requête (batchUpdate)
+            await service.write_values_batch(
+                ranges=[
+                    (name_cell, [[first_employee_name]]),
+                    (phone_cell, [[first_employee_phone]]),
+                ],
                 value_input_option="USER_ENTERED",
             )
-            await service.write_values(
-                values=[[first_employee_phone]],
-                range_name=phone_cell,
-                value_input_option="USER_ENTERED",
-            )
-            logger.info(
+            logger.debug(
                 "Employé synchronisé vers Google Sheets : name=%s, phone=%s",
                 first_employee_name,
                 first_employee_phone,
@@ -144,6 +142,80 @@ async def _sync_employee_to_google_sheets() -> None:
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(
                 "Erreur inattendue lors de la synchronisation employé Google Sheets : %s", exc
+            )
+
+
+async def _sync_all_to_google_sheets(state: DispatchState) -> None:
+    """Synchronise employé (centrale) + état (hôpital/info) en UNE seule requête batch."""
+    async with _sheets_sync_lock:
+        async with SessionLocal() as db:
+            settings = await load_settings_from_db(db)
+
+            first_employee_name = ""
+            first_employee_phone = ""
+            result = await db.execute(
+                select(Employee.first_name, Employee.last_name, Employee.phone)
+                .join(DispatchAssignment, DispatchAssignment.employee_id == Employee.id)
+                .join(DispatchSlot, DispatchSlot.id == DispatchAssignment.slot_id)
+                .where(DispatchSlot.kind == "centrale")
+                .order_by(DispatchAssignment.order.asc(), DispatchAssignment.created_at.asc())
+                .limit(1)
+            )
+            row = result.first()
+            if row:
+                first_employee_name = f"{row.first_name} {row.last_name}".strip()
+                first_employee_phone = row.phone or ""
+
+        if not bool(settings["enabled"]):
+            logger.debug("Synchronisation Google Sheets désactivée.")
+            return
+
+        spreadsheet_id = str(settings["spreadsheet_id"])
+        sheet_name = str(settings["sheet_name"])
+        if not spreadsheet_id or not sheet_name:
+            logger.debug("Google Sheets non configuré, synchronisation ignorée.")
+            return
+
+        service = GoogleSheetsService(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+            timeout_seconds=int(settings["timeout_seconds"]),
+            s3_key=str(settings["s3_key"]),
+        )
+        if not service.configured:
+            logger.debug(
+                "Google Sheets non configuré (credentials absents), synchronisation ignorée."
+            )
+            return
+
+        try:
+            name_cell = str(settings.get("write_name_cell") or "A1")
+            phone_cell = str(settings.get("write_phone_cell") or "B1")
+            hospital_cell = str(settings.get("write_hospital_cell") or "C1")
+            info_cell = str(settings.get("write_info_cell") or "D1")
+
+            await service.write_values_batch(
+                ranges=[
+                    (name_cell, [[first_employee_name]]),
+                    (phone_cell, [[first_employee_phone]]),
+                    (hospital_cell, [[_hospital_status_label(state.hospital_status)]]),
+                    (info_cell, [[""]]),  # LSES/SAFD laissés vides pour le moment
+                ],
+                value_input_option="USER_ENTERED",
+            )
+            logger.debug(
+                "Dispatch synchronisé vers Google Sheets (batch) : hospital=%s, name=%s, phone=%s",
+                state.hospital_status,
+                first_employee_name,
+                first_employee_phone,
+            )
+        except GoogleSheetsError as exc:
+            logger.warning(
+                "Échec de la synchronisation Google Sheets (non bloquant) : %s", exc
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Erreur inattendue lors de la synchronisation Google Sheets : %s", exc
             )
 
 
@@ -184,19 +256,15 @@ async def _sync_state_to_google_sheets(state: DispatchState) -> None:
             hospital_cell = str(settings.get("write_hospital_cell") or "C1")
             info_cell = str(settings.get("write_info_cell") or "D1")
 
-            # Statut hôpital
-            await service.write_values(
-                values=[[_hospital_status_label(state.hospital_status)]],
-                range_name=hospital_cell,
+            # Statut hôpital + info en UNE seule requête (batchUpdate)
+            await service.write_values_batch(
+                ranges=[
+                    (hospital_cell, [[_hospital_status_label(state.hospital_status)]]),
+                    (info_cell, [[""]]),  # LSES/SAFD laissés vides pour le moment
+                ],
                 value_input_option="USER_ENTERED",
             )
-            # Information supplémentaire (LSES/SAFD laissés vides pour le moment)
-            await service.write_values(
-                values=[[""]],
-                range_name=info_cell,
-                value_input_option="USER_ENTERED",
-            )
-            logger.info(
+            logger.debug(
                 "État Dispatch synchronisé vers Google Sheets : hospital=%s",
                 state.hospital_status,
             )
@@ -421,10 +489,8 @@ async def reset_assignments(
     await db.commit()
     snapshot = await build_snapshot(db)
     await manager.broadcast({"type": "assignments_reset", "data": snapshot})
-    # Synchronisation employé vers Google Sheets : vide les cellules nom/téléphone
-    asyncio.create_task(_sync_employee_to_google_sheets())
-    # Synchronisation statut hôpital vers Google Sheets
-    asyncio.create_task(_sync_state_to_google_sheets(state))
+    # Une seule requête batch : vide nom/téléphone + écrit le statut hôpital
+    asyncio.create_task(_sync_all_to_google_sheets(state))
     return snapshot
 
 

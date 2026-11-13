@@ -116,7 +116,7 @@ class S3Service:
             response = client.get_object(Bucket=self._bucket, Key=full_key)
             encrypted_body = response["Body"].read()
             decrypted_body = self._decrypt(encrypted_body)
-            logger.info("Service account JSON téléchargé depuis S3 (clé=%s).", full_key)
+            logger.debug("Service account JSON téléchargé depuis S3 (clé=%s).", full_key)
             return decrypted_body
         except ClientError as exc:
             code = exc.response["Error"]["Code"]

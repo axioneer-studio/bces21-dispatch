@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import socket
+import time
 from contextlib import contextmanager
 from typing import Any
 
@@ -27,6 +28,9 @@ logger = logging.getLogger("bces.google_sheets")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 DEFAULT_S3_KEY = "google-service-account.json"
 GOOGLE_SHEETS_TIMEOUT = 10.0
+# Cache en mémoire du JSON du compte de service (évite un téléchargement S3 à chaque appel).
+SERVICE_ACCOUNT_CACHE_TTL = 300.0  # secondes
+_service_account_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 _original_getaddrinfo = socket.getaddrinfo
 
@@ -81,7 +85,11 @@ class GoogleSheetsService:
             return False
 
     def _download_service_account_info(self) -> dict[str, Any]:
-        """Télécharge et parse le JSON du compte de service depuis S3."""
+        """Télécharge et parse le JSON du compte de service depuis S3 (avec cache TTL)."""
+        now = time.monotonic()
+        cached = _service_account_cache.get(self._s3_key)
+        if cached is not None and now - cached[0] < SERVICE_ACCOUNT_CACHE_TTL:
+            return cached[1]
         try:
             content = s3_service.download_service_account(self._s3_key, prefix="credentials/")
         except S3ServiceError as exc:
@@ -89,11 +97,13 @@ class GoogleSheetsService:
                 f"Impossible de récupérer les credentials depuis S3 (clé={self._s3_key})."
             ) from exc
         try:
-            return json.loads(content)
+            info = json.loads(content)
         except json.JSONDecodeError as exc:
             raise GoogleSheetsError(
                 f"Le JSON du compte de service sur S3 est invalide : {exc}"
             ) from exc
+        _service_account_cache[self._s3_key] = (now, info)
+        return info
 
     def _build_service(self) -> Any:
         """Construit le client API Google Sheets authentifié."""
@@ -267,6 +277,55 @@ class GoogleSheetsService:
             raise self._http_error_to_gs_error(exc) from exc
         except Exception as exc:  # pylint: disable=broad-except
             logger.exception("Erreur lors de l'écriture Google Sheets.")
+            raise GoogleSheetsError(f"Erreur inattendue : {type(exc).__name__}") from exc
+
+        return result
+
+    async def write_values_batch(
+        self,
+        ranges: list[tuple[str, list[list[Any]]]],
+        value_input_option: str = "USER_ENTERED",
+    ) -> dict[str, Any]:
+        """Écrit plusieurs plages en UNE seule requête (values.batchUpdate).
+
+        `ranges` est une liste de tuples (range_name, values).
+        """
+        if not self.configured:
+            raise GoogleSheetsError("Google Sheets non configuré.")
+        try:
+            service = self._build_service()
+        except GoogleSheetsError:
+            raise
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.exception("Erreur lors de la construction du client Google Sheets.")
+            raise GoogleSheetsError(f"Erreur d'authentification : {exc}") from exc
+
+        body = {
+            "valueInputOption": value_input_option,
+            "data": [
+                {
+                    "range": f"{self._sheet_name}!{range_name}",
+                    "values": values,
+                }
+                for range_name, values in ranges
+            ],
+        }
+        try:
+            result = await asyncio.wait_for(
+                self._execute(
+                    service.spreadsheets()
+                    .values()
+                    .batchUpdate(spreadsheetId=self._spreadsheet_id, body=body)
+                ),
+                timeout=GOOGLE_SHEETS_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Délai dépassé lors de l'écriture batch Google Sheets.")
+            raise GoogleSheetsError("Délai dépassé lors de l'écriture batch Google Sheets.")
+        except HttpError as exc:
+            raise self._http_error_to_gs_error(exc) from exc
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.exception("Erreur lors de l'écriture batch Google Sheets.")
             raise GoogleSheetsError(f"Erreur inattendue : {type(exc).__name__}") from exc
 
         return result

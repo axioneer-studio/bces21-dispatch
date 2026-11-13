@@ -133,7 +133,7 @@ async def sync_statuses() -> tuple[bool, float]:
             state.safd_status = safd
             await db.commit()
             await push_snapshot(db)
-            logger.info(
+            logger.debug(
                 "Statuts synchronisés depuis le Sheet : LSES=%s SAFD=%s", lses, safd
             )
     return changed, delay
