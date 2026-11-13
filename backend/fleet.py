@@ -30,7 +30,6 @@ router = APIRouter(tags=["fleet"])
 
 # --- Lignes de la flotte (tout compte ayant accès au Dispatch) ---
 
-
 @router.post("/api/dispatch/fleet", response_model=FleetEntryOut, status_code=201)
 async def create_fleet_entry(
     db: AsyncSession = Depends(get_db),

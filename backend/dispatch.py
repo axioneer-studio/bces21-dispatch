@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from auth.session import decode_token, get_session_cookie_name
-from config import get_settings
 from database import SessionLocal, get_db
 from deps import require_page_access, user_has_page_access
 from frequency_settings import read_all_bounds
@@ -25,7 +24,9 @@ from models import (
     ParkingSpot,
     User,
     Vehicle,
+    utcnow,
 )
+from google_sheets_service import GoogleSheetsError, GoogleSheetsService, load_settings_from_db
 from schemas import (
     AssignRequest,
     DispatchNoteUpdateRequest,
@@ -46,6 +47,168 @@ from schemas import (
 )
 
 logger = logging.getLogger("bces.dispatch")
+
+
+# --- Traduction des statuts pour l'affichage sur Google Sheets ---
+_HOSPITAL_STATUS_LABELS = {
+    "ouvert": "Ouvert",
+    "ferme": "Fermé",
+    "nuit": "Mode nuit",
+}
+
+
+def _hospital_status_label(value: str | None) -> str:
+    """Retourne le libellé d'affichage du statut hôpital pour Google Sheets."""
+    if not value:
+        return ""
+    return _HOSPITAL_STATUS_LABELS.get(value.strip().lower(), value)
+
+
+# --- Verrou pour éviter les synchronisations simultanées ---
+_sheets_sync_lock = asyncio.Lock()
+
+
+async def _sync_employee_to_google_sheets() -> None:
+    """Écrit le nom et le téléphone du premier employé affecté vers Google Sheets.
+
+    Appelé à chaque affectation/désaffectation d'employé, indépendamment du
+    statut hôpital. Les cellules cibles sont google_sheets_write_name_cell et
+    google_sheets_write_phone_cell.
+    """
+    async with _sheets_sync_lock:
+        # Lire la configuration depuis la base de données.
+        async with SessionLocal() as db:
+            settings = await load_settings_from_db(db)
+
+            # Premier employé affecté sur la case "centrale" (nom et téléphone).
+            first_employee_name = ""
+            first_employee_phone = ""
+            result = await db.execute(
+                select(Employee.first_name, Employee.last_name, Employee.phone)
+                .join(DispatchAssignment, DispatchAssignment.employee_id == Employee.id)
+                .join(DispatchSlot, DispatchSlot.id == DispatchAssignment.slot_id)
+                .where(DispatchSlot.kind == "centrale")
+                .order_by(DispatchAssignment.order.asc(), DispatchAssignment.created_at.asc())
+                .limit(1)
+            )
+            row = result.first()
+            if row:
+                first_employee_name = f"{row.first_name} {row.last_name}".strip()
+                first_employee_phone = row.phone or ""
+
+        if not bool(settings["enabled"]):
+            logger.debug("Synchronisation Google Sheets désactivée.")
+            return
+
+        spreadsheet_id = str(settings["spreadsheet_id"])
+        sheet_name = str(settings["sheet_name"])
+        if not spreadsheet_id or not sheet_name:
+            logger.debug("Google Sheets non configuré, synchronisation ignorée.")
+            return
+
+        service = GoogleSheetsService(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+            timeout_seconds=int(settings["timeout_seconds"]),
+            s3_key=str(settings["s3_key"]),
+        )
+        if not service.configured:
+            logger.debug(
+                "Google Sheets non configuré (credentials absents), synchronisation ignorée."
+            )
+            return
+
+        try:
+            name_cell = str(settings.get("write_name_cell") or "A1")
+            phone_cell = str(settings.get("write_phone_cell") or "B1")
+
+            await service.write_values(
+                values=[[first_employee_name]],
+                range_name=name_cell,
+                value_input_option="USER_ENTERED",
+            )
+            await service.write_values(
+                values=[[first_employee_phone]],
+                range_name=phone_cell,
+                value_input_option="USER_ENTERED",
+            )
+            logger.info(
+                "Employé synchronisé vers Google Sheets : name=%s, phone=%s",
+                first_employee_name,
+                first_employee_phone,
+            )
+        except GoogleSheetsError as exc:
+            logger.warning(
+                "Échec de la synchronisation employé Google Sheets (non bloquant) : %s", exc
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Erreur inattendue lors de la synchronisation employé Google Sheets : %s", exc
+            )
+
+
+async def _sync_state_to_google_sheets(state: DispatchState) -> None:
+    """Synchronise l'état du Dispatch vers Google Sheets (non-bloquant).
+
+    Ne gère que le statut hôpital et la cellule info. Le nom/téléphone de
+    l'employé est géré par _sync_employee_to_google_sheets.
+    """
+    async with _sheets_sync_lock:
+        # Lire la configuration depuis la base de données.
+        async with SessionLocal() as db:
+            settings = await load_settings_from_db(db)
+
+        if not bool(settings["enabled"]):
+            logger.debug("Synchronisation Google Sheets désactivée.")
+            return
+
+        spreadsheet_id = str(settings["spreadsheet_id"])
+        sheet_name = str(settings["sheet_name"])
+        if not spreadsheet_id or not sheet_name:
+            logger.debug("Google Sheets non configuré, synchronisation ignorée.")
+            return
+
+        service = GoogleSheetsService(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+            timeout_seconds=int(settings["timeout_seconds"]),
+            s3_key=str(settings["s3_key"]),
+        )
+        if not service.configured:
+            logger.debug(
+                "Google Sheets non configuré (credentials absents), synchronisation ignorée."
+            )
+            return
+
+        try:
+            hospital_cell = str(settings.get("write_hospital_cell") or "C1")
+            info_cell = str(settings.get("write_info_cell") or "D1")
+
+            # Statut hôpital
+            await service.write_values(
+                values=[[_hospital_status_label(state.hospital_status)]],
+                range_name=hospital_cell,
+                value_input_option="USER_ENTERED",
+            )
+            # Information supplémentaire (LSES/SAFD laissés vides pour le moment)
+            await service.write_values(
+                values=[[""]],
+                range_name=info_cell,
+                value_input_option="USER_ENTERED",
+            )
+            logger.info(
+                "État Dispatch synchronisé vers Google Sheets : hospital=%s",
+                state.hospital_status,
+            )
+        except GoogleSheetsError as exc:
+            logger.warning(
+                "Échec de la synchronisation Google Sheets (non bloquant) : %s", exc
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Erreur inattendue lors de la synchronisation Google Sheets : %s", exc
+            )
+
 
 router = APIRouter(tags=["dispatch"])
 
@@ -258,6 +421,10 @@ async def reset_assignments(
     await db.commit()
     snapshot = await build_snapshot(db)
     await manager.broadcast({"type": "assignments_reset", "data": snapshot})
+    # Synchronisation employé vers Google Sheets : vide les cellules nom/téléphone
+    asyncio.create_task(_sync_employee_to_google_sheets())
+    # Synchronisation statut hôpital vers Google Sheets
+    asyncio.create_task(_sync_state_to_google_sheets(state))
     return snapshot
 
 
@@ -346,6 +513,21 @@ async def delete_slot(
     return MessageResponse(message="Supprimé")
 
 
+async def _renumber_slot_orders(db: AsyncSession, slot_id: int) -> None:
+    """Renumérote séquentiellement (0, 1, 2…) les orders des affectations d'un slot.
+
+    Triées par created_at (ordre d'arrivée réel), pas par l'ancien order,
+    pour que le nouvel arrivant garde toujours la dernière place.
+    """
+    result = await db.execute(
+        select(DispatchAssignment)
+        .where(DispatchAssignment.slot_id == slot_id)
+        .order_by(DispatchAssignment.created_at.asc(), DispatchAssignment.id.asc())
+    )
+    for index, assignment in enumerate(result.scalars().all()):
+        assignment.order = index
+
+
 @router.post("/api/dispatch/slots/{slot_id}/assign", response_model=SlotOut)
 async def assign_user(
     slot_id: int,
@@ -374,18 +556,23 @@ async def assign_user(
     )
     assignment = result.scalar_one_or_none()
     if assignment is None:
-        assignment = DispatchAssignment(
-            employee_id=employee.id,
-            order=len(slot.assignments),
-        )
-        slot.assignments.append(assignment)
+        assignment = DispatchAssignment(employee_id=employee.id, order=0)
+        assignment.slot_id = slot.id
+        db.add(assignment)
+        await db.flush()  # created_at renseigné avant le commit
     elif assignment.slot_id != slot.id:
-        assignment.order = len(slot.assignments)
-        slot.assignments.append(assignment)
+        assignment.slot_id = slot.id
+        assignment.order = 0
+        assignment.created_at = utcnow()  # redevient le dernier arrivé
 
+    await db.commit()
+    # Renumérotation propre : 0, 1, 2… par ordre d'arrivée (created_at)
+    await _renumber_slot_orders(db, slot_id)
     await db.commit()
     await db.refresh(slot)
     await push_snapshot(db)
+    # Synchronisation employé vers Google Sheets (nom/téléphone, indépendante du statut hôpital)
+    asyncio.create_task(_sync_employee_to_google_sheets())
     # Re-fetch with assignments
     result = await db.execute(
         select(DispatchSlot)
@@ -425,6 +612,11 @@ async def unassign_user(
             radio.is_on = False
             radio.is_loading = False
         await db.commit()
+
+        # Renuméroter les affectations restantes pour fermer les trous
+        # (ex: retirer le 01 fait passer le 02 en 01)
+        await _renumber_slot_orders(db, slot_id)
+        await db.commit()
     result = await db.execute(
         select(DispatchSlot)
         .options(selectinload(DispatchSlot.assignments))
@@ -432,6 +624,8 @@ async def unassign_user(
     )
     slot = result.scalar_one()
     await push_snapshot(db)
+    # Synchronisation employé vers Google Sheets (nom/téléphone, indépendante du statut hôpital)
+    asyncio.create_task(_sync_employee_to_google_sheets())
     return SlotOut.model_validate(slot)
 
 
@@ -511,5 +705,7 @@ async def update_state(
         setattr(state, k, v)
     await db.commit()
     await db.refresh(state)
+    # Synchronisation asynchrone vers Google Sheets (ne bloque pas l'API)
+    asyncio.create_task(_sync_state_to_google_sheets(state))
     await push_snapshot(db)
     return StateOut.model_validate(state)

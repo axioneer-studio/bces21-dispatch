@@ -403,6 +403,67 @@ class ApplicationSettingsUpdateRequest(BaseModel):
     registration_open: bool
 
 
+# --- Google Sheets configuration ---
+
+
+class GoogleSheetsConfigOut(BaseModel):
+    """Configuration Google Sheets retournée au frontend (sans données sensibles)."""
+
+    configured: bool
+    enabled: bool = False
+    spreadsheet_id: str
+    sheet_name: str
+    timeout_seconds: int = 15
+    service_account_configured: bool
+    connection_status: str  # "connecté", "erreur", "non_configuré"
+    connection_error: str | None = None
+
+    # Configuration de lecture (disponibilités LSES/BCES/SAFD), stockée séparément.
+    read_enabled: bool = False
+    read_spreadsheet_id: str = ""
+    read_sheet_name: str = ""
+    read_lses_cell: str = "B3"
+    read_safd_cell: str = "D3"
+
+    # Configuration d'écriture (statut Dispatch), stockée séparément.
+    write_name_cell: str = "A1"
+    write_phone_cell: str = "B1"
+    write_hospital_cell: str = "C1"
+    write_info_cell: str = "D1"
+
+
+class GoogleSheetsConfigUpdateRequest(BaseModel):
+    spreadsheet_id: str = ""
+    sheet_name: str = ""
+    enabled: bool = False
+    timeout_seconds: int = 15
+
+    # Configuration de lecture (disponibilités LSES/BCES/SAFD), stockée séparément.
+    read_spreadsheet_id: str = ""
+    read_sheet_name: str = ""
+    read_lses_cell: str = "B3"
+    read_safd_cell: str = "D3"
+    read_enabled: bool = False
+
+    # Configuration d'écriture (statut Dispatch), stockée séparément.
+    write_name_cell: str = "A1"
+    write_phone_cell: str = "B1"
+    write_hospital_cell: str = "C1"
+    write_info_cell: str = "D1"
+
+
+class GoogleSheetsServiceAccountUploadRequest(BaseModel):
+    """Corps de la requête d'upload du JSON du compte de service (multipart, pas de JSON)."""
+
+
+class GoogleSheetsTestResponse(BaseModel):
+    connected: bool
+    error: str | None = None
+    spreadsheet_title: str | None = None
+    sheet_names: list[str] = []
+    target_sheet_found: bool = False
+
+
 # « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services.
 FrequencyKind = Literal["radio", "shared"]
 
