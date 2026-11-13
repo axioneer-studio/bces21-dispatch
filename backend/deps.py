@@ -9,7 +9,7 @@ from database import get_db
 from models import User
 
 PAGE_KEYS = frozenset(
-    {"dashboard", "dispatch", "agenda", "human-resources", "direction", "administration"}
+    {"dispatch", "agenda", "human-resources", "direction", "administration"}
 )
 
 

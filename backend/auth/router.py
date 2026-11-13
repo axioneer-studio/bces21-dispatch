@@ -208,7 +208,7 @@ def _status_redirect_target(user: User) -> str:
     if user.status == "pending":
         return _frontend_redirect("/?status=pending")
     if user.prenom_rp and user.nom_rp:
-        return _frontend_redirect("/dashboard")
+        return _frontend_redirect("/dispatch")
     deadline_iso = (
         user.rp_name_deadline.isoformat()
         if user.rp_name_deadline

@@ -1,5 +1,4 @@
 const protectedPages: Record<string, string> = {
-  '/dashboard': 'dashboard',
   '/dispatch': 'dispatch',
   '/hopital': 'hospital',
   '/stock': 'stock',
@@ -10,7 +9,6 @@ const protectedPages: Record<string, string> = {
 }
 
 const pageRoutes: Record<string, string> = {
-  dashboard: '/dashboard',
   dispatch: '/dispatch',
   agenda: '/agenda',
   'human-resources': '/ressources-humaines',

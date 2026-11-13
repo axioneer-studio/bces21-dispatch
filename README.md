@@ -50,11 +50,6 @@ interventions et des radios, avec authentification Discord OAuth2.
   grades autorisés.
 - Mises à jour temps réel via WebSocket, sans rafraîchissement de page.
 
-### Tableau de bord (`/dashboard`)
-
-- KPI : agents affectés, agents disponibles, interventions, radios actives.
-- Panneau « service en cours » avec accès rapide au dispatch.
-
 ### Hôpital (`/hopital`)
 
 - Page ouverte à tout compte ayant un rôle, avec deux onglets : Chambres et
@@ -135,7 +130,7 @@ bces21-dispatch/
 │   ├── schemas.py      # schémas Pydantic (entrées / sorties)
 │   ├── deps.py         # dépendances FastAPI (auth)
 │   ├── agents.py       # routes /api/users
-│   ├── human_resources.py # employés, rôles, permissions, résumé du dashboard
+│   ├── human_resources.py # employés, rôles, permissions
 │   ├── dispatch.py     # routes /api/dispatch/* + WebSocket
 │   ├── cleanup.py      # purge des comptes incomplets
 │   ├── status_sync.py  # synchronisation Google Sheet (LSES / SAFD)
@@ -149,7 +144,7 @@ bces21-dispatch/
 │   ├── server/routes/favicon.ico.ts
 │   ├── public/         # logo, fond, robots.txt
 │   └── app/
-│       ├── pages/      # /, /dashboard, /dispatch, /hopital, /stock, /agenda, RH, profil
+│       ├── pages/      # /, /dispatch, /hopital, /stock, /agenda, RH, profil
 │       ├── middleware/ # contrôle global des accès aux pages
 │       ├── layouts/    # default, dispatch
 │       ├── components/ # 14 composants auto-importés
@@ -353,7 +348,7 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 3. Redirection selon l'état du compte :
    - profil incomplet → `/complete-profile?deadline=<iso>`
    - compte en attente → `/?status=pending`
-   - compte valide → `/dashboard`
+   - compte valide → `/dispatch`
 4. La **session** est un JWT HS256 (`sub`, `iat`, `exp`, `type`) stocké dans un
    cookie `HttpOnly` `bces_session` (`SameSite=Lax`, `Path=/`).
 
@@ -407,8 +402,6 @@ permission ; un compte en attente reçoit un `403`.
 | `DELETE` | `/api/employees/{id}` | Supprime un employé (RH + `manage_employees`) |
 | `GET` | `/api/employee-accounts` | Liste les comptes actifs (RH + `link_accounts`) |
 | `GET` | `/api/employee-grades` | Grades disponibles pour l’attribution RH |
-| `GET` | `/api/dashboard/summary` | Indicateurs agrégés du tableau de bord |
-
 ### Dispatch
 
 | Méthode | Chemin | Description |
@@ -550,7 +543,6 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 | Route | Fichier | Description |
 |---|---|---|
 | `/` | `app/pages/index.vue` | Connexion Discord, gestion des erreurs `?error=` / `?status=pending` |
-| `/dashboard` | `app/pages/dashboard.vue` | KPI du roster et service en cours |
 | `/dispatch` | `app/pages/dispatch.vue` | Plateau de dispatch temps réel |
 | `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres et Morgue, ouverts à tout compte ayant un rôle |
 | `/stock` | `app/pages/stock.vue` | Stock du BCES (à venir) |
