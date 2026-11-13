@@ -36,7 +36,7 @@ class S3Service:
         self._bucket = settings.s3_bucket
         self._access_key = settings.s3_access_key
         self._secret_key = settings.s3_secret_key
-        self._encryption_key = settings.google_sa_encryption_key
+        self._encryption_key = settings.effective_google_sa_encryption_key
         self._fernet = Fernet(self._encryption_key.encode()) if self._encryption_key else None
         self._client = None
         self._configured = bool(
