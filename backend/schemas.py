@@ -859,3 +859,84 @@ class AgendaEventOut(BaseModel):
     color: str
     created_at: datetime
     updated_at: datetime
+
+
+class MorgueEntryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    death_date: date
+    identity: str = Field(default="", max_length=120)
+    affiliation: str = Field(default="", max_length=64)
+    info_shareable: bool = False
+    emergency_contacts: str = Field(default="", max_length=500)
+
+    @field_validator("identity", "affiliation", "emergency_contacts")
+    @classmethod
+    def _trim_morgue_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class MorgueEntryUpdate(MorgueEntryCreate):
+    """La récupération se renseigne après l'ajout, depuis la case. L'autopsie et le
+    légiste passent par `MorgueAutopsyRequest`, réservé aux légistes et à la Direction."""
+
+    death_date: Optional[date] = None
+    identity: Optional[str] = Field(default=None, max_length=120)
+    affiliation: Optional[str] = Field(default=None, max_length=64)
+    info_shareable: Optional[bool] = None
+    emergency_contacts: Optional[str] = Field(default=None, max_length=500)
+    recoverable: Optional[bool] = None
+
+    @field_validator("identity", "affiliation", "emergency_contacts")
+    @classmethod
+    def _trim_morgue_text(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value is not None else None
+
+    @field_validator("death_date", "info_shareable", "recoverable")
+    @classmethod
+    def _required_when_sent(cls, value, info: ValidationInfo):
+        if value is None:
+            raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
+        return value
+
+
+class MorgueAutopsyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    done: bool
+
+
+class MorgueExaminerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    examiner_id: Optional[int] = None
+
+
+class MorgueExaminerOut(BaseModel):
+    id: int
+    name: str
+
+
+class MorgueEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    death_date: date
+    identity: str
+    affiliation: str
+    info_shareable: bool
+    autopsy_done: bool
+    examiner_id: Optional[int]
+    examiner_name: Optional[str] = None
+    emergency_contacts: str
+    recoverable: bool
+    incinerated_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+
+class MorgueOut(BaseModel):
+    entries: list[MorgueEntryOut]
+    examiners: list[MorgueExaminerOut]
+    can_manage_autopsy: bool
+    can_incinerate: bool

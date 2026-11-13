@@ -1,6 +1,7 @@
 const protectedPages: Record<string, string> = {
   '/dashboard': 'dashboard',
   '/dispatch': 'dispatch',
+  '/hopital': 'hospital',
   '/agenda': 'agenda',
   '/ressources-humaines': 'human-resources',
   '/direction': 'direction',
@@ -15,6 +16,9 @@ const pageRoutes: Record<string, string> = {
   direction: '/direction',
   administration: '/administration'
 }
+
+/** Pages ouvertes à tous les comptes connectés, sans case à cocher dans les rôles. */
+const publicPages = new Set(['agenda', 'hospital'])
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const page = protectedPages[to.path]
@@ -32,7 +36,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
   if (!user) return navigateTo('/')
 
-  if (page === 'agenda') return
+  if (publicPages.has(page)) return
   if (user.is_super_admin || user.page_access.includes(page)) return
 
   const firstAllowedPage = user.page_access.find((key) => key in pageRoutes)

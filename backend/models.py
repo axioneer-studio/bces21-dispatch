@@ -288,3 +288,26 @@ class FleetEntry(Base):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class MorgueEntry(Base):
+    """Un défunt pris en charge par la morgue : corps en cellule réfrigérée, ou urne
+    une fois incinéré. L'incinération est réservée aux médecins légistes."""
+
+    __tablename__ = "morgue_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    death_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    identity: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    affiliation: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    info_shareable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    autopsy_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    examiner_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
+    examiner: Mapped[Optional["Employee"]] = relationship(lazy="selectin")
+    emergency_contacts: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    recoverable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    incinerated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

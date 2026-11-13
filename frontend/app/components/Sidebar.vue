@@ -44,14 +44,18 @@ interface NavItem {
 const items: NavItem[] = [
   { to: '/dashboard', label: 'Accueil', icon: 'lucide:layout-dashboard', page: 'dashboard' },
   { to: '/dispatch', label: 'Dispatch', icon: 'lucide:radio', page: 'dispatch' },
+  { to: '/hopital', label: 'Hôpital', icon: 'lucide:hospital', page: 'hospital' },
   { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
   { to: '/ressources-humaines', label: 'Ressources humaines', icon: 'lucide:users-round', page: 'human-resources' },
   { to: '/direction', label: 'Direction', icon: 'lucide:shield', page: 'direction' },
   { to: '/administration', label: 'Administration', icon: 'lucide:settings-2', page: 'administration' }
 ]
 
+/** Pages ouvertes à tous les comptes connectés, sans case à cocher dans les rôles. */
+const PUBLIC_PAGES = new Set(['agenda', 'hospital'])
+
 const visibleItems = computed(() => items.filter((item) =>
-  item.page === 'agenda'
+  PUBLIC_PAGES.has(item.page)
     ? Boolean(currentUser.value)
     : currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
 ))
