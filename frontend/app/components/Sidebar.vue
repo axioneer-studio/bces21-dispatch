@@ -45,6 +45,7 @@ const items: NavItem[] = [
   { to: '/dashboard', label: 'Accueil', icon: 'lucide:layout-dashboard', page: 'dashboard' },
   { to: '/dispatch', label: 'Dispatch', icon: 'lucide:radio', page: 'dispatch' },
   { to: '/hopital', label: 'Hôpital', icon: 'lucide:hospital', page: 'hospital' },
+  { to: '/stock', label: 'Stock', icon: 'lucide:package', page: 'stock' },
   { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
   { to: '/ressources-humaines', label: 'Ressources humaines', icon: 'lucide:users-round', page: 'human-resources' },
   { to: '/direction', label: 'Direction', icon: 'lucide:shield', page: 'direction' },
@@ -52,7 +53,7 @@ const items: NavItem[] = [
 ]
 
 /** Pages ouvertes à tous les comptes connectés, sans case à cocher dans les rôles. */
-const PUBLIC_PAGES = new Set(['agenda', 'hospital'])
+const PUBLIC_PAGES = new Set(['agenda', 'hospital', 'stock'])
 
 const visibleItems = computed(() => items.filter((item) =>
   PUBLIC_PAGES.has(item.page)

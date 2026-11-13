@@ -4,8 +4,7 @@ useHead({ title: 'Hôpital • BCES' })
 
 const hospitalSections = [
   { key: 'rooms', label: 'Chambres', icon: 'lucide:bed-double', title: 'Chambres', description: 'Occupation des chambres de l’hôpital.' },
-  { key: 'morgue', label: 'Morgue', icon: 'lucide:snowflake', title: 'Morgue', description: 'Corps en cellule réfrigérée et urnes des défunts incinérés.' },
-  { key: 'stock', label: 'Stock', icon: 'lucide:package', title: 'Stock', description: 'Matériel et consommables de l’hôpital.' }
+  { key: 'morgue', label: 'Morgue', icon: 'lucide:snowflake', title: 'Morgue', description: 'Corps en cellule réfrigérée et urnes des défunts incinérés.' }
 ] as const
 
 type HospitalSection = (typeof hospitalSections)[number]['key']
@@ -54,11 +53,7 @@ function moveSectionTab(step: -1 | 1) {
         <p>{{ section.description }}</p>
       </div>
       <RoomsPanel v-if="section.key === 'rooms'" :active="activeSection === 'rooms'" />
-      <MorguePanel v-else-if="section.key === 'morgue'" :active="activeSection === 'morgue'" />
-      <div v-else class="hospital-empty">
-        <Icon :name="section.icon" size="21" />
-        <p>À venir.</p>
-      </div>
+      <MorguePanel v-else :active="activeSection === 'morgue'" />
     </section>
   </main>
 </template>
