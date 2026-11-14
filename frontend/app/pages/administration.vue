@@ -812,19 +812,19 @@ function statusLabel(status: string) {
 
     <nav class="admin-nav" role="tablist" aria-label="Sections d’administration" @keydown.left.prevent="moveAdminTab(-1)" @keydown.right.prevent="moveAdminTab(1)">
       <button id="admin-tab-registrations" type="button" role="tab" :aria-selected="activeAdminSection === 'registrations'" aria-controls="admin-registrations" :class="{ 'is-active': activeAdminSection === 'registrations' }" @click="activeAdminSection = 'registrations'">
-        <Icon name="lucide:inbox" size="16" /> Inscriptions <span>{{ registrations.length }}</span>
+        <Icon name="lucide:user-round-plus" size="16" /> Inscriptions <span>{{ registrations.length }}</span>
       </button>
       <button id="admin-tab-users" type="button" role="tab" :aria-selected="activeAdminSection === 'users'" aria-controls="admin-users" :class="{ 'is-active': activeAdminSection === 'users' }" @click="activeAdminSection = 'users'">
         <Icon name="lucide:users-round" size="16" /> Comptes <span>{{ users.length }}</span>
       </button>
       <button id="admin-tab-roles" type="button" role="tab" :aria-selected="activeAdminSection === 'roles'" aria-controls="admin-roles" :class="{ 'is-active': activeAdminSection === 'roles' }" @click="activeAdminSection = 'roles'">
-        <Icon name="lucide:shield-check" size="16" /> Rôles <span>{{ roles.length }}</span>
+        <Icon name="lucide:user-round-shield" size="16" /> Rôles <span>{{ roles.length }}</span>
       </button>
       <button id="admin-tab-vehicles" type="button" role="tab" :aria-selected="activeAdminSection === 'vehicles'" aria-controls="admin-vehicles" :class="{ 'is-active': activeAdminSection === 'vehicles' }" @click="activeAdminSection = 'vehicles'">
-        <Icon name="lucide:car-front" size="16" /> Véhicules <span>{{ vehicles.length }}</span>
+        <Icon name="lucide:ambulance" size="16" /> Véhicules <span>{{ vehicles.length }}</span>
       </button>
       <button id="admin-tab-parking" type="button" role="tab" :aria-selected="activeAdminSection === 'parking'" aria-controls="admin-parking" :class="{ 'is-active': activeAdminSection === 'parking' }" @click="activeAdminSection = 'parking'">
-        <Icon name="lucide:square-parking" size="16" /> Stationnement <span>{{ parkingSpots.length }}</span>
+        <Icon name="lucide:map-pin" size="16" /> Stationnement <span>{{ parkingSpots.length }}</span>
       </button>
       <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="activeAdminSection = 'settings'">
         <Icon name="lucide:settings-2" size="16" /> Paramètres
@@ -833,7 +833,7 @@ function statusLabel(status: string) {
 
     <section id="admin-registrations" v-show="activeAdminSection === 'registrations'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-registrations" tabindex="0">
       <div class="admin-section__heading">
-        <div class="admin-section__intro"><span class="admin-section__icon admin-section__icon--warning"><Icon name="lucide:inbox" size="18" /></span><div><h2>Demandes d’inscription</h2><p>{{ registrations.length }} demande{{ registrations.length > 1 ? 's' : '' }} en attente de validation.</p></div></div>
+        <div class="admin-section__intro"><span class="admin-section__icon admin-section__icon--warning"><Icon name="lucide:user-round-plus" size="18" /></span><div><h2>Demandes d’inscription</h2><p>{{ registrations.length }} demande{{ registrations.length > 1 ? 's' : '' }} en attente de validation.</p></div></div>
         <label class="admin-search">
           <Icon name="lucide:search" size="15" />
           <input v-model="registrationSearch" type="search" aria-label="Rechercher une demande" placeholder="Nom ou compte Discord">
@@ -910,7 +910,7 @@ function statusLabel(status: string) {
 
     <section id="admin-roles" v-show="activeAdminSection === 'roles'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-roles" tabindex="0">
       <div class="admin-section__heading">
-        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:shield-check" size="18" /></span><div><h2>Rôles applicatifs</h2><p>Définissez les pages accessibles et les actions autorisées pour chaque rôle.</p></div></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:user-round-shield" size="18" /></span><div><h2>Rôles applicatifs</h2><p>Définissez les pages accessibles et les actions autorisées pour chaque rôle.</p></div></div>
       </div>
       <form class="admin-role-create" @submit.prevent="createRole">
         <label><span>Nom du rôle</span><input v-model="roleForm.name" required maxlength="64" placeholder="Ex. RH"></label>
@@ -970,7 +970,7 @@ function statusLabel(status: string) {
 
     <section id="admin-vehicles" v-show="activeAdminSection === 'vehicles'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-vehicles" tabindex="0">
       <div class="admin-section__heading">
-        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:car-front" size="18" /></span><div><h2>Véhicules de la flotte</h2><p>Véhicules proposés dans l’encart « Flotte de véhicules » du Dispatch. L’import d’un JSON du garage remplace la liste (nom, plaque et modèle).</p></div></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:ambulance" size="18" /></span><div><h2>Véhicules de la flotte</h2><p>Véhicules proposés dans l’encart « Flotte de véhicules » du Dispatch. L’import d’un JSON du garage remplace la liste (nom, plaque et modèle).</p></div></div>
         <input ref="vehicleFileInput" type="file" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true" @change="importVehicles">
         <button type="button" class="admin-button" :disabled="importingVehicles" @click="vehicleFileInput?.click()">
           <Icon :name="importingVehicles ? 'lucide:loader-circle' : 'lucide:file-up'" size="14" :class="{ 'admin-spin': importingVehicles }" /> {{ importingVehicles ? 'Import…' : 'Importer un JSON' }}
@@ -1005,7 +1005,7 @@ function statusLabel(status: string) {
 
     <section id="admin-parking" v-show="activeAdminSection === 'parking'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-parking" tabindex="0">
       <div class="admin-section__heading">
-        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:square-parking" size="18" /></span><div><h2>Emplacements de stationnement</h2><p>Lieux proposés pour la flotte. La liste n’est pas exhaustive : le Dispatch peut aussi saisir un lieu librement.</p></div></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:map-pin" size="18" /></span><div><h2>Emplacements de stationnement</h2><p>Lieux proposés pour la flotte. La liste n’est pas exhaustive : le Dispatch peut aussi saisir un lieu librement.</p></div></div>
       </div>
       <form class="admin-catalog-create admin-catalog-create--single" @submit.prevent="createSpot">
         <label><span>Nom de l’emplacement</span><input v-model="spotForm.name" required maxlength="64" placeholder="Ex. Parking Hôpital"></label>
