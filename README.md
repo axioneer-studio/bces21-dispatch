@@ -52,7 +52,7 @@ interventions et des radios, avec authentification Discord OAuth2.
 
 ### Hôpital (`/hopital`)
 
-- Page ouverte à tout compte ayant un rôle, avec deux onglets : Chambres et
+- Page ouverte à tous les comptes connectés, avec deux onglets : Chambres et
   Morgue.
 - Chambres : des chambres contenant des lits. Un lit est créé vide ; tout compte
   connecté y affecte un patient (nom, accident, date d’arrivée, raison de sa
@@ -65,16 +65,14 @@ interventions et des radios, avec authentification Discord OAuth2.
 - Morgue : défunts pris en charge, avec date du décès, identité, appartenance
   connue, informations communicables ou non, autopsie, médecin légiste,
   contacts d’urgence et possibilité de récupération par les proches. Un corps
-  en cellule réfrigérée, un cercueil et une urne s’affichent dans trois formes
-  de case différentes. L’autopsie et la récupération se renseignent après
-  l’ajout, d’un clic sur la case.
+  en cellule réfrigérée et une urne s’affichent dans deux formes de case
+  différentes. L’autopsie et la récupération se renseignent après l’ajout,
+  d’un clic sur la case.
 - Tout compte connecté ajoute, modifie et retire un défunt, et indique s’il est
   récupérable. L’autopsie et le légiste ne se renseignent que par un médecin légiste
   (permission applicative « Médecin légiste ») ou par la Direction (grade
   Direction) ; le légiste qui la déclare devient le légiste du défunt. Seuls
-  les légistes incinèrent un corps ou le mettent en cercueil, une fois
-  l’autopsie faite ; les deux s’excluent et figent ensuite l’autopsie et le
-  légiste.
+  les légistes procèdent à l’incinération.
 
 ### Ressources humaines (`/ressources-humaines`)
 
@@ -130,7 +128,7 @@ bces21-dispatch/
 │   ├── schemas.py      # schémas Pydantic (entrées / sorties)
 │   ├── deps.py         # dépendances FastAPI (auth)
 │   ├── agents.py       # routes /api/users
-│   ├── human_resources.py # employés, rôles, permissions
+│   ├── human_resources.py # employés, rôles, permissions, résumé du dashboard
 │   ├── dispatch.py     # routes /api/dispatch/* + WebSocket
 │   ├── cleanup.py      # purge des comptes incomplets
 │   ├── status_sync.py  # synchronisation Google Sheet (LSES / SAFD)
@@ -144,7 +142,7 @@ bces21-dispatch/
 │   ├── server/routes/favicon.ico.ts
 │   ├── public/         # logo, fond, robots.txt
 │   └── app/
-│       ├── pages/      # /, /dispatch, /hopital, /stock, /agenda, RH, profil
+│       ├── pages/      # /, /dashboard, /dispatch, /hopital, /agenda, RH, profil
 │       ├── middleware/ # contrôle global des accès aux pages
 │       ├── layouts/    # default, dispatch
 │       ├── components/ # 14 composants auto-importés
@@ -348,7 +346,7 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 3. Redirection selon l'état du compte :
    - profil incomplet → `/complete-profile?deadline=<iso>`
    - compte en attente → `/?status=pending`
-   - compte valide → `/dispatch`
+   - compte valide → `/dashboard`
 4. La **session** est un JWT HS256 (`sub`, `iat`, `exp`, `type`) stocké dans un
    cookie `HttpOnly` `bces_session` (`SameSite=Lax`, `Path=/`).
 
@@ -402,6 +400,8 @@ permission ; un compte en attente reçoit un `403`.
 | `DELETE` | `/api/employees/{id}` | Supprime un employé (RH + `manage_employees`) |
 | `GET` | `/api/employee-accounts` | Liste les comptes actifs (RH + `link_accounts`) |
 | `GET` | `/api/employee-grades` | Grades disponibles pour l’attribution RH |
+| `GET` | `/api/dashboard/summary` | Indicateurs agrégés du tableau de bord |
+
 ### Dispatch
 
 | Méthode | Chemin | Description |
@@ -438,14 +438,13 @@ permission ; un compte en attente reçoit un `403`.
 | `DELETE` | `/api/hospital/beds/{id}/patient` | Libère le lit (compte connecté) |
 | `POST` | `/api/hospital/bed-reasons` | Ajoute une raison proposée (`hospital.manage`) |
 | `DELETE` | `/api/hospital/bed-reasons/{id}` | Supprime une raison proposée (`hospital.manage`) |
-| `GET` | `/api/hospital/morgue` | Défunts, et droits du compte connecté sur l’autopsie, l’incinération et la mise en cercueil |
+| `GET` | `/api/hospital/morgue` | Défunts, et droits du compte connecté sur l’autopsie et l’incinération |
 | `POST` | `/api/hospital/morgue` | Ajoute un défunt (compte connecté) |
 | `PATCH` | `/api/hospital/morgue/{id}` | Modifie la fiche d’un défunt et sa récupération (compte connecté) |
 | `PUT` | `/api/hospital/morgue/{id}/autopsy` | Déclare l’autopsie faite ou non ; le légiste qui la déclare devient le légiste du défunt (`hospital.forensic` ou grade Direction) |
 | `PUT` | `/api/hospital/morgue/{id}/examiner` | Change le légiste du défunt, parmi les employés au rôle de légiste (`hospital.forensic` ou grade Direction) |
-| `POST` | `/api/hospital/morgue/{id}/incinerate` | Incinère le corps, qui devient une urne ; autopsie faite requise (`hospital.forensic`) |
-| `POST` | `/api/hospital/morgue/{id}/coffin` | Met le corps en cercueil ; autopsie faite requise (`hospital.forensic`) |
-| `DELETE` | `/api/hospital/morgue/{id}` | Retire un corps, un cercueil ou une urne de la morgue (compte connecté) |
+| `POST` | `/api/hospital/morgue/{id}/incinerate` | Incinère le corps, qui devient une urne (`hospital.forensic`) |
+| `DELETE` | `/api/hospital/morgue/{id}` | Retire un corps ou une urne de la morgue (compte connecté) |
 
 ---
 
@@ -515,7 +514,7 @@ d'employés.
 | `hospital_rooms` | Chambres de l’hôpital : `name`, `order` |
 | `hospital_beds` | Lits : `room_id` → `hospital_rooms` (cascade), `label`, puis le patient : `patient_name` (vide si le lit est libre), `accident`, `arrival_date`, `care_done`, `police_status` (`none` \| `to_notify` \| `notified`), `reason` |
 | `hospital_bed_reasons` | Raisons proposées pour la présence d’un patient dans un lit |
-| `morgue_entries` | Défunts de la morgue : `death_date`, `identity`, `affiliation`, `info_shareable`, `autopsy_done`, `examiner_id` → `employees`, `emergency_contacts`, `recoverable`, `incinerated_at` et `coffined_at` (vides tant que le corps est en cellule ; un seul des deux peut être rempli) |
+| `morgue_entries` | Défunts de la morgue : `death_date`, `identity`, `affiliation`, `info_shareable`, `autopsy_done`, `examiner_id` → `employees`, `emergency_contacts`, `recoverable`, `incinerated_at` (vide tant que le corps est en cellule) |
 | `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_bces`, `freq_shared` (fréquences actuelles, vides tant qu'elles ne sont pas réglées ; bornes dans `application_settings`), `radio_codes` |
 
 ### Créneaux amorcés
@@ -543,20 +542,15 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 | Route | Fichier | Description |
 |---|---|---|
 | `/` | `app/pages/index.vue` | Connexion Discord, gestion des erreurs `?error=` / `?status=pending` |
+| `/dashboard` | `app/pages/dashboard.vue` | KPI du roster et service en cours |
 | `/dispatch` | `app/pages/dispatch.vue` | Plateau de dispatch temps réel |
-| `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres et Morgue, ouverts à tout compte ayant un rôle |
-| `/stock` | `app/pages/stock.vue` | Stock du BCES (à venir) |
+| `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres, Morgue et Stock, ouverts à tous les comptes connectés |
 | `/agenda` | `app/pages/agenda.vue` | Agenda partagé |
 | `/ressources-humaines` | `app/pages/ressources-humaines.vue` | Employés, rôles et accès (selon les droits) |
 | `/complete-profile` | `app/pages/complete-profile.vue` | Formulaire prénom RP / nom RP / téléphone avec compte à rebours |
 
 Le middleware global vérifie `/api/me` avant l'accès aux pages privées. Les
 permissions sont aussi contrôlées par les dépendances FastAPI.
-
-Agenda, Hôpital et Stock n'ont pas de case dans les rôles : ils sont ouverts à
-tout compte ayant un rôle. Un compte sans rôle ne voit aucune page et est
-renvoyé vers `/acces-refuse` ; les API de l'Agenda et de l'Hôpital lui répondent
-`403` (dépendance `require_role`). Les super-admins ont accès à tout.
 
 ### Composables
 
@@ -580,7 +574,7 @@ renvoyé vers `/acces-refuse` ; les API de l'Agenda et de l'Hôpital lui répond
 | `AgentTile.vue` | Tuile agent compacte (nom, compétences, indicatif radio) |
 | `RadioPanel.vue` | Colonne radios (marche/arrêt, série, agent, fréquences) |
 | `RoomsPanel.vue` | Onglet Chambres de la page Hôpital : chambres, lits, affectation des patients, raisons proposées |
-| `MorguePanel.vue` | Onglet Morgue de la page Hôpital : cases des corps, des cercueils et des urnes, ajout, modification, incinération, mise en cercueil, retrait |
+| `MorguePanel.vue` | Onglet Morgue de la page Hôpital : cases des corps et des urnes, ajout, modification, incinération, retrait |
 | `StatusPicker.vue` | Liste déroulante statuts + lieux |
 | `ZipPicker.vue` | Saisie du code postal (validation différée 400 ms) |
 | `ToastStack.vue` | Pile de notifications (bas droite) |

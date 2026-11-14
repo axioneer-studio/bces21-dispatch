@@ -4,7 +4,7 @@ useHead({ title: 'Hôpital • BCES' })
 
 const hospitalSections = [
   { key: 'rooms', label: 'Chambres', icon: 'lucide:bed-double', title: 'Chambres', description: 'Occupation des chambres de l’hôpital.' },
-  { key: 'morgue', label: 'Morgue', icon: 'lucide:snowflake', title: 'Morgue', description: 'Corps en cellule réfrigérée et urnes des défunts incinérés.' }
+  { key: 'morgue', label: 'Morgue', icon: 'lucide:tombstone', title: 'Morgue', description: 'Corps en cellule réfrigérée et urnes des défunts incinérés.' }
 ] as const
 
 type HospitalSection = (typeof hospitalSections)[number]['key']

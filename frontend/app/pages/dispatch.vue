@@ -321,7 +321,7 @@ async function finishNoteEdit() {
 
         <div class="dp__lower-bottom">
           <section v-if="ipt" class="z z--ipt">
-            <header class="z__head"><Icon name="lucide:id-card" size="12" /><span>IPT</span></header>
+            <header class="z__head"><Icon name="lucide:accessibility" size="12" /><span>IPT</span></header>
             <SlotPanel
               :slot="ipt"
               :agents="agents"
