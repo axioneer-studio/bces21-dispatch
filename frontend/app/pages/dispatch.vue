@@ -311,7 +311,7 @@ async function finishNoteEdit() {
         </section>
 
         <section v-if="conges" class="z z--conges">
-          <header class="z__head"><Icon name="lucide:umbrella" size="12" /><span>Congés</span></header>
+          <header class="z__head"><Icon name="lucide:parasol" size="12" /><span>Congés</span></header>
           <SlotPanel
             :slot="conges"
             :agents="agents"
@@ -356,7 +356,7 @@ async function finishNoteEdit() {
       <div class="dp__tools">
         <section class="z z--fleet">
           <header class="z__head">
-            <Icon name="lucide:car-front" size="12" />
+            <Icon name="lucide:ambulance" size="12" />
             <span>Flotte de véhicules</span>
             <button
               type="button"

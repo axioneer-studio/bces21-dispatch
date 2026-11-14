@@ -216,7 +216,7 @@ const safdClass = computed(() => {
 
     <div class="dh__group">
       <span class="dh__chip dh__chip--readonly" :class="lsesClass">
-        <Icon name="lucide:door-open" size="14" />
+        <Icon name="lucide:hospital" size="14" />
         LSES : <strong>{{ lsesLabel }}</strong>
       </span>
     </div>
@@ -226,7 +226,7 @@ const safdClass = computed(() => {
         class="dh__chip dh__chip--readonly"
         :class="safdClass"
       >
-        <Icon name="lucide:truck" size="14" />
+        <Icon name="lucide:fire-extinguisher" size="14" />
         SAFD : <strong>{{ safdLabel }}</strong>
       </span>
     </div>
@@ -238,7 +238,7 @@ const safdClass = computed(() => {
         :disabled="resettingAssignments || !canResetDispatch"
         @click="confirmVisible = true"
       >
-        <Icon :name="resettingAssignments ? 'lucide:loader-circle' : 'lucide:rotate-ccw'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
+        <Icon :name="resettingAssignments ? 'lucide:tornado' : 'lucide:tornado'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
         {{ resettingAssignments ? 'Réinitialisation…' : 'Tempête' }}
       </button>
     </div>
