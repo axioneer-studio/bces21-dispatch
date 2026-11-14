@@ -162,8 +162,7 @@ function unassign(agentId: number) {
         :agents="agents"
         tone="assigned"
         draggable
-        :removable="!fixed"
-        @remove="unassign(a.id)"
+
       />
       <div v-if="!assigned.length && !fixed" class="iv__hint iv__hint--unassigned">
         À PRENDRE

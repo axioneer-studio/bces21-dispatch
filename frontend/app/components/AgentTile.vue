@@ -7,14 +7,12 @@ const props = withDefaults(
     agent: Agent
     agents?: Agent[]
     draggable?: boolean
-    removable?: boolean
     tone?: 'default' | 'assigned' | 'pool'
     compact?: boolean
   }>(),
   {
     agents: () => [],
     draggable: false,
-    removable: false,
     tone: 'default',
     compact: false
   }
@@ -22,7 +20,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   dragstart: []
-  remove: []
 }>()
 
 const gradeTextColor = computed(() => {
@@ -56,10 +53,7 @@ function onDragStart(e: DragEvent) {
   emit('dragstart')
 }
 
-function onRemove(e: MouseEvent) {
-  e.stopPropagation()
-  emit('remove')
-}
+
 </script>
 
 <template>
@@ -67,8 +61,7 @@ function onRemove(e: MouseEvent) {
     class="at"
     :class="[`at--${tone}`, {
       'at--compact': compact,
-      'at--graded': agent.grade_color,
-      'at--removable': removable
+      'at--graded': agent.grade_color
     }]"
     :style="agent.grade_color
       ? { '--at-grade-color': agent.grade_color, '--at-grade-text': gradeTextColor }
@@ -89,16 +82,6 @@ function onRemove(e: MouseEvent) {
       </span>
     </span>
     <span class="at__num">{{ agent.phone || '—' }}</span>
-    <button
-      v-if="removable"
-      type="button"
-      class="at__x"
-      draggable="true"
-      aria-label="Retirer"
-      @click="onRemove"
-    >
-      <Icon name="lucide:x" size="9" />
-    </button>
   </div>
 </template>
 
@@ -160,10 +143,6 @@ function onRemove(e: MouseEvent) {
   min-width: 0;
   overflow-wrap: anywhere;
   text-align: center;
-}
-
-.at--removable .at__name {
-  padding-right: 12px;
 }
 
 .at__skills {

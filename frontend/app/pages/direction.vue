@@ -382,7 +382,7 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
         <Icon name="lucide:shield" size="16" /> Grades <span>{{ grades.length }}</span>
       </button>
       <button id="direction-tab-radios" type="button" role="tab" :aria-selected="activeSection === 'radios'" aria-controls="direction-radios" :tabindex="activeSection === 'radios' ? 0 : -1" :class="{ 'is-active': activeSection === 'radios' }" @click="activeSection = 'radios'">
-        <Icon name="lucide:radio" size="16" /> Radios <span>{{ radios.length }}</span>
+        <Icon name="lucide:mic" size="16" /> Radios <span>{{ radios.length }}</span>
       </button>
       <button id="direction-tab-frequencies" type="button" role="tab" :aria-selected="activeSection === 'frequencies'" aria-controls="direction-frequencies" :tabindex="activeSection === 'frequencies' ? 0 : -1" :class="{ 'is-active': activeSection === 'frequencies' }" @click="activeSection = 'frequencies'">
         <Icon name="lucide:radio" size="16" /> Fréquences <span>{{ frequencySettings.length }}</span>

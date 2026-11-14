@@ -2,6 +2,7 @@
 import { resetAssignments, updateState } from '~/composables/useDispatchApi'
 import type { FrequencyKind } from '~/composables/useDispatchStore'
 import FrequencyPicker from '~/components/FrequencyPicker.vue'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 const props = defineProps<{
   canResetAssignments: boolean
@@ -14,7 +15,7 @@ const toast = useAppToast()
 const hospitalOpen = ref<boolean>(true)
 const hospitalMenu = ref<boolean>(false)
 const resettingAssignments = ref(false)
-const resetDialogOpen = ref(false)
+const confirmVisible = ref(false)
 const deleteInterventions = ref(false)
 
 const dynamicInterventions = computed(() =>
@@ -100,7 +101,7 @@ async function resetDispatchAssignments() {
         ? 'Dispatch réinitialisé : hôpital fermé, affectations retirées, radios éteintes et interventions supprimées.'
         : 'Dispatch réinitialisé : hôpital fermé, radios éteintes et employés remis hors service BCES.'
     )
-    resetDialogOpen.value = false
+    confirmVisible.value = false
     deleteInterventions.value = false
   } catch {
     toast.error('Réinitialisation du Dispatch impossible.')
@@ -234,7 +235,7 @@ const safdClass = computed(() => {
         type="button"
         class="dh__reset-button"
         :disabled="resettingAssignments || !canResetDispatch"
-        @click="resetDialogOpen = true"
+        @click="confirmVisible = true"
       >
         <Icon :name="resettingAssignments ? 'lucide:loader-circle' : 'lucide:rotate-ccw'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
         {{ resettingAssignments ? 'Réinitialisation…' : 'Tempête' }}
@@ -243,52 +244,19 @@ const safdClass = computed(() => {
 
   </header>
   <Teleport to="body">
-    <div
-      v-if="resetDialogOpen"
-      class="dh-modal"
-      role="presentation"
-      @click.self="resetDialogOpen = false"
-      @keydown.esc="resetDialogOpen = false"
-    >
-      <section
-        class="dh-modal__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dh-reset-title"
-        aria-describedby="dh-reset-description"
-      >
-        <div class="dh-modal__header">
-          <div class="dh-modal__icon">
-            <Icon name="lucide:alert-triangle" size="18" />
-          </div>
-          <div>
-            <h2 id="dh-reset-title">Réinitialiser le Dispatch ?</h2>
-            <p id="dh-reset-description">
-              Les employés affectés seront remis dans « Hors service BCES », les radios ON ou indisponibles passeront OFF et l’hôpital sera fermé.
-            </p>
-          </div>
-          <button type="button" class="dh-modal__close" aria-label="Fermer" @click="resetDialogOpen = false">
-            <Icon name="lucide:x" size="16" />
-          </button>
-        </div>
-        <label v-if="props.canDeleteInterventions" class="dh-modal__option">
-          <input v-model="deleteInterventions" type="checkbox">
-          <span>
-            <strong>Supprimer aussi toutes les interventions et consultations</strong>
-            <small>{{ dynamicInterventions.length }} case{{ dynamicInterventions.length > 1 ? 's' : '' }} concernée{{ dynamicInterventions.length > 1 ? 's' : '' }}</small>
-          </span>
-        </label>
-        <div class="dh-modal__actions">
-          <button type="button" class="dh-modal__cancel" :disabled="resettingAssignments" @click="resetDialogOpen = false">
-            Annuler
-          </button>
-          <button type="button" class="dh-modal__confirm" :disabled="resettingAssignments" @click="resetDispatchAssignments">
-            <Icon :name="resettingAssignments ? 'lucide:loader-circle' : 'lucide:rotate-ccw'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
-            {{ resettingAssignments ? 'Réinitialisation…' : 'Confirmer' }}
-          </button>
-        </div>
-      </section>
-    </div>
+    <ConfirmDialog
+      v-model:visible="confirmVisible"
+      title="Réinitialiser le Dispatch ?"
+      message="Les affectations seront retirées, les radios éteintes et l’hôpital fermé."
+      confirm-label="Confirmer"
+      cancel-label="Annuler"
+      danger
+      :checkbox-label="dynamicInterventions.length > 0 ? `Supprimer aussi ${dynamicInterventions.length === 1 ? 'l\'intervention' : `les ${dynamicInterventions.length} interventions`}` : undefined"
+      :checkbox-checked="deleteInterventions"
+      @confirm="resetDispatchAssignments"
+      @cancel="confirmVisible = false"
+      @update:checkboxChecked="deleteInterventions = $event"
+    />
 
     <FrequencyPicker
       v-if="editingFrequencyKind"
@@ -690,5 +658,35 @@ const safdClass = computed(() => {
 @keyframes dh-panel-in {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dh-reset-option {
+  display: flex;
+  justify-content: center;
+  padding: 12px 24px;
+  background: var(--dp-panel-2);
+  border-top: 1px solid var(--dp-line);
+}
+
+.dh-reset-option__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dp-text);
+  cursor: pointer;
+}
+
+.dh-reset-option__label input {
+  accent-color: var(--dp-danger);
+}
+
+.dh-reset-option__label strong {
+  color: var(--dp-text);
+}
+
+.dh-reset-option__label small {
+  color: var(--dp-text-dim);
+  font-size: 10px;
 }
 </style>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
+
 interface MorgueEntry {
   id: number
   death_date: string
@@ -57,9 +59,32 @@ const loadError = ref('')
 const busyId = ref<number | null>(null)
 
 const dialog = ref<HTMLDialogElement | null>(null)
+const confirmVisible = ref(false)
+const confirmMessage = ref('')
+let confirmResolve: ((value: boolean) => void) | null = null
 const editingId = ref<number | null>(null)
 const saving = ref(false)
 const formError = ref('')
+
+async function confirm(message: string): Promise<boolean> {
+  confirmMessage.value = message
+  return new Promise((resolve) => {
+    confirmResolve = resolve
+    confirmVisible.value = true
+  })
+}
+
+function onConfirm() {
+  confirmVisible.value = false
+  confirmResolve?.(true)
+  confirmResolve = null
+}
+
+function onCancel() {
+  confirmVisible.value = false
+  confirmResolve?.(false)
+  confirmResolve = null
+}
 const form = reactive({
   death_date: '',
   identity: '',
@@ -132,7 +157,7 @@ async function load() {
 
 /** Rafraîchissement en arrière-plan, sans toucher à un défunt en cours de modification. */
 function refresh() {
-  if (!props.active || saving.value || busyId.value !== null || dialog.value?.open) return
+  if (!props.active || saving.value || busyId.value !== null || dialog.value?.open || confirmVisible.value) return
   void load()
 }
 
@@ -149,6 +174,9 @@ onBeforeUnmount(() => {
 watch(() => props.active, (active) => {
   if (active) refresh()
 })
+/* Popups à la place des alertes inline. */
+watch(loadError, (msg) => { if (msg) toast.error(msg) })
+watch(formError, (msg) => { if (msg) toast.error(msg) })
 
 function openDialog(entry?: MorgueEntry) {
   editingId.value = entry?.id ?? null
@@ -266,7 +294,7 @@ const FINAL_ACTIONS = {
 async function finalize(entry: MorgueEntry, action: keyof typeof FINAL_ACTIONS) {
   if (busyId.value !== null) return
   const texts = FINAL_ACTIONS[action]
-  if (!window.confirm(texts.confirm(entryLabel(entry)))) return
+  if (!(await confirm(texts.confirm(entryLabel(entry))))) return
   busyId.value = entry.id
   try {
     const saved = await $fetch<MorgueEntry>(`/api/hospital/morgue/${entry.id}/${action}`, {
@@ -285,7 +313,7 @@ async function finalize(entry: MorgueEntry, action: keyof typeof FINAL_ACTIONS) 
 async function remove(entry: MorgueEntry) {
   if (busyId.value !== null) return
   const what = STATES[entryState(entry)].removeLabel
-  if (!window.confirm(`Retirer ${what} de ${entryLabel(entry)} de la morgue ?`)) return
+  if (!(await confirm(`Retirer ${what} de ${entryLabel(entry)} de la morgue ?`))) return
   busyId.value = entry.id
   try {
     await $fetch(`/api/hospital/morgue/${entry.id}`, { method: 'DELETE', credentials: 'include' })
@@ -303,17 +331,13 @@ async function remove(entry: MorgueEntry) {
   <div class="morgue">
     <div class="morgue__toolbar">
       <div class="morgue__counts" aria-label="Résumé de la morgue">
-        <span class="morgue__count"><span class="morgue__shape morgue__shape--body" aria-hidden="true"></span><strong>{{ counts.body }}</strong> corps en cellule</span>
-        <span class="morgue__count"><span class="morgue__shape morgue__shape--coffin" aria-hidden="true"></span><strong>{{ counts.coffin }}</strong> cercueil{{ counts.coffin > 1 ? 's' : '' }}</span>
-        <span class="morgue__count"><span class="morgue__shape morgue__shape--urn" aria-hidden="true"></span><strong>{{ counts.urn }}</strong> urne{{ counts.urn > 1 ? 's' : '' }}</span>
+        <span class="morgue__count"><Icon name="lucide:snowflake" size="24" class="morgue__shape morgue__shape--body" aria-hidden="true" /><strong>{{ counts.body }}</strong> corps en cellule</span>
+        <span class="morgue__count"><Icon name="lucide:cross" size="24" class="morgue__shape morgue__shape--coffin" aria-hidden="true" /><strong>{{ counts.coffin }}</strong> cercueil{{ counts.coffin > 1 ? 's' : '' }}</span>
+        <span class="morgue__count"><Icon name="lucide:amphora" size="24" class="morgue__shape morgue__shape--urn" aria-hidden="true" /><strong>{{ counts.urn }}</strong> urne{{ counts.urn > 1 ? 's' : '' }}</span>
       </div>
       <button type="button" class="morgue-button morgue-button--primary" @click="openDialog()">
         <Icon name="lucide:plus" size="16" /> Ajouter un défunt
       </button>
-    </div>
-
-    <div v-if="loadError" class="morgue__error" role="alert">
-      <Icon name="lucide:circle-alert" size="16" /><span>{{ loadError }}</span>
     </div>
 
     <div v-if="sortedEntries.length" class="morgue__grid">
@@ -466,8 +490,6 @@ async function remove(entry: MorgueEntry) {
           <label class="morgue-form__check morgue-form__wide"><input v-model="form.info_shareable" type="checkbox"> Informations communicables</label>
         </div>
 
-        <p v-if="formError" class="morgue__error" role="alert"><Icon name="lucide:circle-alert" size="16" /><span>{{ formError }}</span></p>
-
         <footer class="morgue-dialog__footer">
           <button type="button" class="morgue-button" :disabled="saving" @click="closeDialog">Annuler</button>
           <button type="submit" class="morgue-button morgue-button--primary" :disabled="saving">
@@ -477,6 +499,14 @@ async function remove(entry: MorgueEntry) {
         </footer>
       </form>
     </dialog>
+
+    <ConfirmDialog
+      v-model:visible="confirmVisible"
+      title="Confirmation"
+      :message="confirmMessage"
+      @confirm="onConfirm"
+      @cancel="onCancel"
+    />
   </div>
 </template>
 
@@ -486,11 +516,12 @@ async function remove(entry: MorgueEntry) {
 .morgue__count { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-2); background: var(--dp-panel-2); font-size: 11px; }
 .morgue__count strong { color: var(--dp-text); font-size: 14px; font-variant-numeric: tabular-nums; }
 
-/* Les deux formes de case, reprises en miniature dans le résumé. */
-.morgue__shape { display: inline-block; flex-shrink: 0; border: 1.5px solid currentColor; }
-.morgue__shape--body { width: 18px; height: 11px; border-radius: 2px; color: var(--dp-info); }
-.morgue__shape--urn { width: 11px; height: 15px; border-radius: 6px 6px 3px 3px; color: var(--dp-warn); }
-.morgue__shape--coffin { width: 11px; height: 17px; border: 0; background: var(--coffin); clip-path: var(--coffin-shape); }
+/* Icônes du résumé : taille uniforme et alignement avec le texte. */
+.morgue__shape { display: inline-block; flex-shrink: 0; width: 24px; height: 24px; vertical-align: middle; margin-right: 6px; }
+.morgue__shape svg { width: 100%; height: 100%; display: block; }
+.morgue__shape--body { color: var(--dp-info); }
+.morgue__shape--coffin { color: var(--coffin); }
+.morgue__shape--urn { color: var(--dp-warn); }
 
 /* Bois du cercueil, et sa silhouette : épaules larges, tête et pied plus étroits. */
 .morgue { --coffin: #c08b5c; --coffin-soft: rgba(192, 139, 92, .14); --coffin-line: rgba(192, 139, 92, .5); --coffin-shape: polygon(26% 0, 74% 0, 100% 15%, 90% 100%, 10% 100%, 0 15%); }
@@ -500,23 +531,18 @@ async function remove(entry: MorgueEntry) {
 
 .morgue-case { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--dp-line); background: var(--dp-panel-2); transition: border-color .16s ease, opacity .16s ease; }
 .morgue-case[aria-busy='true'] { opacity: .6; }
-/* Corps : porte de cellule réfrigérée, angles droits et poignée en haut. */
-.morgue-case--body { border-radius: 6px; border-top: 4px solid var(--dp-info); padding-top: 18px; background: linear-gradient(180deg, var(--dp-info-soft), transparent 46%), var(--dp-panel-2); }
-.morgue-case--body::before { content: ''; position: absolute; top: 7px; left: 50%; width: 42px; height: 4px; transform: translateX(-50%); border-radius: 2px; background: color-mix(in srgb, var(--dp-info) 55%, transparent); }
-/* Urne : sommet en arche, bord doré. */
-.morgue-case--urn { border-color: var(--dp-warn-line); border-radius: 120px 120px 14px 14px; padding-top: 34px; background: radial-gradient(ellipse at 50% 0, var(--dp-warn-soft), transparent 62%), var(--dp-panel-2); }
+/* Toutes les cases ont la même forme : seuls la couleur de l’icône et le libellé changent. */
+.morgue-case--body { border-top: 4px solid var(--dp-info); padding-top: 18px; }
+.morgue-case--body .morgue-case__kind { color: var(--dp-info); }
+.morgue-case--urn { border-top: 4px solid var(--dp-warn); padding-top: 18px; }
+.morgue-case--urn .morgue-case__kind { color: var(--dp-warn); }
+.morgue-case--coffin { border-top: 4px solid var(--coffin); padding-top: 18px; }
+.morgue-case--coffin .morgue-case__kind { color: var(--coffin); }
 
 /* En-tête, identité et appartenance centrés, pour un corps comme pour une urne. */
 .morgue-case__head { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--dp-text-dim); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
 .morgue-case__head time { color: var(--dp-text); font-size: 12px; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .morgue-case__kind { display: inline-flex; align-items: center; gap: 5px; text-transform: uppercase; }
-.morgue-case--body .morgue-case__kind { color: var(--dp-info); }
-.morgue-case--urn .morgue-case__kind { color: var(--dp-warn); }
-/* Cercueil : silhouette découpée, bord en bois. Le fond de la case est le bord ; le
-   pseudo-élément, en retrait, porte le fond intérieur. */
-.morgue-case--coffin { isolation: isolate; padding: 34px 11% 22px; border: 0; background: var(--coffin-line); clip-path: var(--coffin-shape); }
-.morgue-case--coffin::before { content: ''; position: absolute; inset: 1.5px; z-index: -1; clip-path: var(--coffin-shape); background: linear-gradient(180deg, var(--coffin-soft), transparent 40%), var(--dp-panel-2); }
-.morgue-case--coffin .morgue-case__kind { color: var(--coffin); }
 .morgue-case__hint { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 0; color: var(--dp-text-dim); font-size: 10px; text-align: center; }
 .morgue-case__identity { margin: 0; overflow-wrap: anywhere; text-align: center; color: var(--dp-text); font-size: 14px; font-weight: 700; }
 .morgue-case__identity.is-unknown { color: var(--dp-text-dim); font-style: italic; font-weight: 600; }
@@ -558,8 +584,6 @@ async function remove(entry: MorgueEntry) {
 
 .morgue__empty { display: grid; min-height: 170px; justify-items: center; align-content: center; gap: 9px; padding: 24px; border: 1px dashed var(--dp-line-strong); border-radius: 14px; color: var(--dp-text-dim); text-align: center; font-size: 12px; }
 .morgue__empty p { margin: 0; }
-.morgue__error { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--dp-danger-line); border-radius: 10px; color: #f0a29d; background: var(--dp-danger-soft); font-size: 12px; }
-
 .morgue-dialog { position: fixed; inset: 50% auto auto 50%; width: min(640px, calc(100vw - 28px)); max-height: min(90dvh, 760px); margin: 0; padding: 0; overflow: auto; transform: translate(-50%, -50%); border: 1px solid var(--dp-line-strong); border-radius: 18px; color: var(--dp-text); background: var(--dp-panel); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }
 .morgue-dialog::backdrop { background: rgba(5, 8, 11, .76); backdrop-filter: blur(5px); }
 .morgue-dialog__content { display: grid; gap: 16px; margin: 0; padding: clamp(18px, 4vw, 26px); }
