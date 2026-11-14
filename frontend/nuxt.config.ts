@@ -41,7 +41,7 @@ export default defineNuxtConfig({
         { name: 'theme-color', content: '#21252b' }
       ],
       link: [
-        { rel: 'icon', type: 'image/png', href: '/images/favicon.png' }
+        { rel: 'icon', type: 'image/png', href: 'https://s3.axioneer.com/bces21-dispatch/images/favicon.png' }
       ]
     }
   },

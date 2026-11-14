@@ -6,7 +6,7 @@ defineProps<{
 
 <template>
   <NuxtLink to="/" class="bces-brand" aria-label="BCES Dispatch - Accueil">
-    <img src="/images/logo.webp" alt="BCES Dispatch" :width="size ?? 44" :height="size ?? 44" />
+    <img src="https://s3.axioneer.com/bces21-dispatch/images/logo.webp" alt="BCES Dispatch" :width="size ?? 44" :height="size ?? 44" />
     <span class="bces-brand__name">BCES</span>
   </NuxtLink>
 </template>

@@ -1,11 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
-const logoPath = join(process.cwd(), 'public', 'images', 'favicon.png')
-const logoBuffer = readFileSync(logoPath)
+import { sendRedirect } from 'h3'
 
 export default defineEventHandler((event) => {
-  setHeader(event, 'Content-Type', 'image/png')
-  setHeader(event, 'Cache-Control', 'public, max-age=86400')
-  return logoBuffer
+  return sendRedirect(event, 'https://s3.axioneer.com/bces21-dispatch/images/favicon.png', 301)
 })
