@@ -42,7 +42,7 @@ if (!meData.value) {
 }
 
 if (meData.value?.prenom_rp && meData.value?.nom_rp) {
-  await navigateTo('/dashboard')
+  await navigateTo('/dispatch')
 }
 
 const prenom = ref<string>('')
@@ -238,7 +238,7 @@ async function submit() {
       return
     }
     toast.success('Compte activé. Bienvenue !')
-    await navigateTo('/dashboard')
+    await navigateTo('/dispatch')
   } catch (e: unknown) {
     const fetchError = e as { data?: { detail?: string | string[] }; statusMessage?: string }
     const detail = fetchError.data?.detail

@@ -7,6 +7,8 @@ from models import User
 
 APP_PERMISSION_CATALOG = {
     "human_resources.link_accounts": "Lier ou délier un compte utilisateur à une tuile employé",
+    "hospital.forensic": "Médecin Légiste",
+    "hospital.manage": "Gérer l’hôpital",
 }
 
 

@@ -288,3 +288,77 @@ class FleetEntry(Base):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class HospitalRoom(Base):
+    """Chambre de l'hôpital, qui contient des lits."""
+
+    __tablename__ = "hospital_rooms"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    beds: Mapped[list["HospitalBed"]] = relationship(
+        back_populates="room",
+        cascade="all, delete-orphan",
+        order_by="HospitalBed.id",
+        lazy="selectin",
+    )
+
+
+class HospitalBed(Base):
+    """Lit d'une chambre. Créé vide ; les champs du patient sont remplis à l'affectation."""
+
+    __tablename__ = "hospital_beds"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    room_id: Mapped[int] = mapped_column(
+        ForeignKey("hospital_rooms.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    room: Mapped["HospitalRoom"] = relationship(back_populates="beds")
+    label: Mapped[str] = mapped_column(String(32), nullable=False)
+    patient_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    accident: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    arrival_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    care_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Forces de l'ordre : « none » (non concernées), « to_notify » (à prévenir), « notified » (prévenues).
+    police_status: Mapped[str] = mapped_column(String(16), default="none", nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class HospitalBedReason(Base):
+    """Raison proposée pour la présence d'un patient dans un lit (liste non exhaustive)."""
+
+    __tablename__ = "hospital_bed_reasons"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MorgueEntry(Base):
+    """Un défunt pris en charge par la morgue : corps en cellule réfrigérée, puis
+    urne s'il est incinéré, ou cercueil s'il y est mis. Les deux sont réservés aux
+    médecins légistes, après l'autopsie, et s'excluent l'un l'autre."""
+
+    __tablename__ = "morgue_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    death_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    identity: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    affiliation: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    info_shareable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    autopsy_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    examiner_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
+    examiner: Mapped[Optional["Employee"]] = relationship(lazy="selectin")
+    emergency_contacts: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    recoverable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    incinerated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    coffined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

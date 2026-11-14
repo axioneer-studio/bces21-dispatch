@@ -83,6 +83,10 @@ _VEHICLE_ALTER_STATEMENTS = [
     "ALTER TABLE vehicles ADD COLUMN model VARCHAR(64)",
 ]
 
+_MORGUE_ALTER_STATEMENTS = [
+    "ALTER TABLE morgue_entries ADD COLUMN coffined_at TIMESTAMP WITH TIME ZONE",
+]
+
 
 async def _run_user_migrations(conn) -> None:
     for stmt in _USER_ALTER_STATEMENTS:
@@ -137,6 +141,15 @@ async def _run_grade_migrations(conn) -> None:
 
 async def _run_vehicle_migrations(conn) -> None:
     for stmt in _VEHICLE_ALTER_STATEMENTS:
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
+
+
+async def _run_morgue_migrations(conn) -> None:
+    for stmt in _MORGUE_ALTER_STATEMENTS:
         try:
             async with conn.begin_nested():
                 await conn.execute(text(stmt))
@@ -290,6 +303,7 @@ async def init_db() -> None:
         await _run_employee_migrations(conn)
         await _run_grade_migrations(conn)
         await _run_vehicle_migrations(conn)
+        await _run_morgue_migrations(conn)
         await _run_access_migrations(conn)
         await _run_dispatch_migrations(conn)
 

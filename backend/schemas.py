@@ -859,3 +859,184 @@ class AgendaEventOut(BaseModel):
     color: str
     created_at: datetime
     updated_at: datetime
+
+
+class MorgueEntryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    death_date: date
+    identity: str = Field(default="", max_length=120)
+    affiliation: str = Field(default="", max_length=64)
+    info_shareable: bool = False
+    emergency_contacts: str = Field(default="", max_length=500)
+
+    @field_validator("identity", "affiliation", "emergency_contacts")
+    @classmethod
+    def _trim_morgue_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class MorgueEntryUpdate(MorgueEntryCreate):
+    """La récupération se renseigne après l'ajout, depuis la case. L'autopsie et le
+    légiste passent par `MorgueAutopsyRequest`, réservé aux légistes et à la Direction."""
+
+    death_date: Optional[date] = None
+    identity: Optional[str] = Field(default=None, max_length=120)
+    affiliation: Optional[str] = Field(default=None, max_length=64)
+    info_shareable: Optional[bool] = None
+    emergency_contacts: Optional[str] = Field(default=None, max_length=500)
+    recoverable: Optional[bool] = None
+
+    @field_validator("identity", "affiliation", "emergency_contacts")
+    @classmethod
+    def _trim_morgue_text(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value is not None else None
+
+    @field_validator("death_date", "info_shareable", "recoverable")
+    @classmethod
+    def _required_when_sent(cls, value, info: ValidationInfo):
+        if value is None:
+            raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
+        return value
+
+
+class MorgueAutopsyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    done: bool
+
+
+class MorgueExaminerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    examiner_id: Optional[int] = None
+
+
+class MorgueExaminerOut(BaseModel):
+    id: int
+    name: str
+
+
+class MorgueEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    death_date: date
+    identity: str
+    affiliation: str
+    info_shareable: bool
+    autopsy_done: bool
+    examiner_id: Optional[int]
+    examiner_name: Optional[str] = None
+    emergency_contacts: str
+    recoverable: bool
+    incinerated_at: Optional[datetime]
+    coffined_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+
+class MorgueOut(BaseModel):
+    entries: list[MorgueEntryOut]
+    examiners: list[MorgueExaminerOut]
+    can_manage_autopsy: bool
+    # Médecin légiste : incinération et mise en cercueil.
+    is_forensic: bool
+
+
+class HospitalRoomRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _room_name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom de la chambre")
+
+
+class HospitalBedReasonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _reason_name(cls, value: str) -> str:
+        return _clean_required(value, "La raison")
+
+
+PoliceStatus = Literal["none", "to_notify", "notified"]
+
+
+class HospitalPatientRequest(BaseModel):
+    """Affectation d'un patient à un lit, ou mise à jour de sa fiche."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    patient_name: str = Field(min_length=1, max_length=120)
+    accident: str = Field(default="", max_length=200)
+    arrival_date: date
+    police_status: PoliceStatus = "none"
+    reason: str = Field(default="", max_length=64)
+
+    @field_validator("patient_name")
+    @classmethod
+    def _patient_name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du patient")
+
+    @field_validator("accident", "reason")
+    @classmethod
+    def _trim_patient_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class HospitalBedFlagsRequest(BaseModel):
+    """Soins et forces de l'ordre, changés d'un clic sur la case du lit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    care_done: Optional[bool] = None
+    police_status: Optional[PoliceStatus] = None
+
+    @field_validator("care_done", "police_status")
+    @classmethod
+    def _flag_required_when_sent(cls, value, info: ValidationInfo):
+        if value is None:
+            raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
+        return value
+
+
+class HospitalBedOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    room_id: int
+    label: str
+    patient_name: Optional[str]
+    accident: str
+    arrival_date: Optional[date]
+    care_done: bool
+    police_status: PoliceStatus
+    reason: str
+
+
+class HospitalRoomOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    beds: list[HospitalBedOut]
+
+
+class HospitalBedReasonOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class HospitalRoomsOut(BaseModel):
+    rooms: list[HospitalRoomOut]
+    reasons: list[HospitalBedReasonOut]
+    can_manage: bool

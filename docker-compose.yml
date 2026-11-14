@@ -44,9 +44,11 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in the Coolify environment}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in the Coolify environment}
       # Clé Fernet (base64, 32 octets) pour chiffrer le JSON du compte de service sur S3.
+      # Optionnelle : sans elle, le backend démarre sans chiffrement et les appels S3
+      # de credentials échouent proprement (« Clé de chiffrement non configurée »).
       # À définir dans les Environment Variables de Coolify. Générer avec :
       #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-      GOOGLE_SA_ENCRYPTION_KEY: ${GOOGLE_SA_ENCRYPTION_KEY:?Set GOOGLE_SA_ENCRYPTION_KEY in the Coolify environment}
+      GOOGLE_SA_ENCRYPTION_KEY: ${GOOGLE_SA_ENCRYPTION_KEY:-}
       STATUS_SYNC_INTERVAL_SECONDS: "10"
     expose:
       - "8000"

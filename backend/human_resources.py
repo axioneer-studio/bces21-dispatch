@@ -1,7 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -13,7 +13,7 @@ from deps import (
     user_has_page_access,
 )
 from grade_permissions import parse_grade_permissions, require_grade_permission
-from models import DispatchAssignment, DispatchRadio, DispatchSlot, Employee, Grade, User
+from models import DispatchAssignment, DispatchRadio, Employee, Grade, User
 from schemas import (
     EmployeeAccountLinkRequest,
     EmployeeCreateRequest,
@@ -138,33 +138,6 @@ async def list_employee_grade_options(db: AsyncSession = Depends(get_db)):
         GradeOption(id=grade.id, name=grade.name, level=grade.level, color=grade.color)
         for grade in grades
     ]
-
-
-@router.get(
-    "/dashboard/summary",
-    dependencies=[Depends(require_page_access("dashboard"))],
-)
-async def dashboard_summary(db: AsyncSession = Depends(get_db)):
-    active_employees = await db.scalar(
-        select(func.count(Employee.id)).where(Employee.is_active.is_(True))
-    )
-    assigned_employees = await db.scalar(
-        select(func.count(func.distinct(DispatchAssignment.employee_id)))
-    )
-    intervention_count = await db.scalar(
-        select(func.count(DispatchSlot.id)).where(
-            DispatchSlot.kind.in_(("intervention", "consultation"))
-        )
-    )
-    online_radios = await db.scalar(
-        select(func.count(DispatchRadio.id)).where(DispatchRadio.is_on.is_(True))
-    )
-    return {
-        "assigned_employees": assigned_employees or 0,
-        "available_employees": max(0, (active_employees or 0) - (assigned_employees or 0)),
-        "interventions": intervention_count or 0,
-        "online_radios": online_radios or 0,
-    }
 
 
 @router.post(
