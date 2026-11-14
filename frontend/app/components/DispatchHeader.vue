@@ -7,6 +7,7 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue'
 const props = defineProps<{
   canResetAssignments: boolean
   canDeleteInterventions: boolean
+  canManageFrequencies?: boolean
 }>()
 
 const { state, snapshot, applyResetSnapshot } = useDispatchStore()
@@ -66,7 +67,7 @@ function closeFrequencyPicker() {
   editingFrequencyKind.value = null
 }
 
-async function onFrequencyUpdated(kind: FrequencyKind, value: string | null) {
+async function onFrequencyUpdated() {
   // La mise à jour est gérée par le composant FrequencyPicker via l'API Direction.
   // On recharge le snapshot via le WebSocket (broadcast) ou on attend la prochaine réception.
   closeFrequencyPicker()
@@ -265,6 +266,7 @@ const safdClass = computed(() => {
       :current="editingCurrent"
       :min="editingBounds.min"
       :max="editingBounds.max"
+      :can-manage-frequencies="props.canManageFrequencies"
       @update:current="onFrequencyUpdated"
       @close="closeFrequencyPicker"
     />

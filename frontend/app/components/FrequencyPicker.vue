@@ -8,6 +8,7 @@ const props = defineProps<{
   current: string | null
   min: number | null
   max: number | null
+  canManageFrequencies?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -87,6 +88,12 @@ async function generateRandom() {
 function close() {
   emit('close')
 }
+
+async function goToFrequencySettings() {
+  if (!props.canManageFrequencies) return
+  close()
+  await navigateTo('/direction#frequencies')
+}
 </script>
 
 <template>
@@ -160,7 +167,15 @@ function close() {
             </button>
             <p class="fp-bounds">
               <span v-if="props.min != null && props.max != null">Entre {{ props.min }} et {{ props.max }} MHz</span>
-              <span v-else class="fp-bounds--missing">Bornes non définies dans Direction → Fréquences</span>
+              <span
+                v-else
+                class="fp-bounds--missing"
+                :class="{ 'fp-bounds--link': props.canManageFrequencies }"
+                @click="goToFrequencySettings"
+                :style="{ cursor: props.canManageFrequencies ? 'pointer' : 'default' }"
+              >
+                Bornes non définies dans Direction → Fréquences
+              </span>
             </p>
           </div>
         </div>
@@ -434,6 +449,18 @@ function close() {
 
 .fp-bounds--missing {
   color: var(--dp-warn);
+}
+
+.fp-bounds--link {
+  color: var(--dp-accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.fp-bounds--link:hover {
+  color: var(--dp-accent);
+  opacity: 0.9;
 }
 
 .fp-footer {
