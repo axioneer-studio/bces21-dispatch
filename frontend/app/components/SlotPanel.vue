@@ -8,7 +8,6 @@ const props = defineProps<{
   pool?: Agent[]
   agents: Agent[]
   accent?: string
-  removable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -114,8 +113,7 @@ function unassign(agentId: number) {
       :agents="agents"
       tone="assigned"
       draggable
-      :removable="!isPool && removable !== false"
-      @remove="unassign(a.id)"
+
     />
     <EmptySlotState
       v-if="!displayedAgents.length"

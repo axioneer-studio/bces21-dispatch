@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
+
 interface HospitalBed {
   id: number
   room_id: number
@@ -80,6 +82,30 @@ const otherReason = ref('')
 const reasonsDialog = ref<HTMLDialogElement | null>(null)
 const newReasonName = ref('')
 const reasonError = ref('')
+/** Popup de confirmation (remplace window.confirm). */
+const confirmVisible = ref(false)
+const confirmMessage = ref('')
+let confirmResolve: ((value: boolean) => void) | null = null
+
+async function confirm(message: string): Promise<boolean> {
+  confirmMessage.value = message
+  return new Promise((resolve) => {
+    confirmResolve = resolve
+    confirmVisible.value = true
+  })
+}
+
+function onConfirm() {
+  confirmVisible.value = false
+  confirmResolve?.(true)
+  confirmResolve = null
+}
+
+function onCancel() {
+  confirmVisible.value = false
+  confirmResolve?.(false)
+  confirmResolve = null
+}
 
 const bedCount = computed(() => rooms.value.reduce((total, room) => total + room.beds.length, 0))
 const occupiedCount = computed(() =>
@@ -209,8 +235,8 @@ async function saveRoom() {
   }
 }
 
-function deleteRoom(room: HospitalRoom) {
-  if (!window.confirm(`Supprimer la chambre « ${room.name} » et ses ${room.beds.length} lit(s) ?`)) return
+async function deleteRoom(room: HospitalRoom) {
+  if (!(await confirm(`Supprimer la chambre « ${room.name} » et ses ${room.beds.length} lit(s) ?`))) return
   void run(
     () => $fetch(`/api/hospital/rooms/${room.id}`, { method: 'DELETE', credentials: 'include' }),
     'Chambre supprimée.',
@@ -226,8 +252,8 @@ function addBed(room: HospitalRoom) {
   )
 }
 
-function deleteBed(room: HospitalRoom, bed: HospitalBed) {
-  if (!window.confirm(`Supprimer le ${bed.label} de « ${room.name} » ?`)) return
+async function deleteBed(room: HospitalRoom, bed: HospitalBed) {
+  if (!(await confirm(`Supprimer le ${bed.label} de « ${room.name} » ?`))) return
   void run(
     () => $fetch(`/api/hospital/beds/${bed.id}`, { method: 'DELETE', credentials: 'include' }),
     'Lit supprimé.',
@@ -307,8 +333,8 @@ function toggleFlag(bed: HospitalBed, field: 'care_done' | 'police_status') {
   )
 }
 
-function releaseBed(bed: HospitalBed) {
-  if (!window.confirm(`Libérer le ${bed.label} occupé par « ${bed.patient_name} » ?`)) return
+async function releaseBed(bed: HospitalBed) {
+  if (!(await confirm(`Libérer le ${bed.label} occupé par « ${bed.patient_name} » ?`))) return
   void run(
     () => $fetch(`/api/hospital/beds/${bed.id}/patient`, { method: 'DELETE', credentials: 'include' }),
     'Lit libéré.',
@@ -552,6 +578,14 @@ function deleteReason(reason: BedReason) {
         <p v-else class="rooms-dialog__hint">Aucune raison pour l’instant.</p>
       </div>
     </dialog>
+
+    <ConfirmDialog
+      v-model:visible="confirmVisible"
+      title="Confirmation"
+      :message="confirmMessage"
+      @confirm="onConfirm"
+      @cancel="onCancel"
+    />
   </div>
 </template>
 
