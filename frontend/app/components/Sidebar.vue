@@ -51,8 +51,8 @@ const items: NavItem[] = [
   { to: '/administration', label: 'Administration', icon: 'lucide:settings', page: 'administration' }
 ]
 
-/** Pages ouvertes à tous les comptes connectés, sans case à cocher dans les rôles. */
-const PUBLIC_PAGES = new Set(['agenda', 'hospital', 'stock'])
+/** Pages ouvertes à tout compte validé, même sans rôle : elles n'ont pas de case à cocher dans les rôles. */
+const PUBLIC_PAGES = new Set(['dispatch', 'hospital', 'agenda', 'stock'])
 
 const visibleItems = computed(() => items.filter((item) =>
   PUBLIC_PAGES.has(item.page)

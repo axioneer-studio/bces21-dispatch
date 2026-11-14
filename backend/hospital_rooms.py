@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from deps import get_current_user, require_role
+from deps import get_current_user, require_page_access
 from hospital_access import require_hospital_manage, user_can_manage_hospital
 from models import HospitalBed, HospitalBedReason, HospitalRoom, User
 from schemas import (
@@ -30,7 +30,7 @@ from schemas import (
 
 _BED_LABEL = re.compile(r"^Lit (\d+)$")
 
-router = APIRouter(prefix="/api/hospital", tags=["hospital"], dependencies=[Depends(require_role)])
+router = APIRouter(prefix="/api/hospital", tags=["hospital"], dependencies=[Depends(require_page_access("hospital"))])
 require_manage = require_hospital_manage
 
 

@@ -5,12 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from deps import get_current_user, require_role
+from deps import get_current_user, require_page_access
 from grade_permissions import require_grade_permission
 from models import AgendaEvent, User
 from schemas import AgendaEventCreate, AgendaEventOut, AgendaEventUpdate, MessageResponse
 
-router = APIRouter(prefix="/api/agenda", tags=["agenda"], dependencies=[Depends(require_role)])
+router = APIRouter(prefix="/api/agenda", tags=["agenda"], dependencies=[Depends(require_page_access("agenda"))])
 
 
 @router.get("/events", response_model=list[AgendaEventOut])

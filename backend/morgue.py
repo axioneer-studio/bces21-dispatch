@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app_permissions import parse_app_permissions, require_app_permission, user_has_app_permission
 from database import get_db
-from deps import get_current_user, require_role
+from deps import get_current_user, require_page_access
 from hospital_access import FORENSIC_PERMISSION, is_direction, linked_employee
 from models import Employee, MorgueEntry, User, utcnow
 from schemas import (
@@ -29,7 +29,7 @@ from schemas import (
     MorgueOut,
 )
 
-router = APIRouter(prefix="/api/hospital/morgue", tags=["hospital"], dependencies=[Depends(require_role)])
+router = APIRouter(prefix="/api/hospital/morgue", tags=["hospital"], dependencies=[Depends(require_page_access("hospital"))])
 
 
 def _employee_name(employee: Employee) -> str:

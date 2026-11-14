@@ -51,7 +51,7 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 
 ### Hôpital (`/hopital`)
 
-- Page ouverte à tous les comptes connectés, avec deux onglets : Chambres et
+- Page ouverte à tout compte validé, même sans rôle, avec deux onglets : Chambres et
   Morgue.
 - **Chambres** : des chambres contenant des lits. Un lit est créé vide ; tout
   compte connecté y affecte un patient (nom, accident, date d'arrivée, raison de
@@ -102,7 +102,11 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Connexion Discord OAuth2 (création de compte automatique à la première connexion).
 - Complétion du profil (prénom RP / nom RP / téléphone) obligatoire, avec délai de 24 h.
 - Brouillon de profil sauvegardé en `localStorage` (`bces:profile-draft`).
-- Comptes en attente de validation : traitement par un administrateur.
+- Comptes en attente de validation : traitement par un administrateur. Un
+  compte validé accède au Dispatch, à l'Hôpital, à l'Agenda et au Stock, même
+  sans rôle ; un rôle ajoute les autres pages.
+- Désactiver un compte le suspend : il ne peut plus se connecter ni appeler
+  l'API. Le réactiver lui rend ses accès sans nouvelle validation.
 
 ### Interface
 
@@ -425,7 +429,7 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 3. Redirection selon l'état du compte :
    - profil incomplet → `/complete-profile?deadline=<iso>`
    - compte en attente → `/?status=pending`
-   - compte valide → `/dashboard`
+   - compte valide → `/dispatch`
 4. La **session** est un JWT HS256 (`sub`, `iat`, `exp`, `type`) stocké dans un
    cookie `HttpOnly` `bces_session` (`SameSite=Lax`, `Path=/`).
 
@@ -437,9 +441,11 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 
 ## API REST
 
-Les routes authentifiées exigent une session valide. Les pages et API du
-Dispatch, de l'agenda et des ressources humaines vérifient également leur
-permission ; un compte en attente reçoit un `403`.
+Les routes authentifiées exigent une session valide et un compte validé : un
+compte en attente ou désactivé reçoit un `403`. Les API du Dispatch, de
+l'Hôpital et de l'Agenda sont ouvertes à tout compte validé, même sans rôle ;
+celles des ressources humaines, de la Direction et de l'administration
+vérifient en plus la page cochée dans le rôle.
 
 ### Authentification & comptes
 
@@ -621,15 +627,23 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 | Route | Fichier | Description |
 |---|---|---|
 | `/` | `app/pages/index.vue` | Connexion Discord, gestion des erreurs `?error=` / `?status=pending` |
-| `/dashboard` | `app/pages/dashboard.vue` | KPI du roster et service en cours |
 | `/dispatch` | `app/pages/dispatch.vue` | Plateau de dispatch temps réel |
-| `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres, Morgue et Stock, ouverts à tous les comptes connectés |
+| `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres et Morgue |
+| `/stock` | `app/pages/stock.vue` | Stock du BCES (à venir) |
 | `/agenda` | `app/pages/agenda.vue` | Agenda partagé |
 | `/ressources-humaines` | `app/pages/ressources-humaines.vue` | Employés, rôles et accès (selon les droits) |
 | `/complete-profile` | `app/pages/complete-profile.vue` | Formulaire prénom RP / nom RP / téléphone avec compte à rebours |
 
 Le middleware global vérifie `/api/me` avant l'accès aux pages privées. Les
 permissions sont aussi contrôlées par les dépendances FastAPI.
+
+Dispatch, Hôpital, Agenda et Stock n'ont pas de case dans les « Pages
+accessibles » des rôles : ils sont ouverts à tout compte validé, même sans rôle
+(`OPEN_PAGES` dans `backend/deps.py`). Un compte en attente ou désactivé reçoit
+un `403` sur `/api/me` et repart vers la connexion. Les rôles ne cochent que
+Ressources humaines, Direction et Administration ; au démarrage, les pages qui
+ne sont plus à cocher sont retirées des rôles existants. Les super-admins ont
+accès à tout.
 
 ### Composables
 
