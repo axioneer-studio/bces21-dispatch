@@ -23,8 +23,8 @@ onMounted(() => {
   <main class="bces-card bces-card--wide">
     <div class="bces-card__brand">
       <img
-        src="/images/logo-72.webp"
-        srcset="/images/logo-72.webp 1x, /images/logo.webp 2x"
+        src="https://s3.axioneer.com/bces21-dispatch/images/logo-72.webp"
+        srcset="https://s3.axioneer.com/bces21-dispatch/images/logo-72.webp 1x, https://s3.axioneer.com/bces21-dispatch/images/logo.webp 2x"
         alt="BCES"
         width="72"
         height="72"

@@ -278,7 +278,7 @@ onBeforeUnmount(() => {
 <template>
   <main class="bces-card bces-card--wide">
     <div class="bces-card__brand">
-      <img src="/images/logo.webp" alt="BCES" width="72" height="72" />
+      <img src="https://s3.axioneer.com/bces21-dispatch/images/logo.webp" alt="BCES" width="72" height="72" />
       <span class="bces-card__brand-name">BCES Dispatch</span>
     </div>
 
