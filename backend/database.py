@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
@@ -119,6 +120,28 @@ async def _run_role_migrations(conn) -> None:
                 await conn.execute(text(stmt))
         except Exception:
             pass
+    await _clean_role_pages(conn)
+
+
+async def _clean_role_pages(conn) -> None:
+    """Ne garde dans les rôles que les pages encore à cocher : les pages ouvertes
+    à tout compte validé, ou supprimées, feraient refuser l'enregistrement du rôle."""
+    from deps import PAGE_KEYS
+
+    rows = (await conn.execute(text("SELECT id, pages FROM roles"))).all()
+    for role_id, raw_pages in rows:
+        try:
+            pages = json.loads(raw_pages)
+        except (TypeError, ValueError):
+            pages = []
+        if not isinstance(pages, list):
+            pages = []
+        kept = [page for page in pages if page in PAGE_KEYS]
+        if kept != pages:
+            await conn.execute(
+                text("UPDATE roles SET pages = :pages WHERE id = :id"),
+                {"pages": json.dumps(kept), "id": role_id},
+            )
 
 
 async def _run_employee_migrations(conn) -> None:

@@ -8,9 +8,10 @@ from auth.session import current_user_id
 from database import get_db
 from models import User
 
-PAGE_KEYS = frozenset(
-    {"dispatch", "agenda", "human-resources", "direction", "administration"}
-)
+# Pages ouvertes à tout compte validé par un admin, même sans rôle.
+OPEN_PAGES = frozenset({"dispatch", "hospital", "agenda", "stock"})
+# Pages à cocher dans un rôle (« Pages accessibles »).
+PAGE_KEYS = frozenset({"human-resources", "direction", "administration"})
 
 
 async def get_current_user(
@@ -34,7 +35,7 @@ async def get_current_user(
 
 
 def require_page_access(page: str):
-    if page not in PAGE_KEYS:
+    if page not in PAGE_KEYS | OPEN_PAGES:
         raise ValueError(f"Unknown page permission: {page}")
 
     async def dependency(user: User = Depends(get_current_user)) -> User:
@@ -51,6 +52,8 @@ def require_page_access(page: str):
 def user_has_page_access(user: User, page: str) -> bool:
     if user.has_super_admin_rights:
         return True
+    if page in OPEN_PAGES:
+        return (user.status or "active") == "active"
     if user.role is None:
         return False
     try:
@@ -61,7 +64,7 @@ def user_has_page_access(user: User, page: str) -> bool:
 
 
 def require_any_page_access(*pages: str):
-    if not pages or not set(pages).issubset(PAGE_KEYS):
+    if not pages or not set(pages).issubset(PAGE_KEYS | OPEN_PAGES):
         raise ValueError("At least one valid page permission is required.")
 
     async def dependency(user: User = Depends(get_current_user)) -> User:
@@ -73,16 +76,6 @@ def require_any_page_access(*pages: str):
         )
 
     return dependency
-
-
-async def require_role(user: User = Depends(get_current_user)) -> User:
-    """Compte ayant un rôle (ou super-admin) : condition des pages ouvertes à tous."""
-    if user.has_super_admin_rights or user.role_id is not None:
-        return user
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Aucun rôle ne vous donne accès à l’application.",
-    )
 
 
 async def require_super_admin(user: User = Depends(get_current_user)) -> User:

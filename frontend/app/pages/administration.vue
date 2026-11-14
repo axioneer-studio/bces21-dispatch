@@ -97,8 +97,6 @@ interface ParkingSpot {
 }
 
 const pageOptions = [
-  { key: 'dispatch', label: 'Dispatch' },
-  { key: 'agenda', label: 'Agenda' },
   { key: 'human-resources', label: 'Ressources humaines' },
   { key: 'direction', label: 'Direction' },
   { key: 'administration', label: 'Administration' }

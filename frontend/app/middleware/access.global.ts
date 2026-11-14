@@ -8,16 +8,12 @@ const protectedPages: Record<string, string> = {
   '/administration': 'administration'
 }
 
-const pageRoutes: Record<string, string> = {
-  dispatch: '/dispatch',
-  agenda: '/agenda',
-  'human-resources': '/ressources-humaines',
-  direction: '/direction',
-  administration: '/administration'
-}
-
-/** Pages ouvertes à tous les comptes connectés, sans case à cocher dans les rôles. */
-const publicPages = new Set(['agenda', 'hospital', 'stock'])
+/**
+ * Pages ouvertes à tout compte validé, même sans rôle : elles n'ont pas de case à
+ * cocher dans les rôles. Un compte en attente ou désactivé reçoit un 403 sur
+ * /api/me et repart vers la connexion.
+ */
+const publicPages = new Set(['dispatch', 'hospital', 'agenda', 'stock'])
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const page = protectedPages[to.path]
@@ -38,6 +34,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (publicPages.has(page)) return
   if (user.is_super_admin || user.page_access.includes(page)) return
 
-  const firstAllowedPage = user.page_access.find((key) => key in pageRoutes)
-  return navigateTo(firstAllowedPage ? pageRoutes[firstAllowedPage] : '/acces-refuse')
+  return navigateTo('/dispatch')
 })
