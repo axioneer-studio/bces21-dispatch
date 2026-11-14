@@ -65,7 +65,7 @@ function onCancel() {
             <input
               type="checkbox"
               :checked="props.checkboxChecked"
-              @change="$event => emit('update:checkboxChecked', $event.target.checked)"
+              @change="$event => emit('update:checkboxChecked', ($event.target as HTMLInputElement).checked)"
               class="confirm-option__input"
             >
             <span class="confirm-option__box">
@@ -76,6 +76,8 @@ function onCancel() {
             </span>
           </label>
         </div>
+
+        <slot name="content" />
 
         <footer class="confirm-footer">
           <button type="button" class="confirm-button confirm-button--cancel" @click="onCancel">

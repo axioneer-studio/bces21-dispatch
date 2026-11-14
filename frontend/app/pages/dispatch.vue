@@ -200,6 +200,7 @@ async function finishNoteEdit() {
   <DispatchHeader
     :can-reset-assignments="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_assignments'))"
     :can-delete-interventions="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_slots'))"
+    :can-manage-frequencies="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_radios'))"
   />
 
   <main class="dp">
