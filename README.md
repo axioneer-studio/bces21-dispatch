@@ -1,7 +1,6 @@
 # BCES Dispatch
 
-Application de dispatch du BCES : tableau de bord temps réel des agents, des
-interventions et des radios, avec authentification Discord OAuth2.
+Application de dispatch du BCES : tableau de bord temps réel des agents, des interventions et des radios, avec authentification Discord OAuth2.
 
 - **Frontend** : Nuxt 4 (Vue 3) + Tailwind CSS 4 + `@nuxt/ui` + `@nuxt/icon`
 - **Backend** : FastAPI (Python 3.11+) + SQLAlchemy 2 async + SQLite
@@ -44,7 +43,7 @@ interventions et des radios, avec authentification Discord OAuth2.
   puces **LSES** et **SAFD** en lecture seule (synchronisées depuis un Google Sheet).
 - Panneau de flotte de véhicules (emplacement préparé) et bloc-notes Dispatch
   partagé, modifiable au double-clic puis sauvegardé automatiquement à la
-  sortie de l’édition.
+  sortie de l'édition.
 - Événements de l’Agenda du jour visibles sous les radios ; tous les comptes
   actifs peuvent consulter l’agenda, tandis que sa gestion reste réservée aux
   grades autorisés.
@@ -54,20 +53,20 @@ interventions et des radios, avec authentification Discord OAuth2.
 
 - Page ouverte à tous les comptes connectés, avec deux onglets : Chambres et
   Morgue.
-- Chambres : des chambres contenant des lits. Un lit est créé vide ; tout compte
-  connecté y affecte un patient (nom, accident, date d’arrivée, raison de sa
-  présence), indique si les soins sont faits et si les forces de l’ordre sont
+- **Chambres** : des chambres contenant des lits. Un lit est créé vide ; tout
+  compte connecté y affecte un patient (nom, accident, date d'arrivée, raison de
+  sa présence), indique si les soins sont faits et si les forces de l'ordre sont
   à prévenir ou déjà prévenues, puis libère le lit. La raison se choisit dans
   une liste, ou se saisit avec « Autre… ». Seuls la Direction (grade Direction,
-  par défaut) et les rôles ayant la permission applicative « Gérer l’hôpital »
+  par défaut) et les rôles ayant la permission applicative « Gérer l'hôpital »
   ajoutent, renomment et suppriment les chambres et les lits, ainsi que les
   raisons de la liste.
-- Morgue : défunts pris en charge, avec date du décès, identité, appartenance
-  connue, informations communicables ou non, autopsie, médecin légiste,
-  contacts d’urgence et possibilité de récupération par les proches. Un corps
-  en cellule réfrigérée et une urne s’affichent dans deux formes de case
-  différentes. L’autopsie et la récupération se renseignent après l’ajout,
-  d’un clic sur la case.
+- **Morgue** : défunts pris en charge, avec date du décès, identité, appartenance
+  connue, informations communicables ou non, autopsie, médecin légiste, contacts
+  d'urgence et possibilité de récupération par les proches. Un corps en cellule
+  réfrigérée et une urne s'affichent dans deux formes de case différentes.
+  L'autopsie et la récupération se renseignent après l'ajout, d'un clic sur la
+  case.
 - Tout compte connecté ajoute, modifie et retire un défunt, et indique s’il est
   récupérable. L’autopsie et le légiste ne se renseignent que par un médecin légiste
   (permission applicative « Médecin légiste ») ou par la Direction (grade
@@ -79,7 +78,7 @@ interventions et des radios, avec authentification Discord OAuth2.
 - Création et gestion des employés, de leurs compétences et du lien facultatif
   à un compte utilisateur ; les tuiles sont créées dans RH, puis liées
   séparément aux comptes avec la permission de rôle applicatif dédiée,
-  configurée dans Administration. Attribution d’un
+  configurée dans Administration. Attribution d'un
   grade centralisé par la Direction.
 
 ### Direction (`/direction`)
@@ -128,30 +127,110 @@ bces21-dispatch/
 │   ├── schemas.py      # schémas Pydantic (entrées / sorties)
 │   ├── deps.py         # dépendances FastAPI (auth)
 │   ├── agents.py       # routes /api/users
-│   ├── human_resources.py # employés, rôles, permissions, résumé du dashboard
-│   ├── dispatch.py     # routes /api/dispatch/* + WebSocket
+│   ├── administration.py # routes d'administration
+│   ├── agenda.py       # routes de l'agenda
 │   ├── cleanup.py      # purge des comptes incomplets
+│   ├── direction.py    # routes grades et permissions (Direction)
+│   ├── dispatch.py     # routes /api/dispatch/* + WebSocket
+│   ├── fleet.py        # gestion de la flotte de véhicules
+│   ├── frequencies.py  # gestion des fréquences radio
+│   ├── frequency_settings.py # paramètres de fréquences
+│   ├── fix_google_sheets.py
+│   ├── google_sheets_service.py
+│   ├── google_sheets_service_fixed.py
+│   ├── google_sheets_service_v2.py
+│   ├── grade_permissions.py
+│   ├── hospital_access.py
+│   ├── hospital_rooms.py
+│   ├── human_resources.py # employés, rôles, permissions, résumé du dashboard
+│   ├── morgue.py       # routes morgue
+│   ├── requirements.txt
+│   ├── s3_service.py
+│   ├── sheets_sync.py
 │   ├── status_sync.py  # synchronisation Google Sheet (LSES / SAFD)
-│   └── auth/
-│       ├── router.py   # routes /api/auth/*
-│       ├── discord.py  # client OAuth2 Discord
-│       └── session.py  # émission / vérification du JWT de session
-│
+│   ├── Dockerfile
+│   ├── auth/
+│   │   ├── __init__.py
+│   │   ├── router.py   # routes /api/auth/*
+│   │   ├── discord.py  # client OAuth2 Discord
+│   │   └── session.py  # émission / vérification du JWT de session
+│   └── migrations/
 ├── frontend/           # application Nuxt 4
 │   ├── nuxt.config.ts
-│   ├── server/routes/favicon.ico.ts
-│   ├── public/         # logo, fond, robots.txt
-│   └── app/
-│       ├── pages/      # /, /dashboard, /dispatch, /hopital, /agenda, RH, profil
-│       ├── middleware/ # contrôle global des accès aux pages
-│       ├── layouts/    # default, dispatch
-│       ├── components/ # 14 composants auto-importés
-│       ├── composables/# useDispatchApi, useDispatchStore, useDispatchSocket, …
-│       ├── utils/      # agent, locations, statuses, toast
-│       ├── types/      # types partagés (non auto-importés)
-│       └── assets/css/ # main.css (thème global), dispatch.css (palette dispatch)
-│
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── Dockerfile
+│   ├── app.vue
+│   ├── app/
+│   │   ├── assets/
+│   │   │   └── css/
+│   │   │       ├── dispatch.css
+│   │   │       └── main.css
+│   │   ├── components/
+│   │   │   ├── AgentTile.vue
+│   │   │   ├── AppLogo.vue
+│   │   │   ├── ConfirmDialog.vue
+│   │   │   ├── DiscordButton.vue
+│   │   │   ├── DispatchHeader.vue
+│   │   │   ├── EmptySlotState.vue
+│   │   │   ├── FleetPanel.vue
+│   │   │   ├── FrequencyPicker.vue
+│   │   │   ├── InterventionCard.vue
+│   │   │   ├── LocationPicker.vue
+│   │   │   ├── MorguePanel.vue
+│   │   │   ├── RadioPanel.vue
+│   │   │   ├── RoomsPanel.vue
+│   │   │   ├── Sidebar.vue
+│   │   │   ├── SlotPanel.vue
+│   │   │   ├── StatusPicker.vue
+│   │   │   ├── ToastStack.vue
+│   │   │   └── ZipPicker.vue
+│   │   ├── composables/
+│   │   │   ├── useAppToast.ts
+│   │   │   ├── useDispatchApi.ts
+│   │   │   ├── useDispatchSocket.ts
+│   │   │   ├── useDispatchStore.ts
+│   │   │   ├── useSyncApi.ts
+│   │   │   ├── useTimezone.ts
+│   │   │   └── useToastStore.ts
+│   │   ├── layouts/
+│   │   │   ├── default.vue
+│   │   │   └── dispatch.vue
+│   │   ├── middleware/
+│   │   │   └── access.global.ts
+│   │   ├── pages/
+│   │   │   ├── acces-refuse.vue
+│   │   │   ├── administration.vue
+│   │   │   ├── agenda.vue
+│   │   │   ├── complete-profile.vue
+│   │   │   ├── direction.vue
+│   │   │   ├── dispatch.vue
+│   │   │   ├── hopital.vue
+│   │   │   ├── index.vue
+│   │   │   ├── ressources-humaines.vue
+│   │   │   ├── stock.vue
+│   │   │   ├── administration/
+│   │   │   ├── direction/
+│   │   │   ├── hopital/
+│   │   │   └── stock/
+│   │   ├── types/
+│   │   │   └── toast.ts
+│   │   └── utils/
+│   │       ├── agent.ts
+│   │       ├── locations.ts
+│   │       ├── radios.ts
+│   │       ├── statuses.ts
+│   │       └── toast.ts
+│   ├── public/
+│   │   ├── robots.txt
+│   │   └── images/
+│   └── server/
+│       └── routes/
+│           └── favicon.ico.ts
 ├── .github/ISSUE_TEMPLATE/
+├── docker-compose.yml
+├── dev.cmd
+├── dev.ps1
 ├── LICENCE.md
 └── README.md
 ```
@@ -275,7 +354,7 @@ npm run dev
 
 ## Configuration
 
-### Backend — `backend/.env`
+### Backend - `backend/.env`
 
 Toutes les variables sont lues par `pydantic-settings` (fichier `.env` à la
 racine du dossier `backend/`). Les variables non listées ici sont ignorées.
@@ -309,7 +388,7 @@ Générer un secret de session :
 openssl rand -hex 32
 ```
 
-### Frontend — variables `NUXT_PUBLIC_*`
+### Frontend - variables `NUXT_PUBLIC_*`
 
 Le front ne lit pas de fichier `.env` en développement : tout passe par
 `runtimeConfig.public` dans `nuxt.config.ts`, surchargé par des variables
@@ -451,7 +530,7 @@ permission ; un compte en attente reçoit un `403`.
 ## WebSocket
 
 - **Endpoint** : `ws://<apiBase>/ws/dispatch` (et `wss://` en HTTPS ; chemin
-  hors `/api`, donc **non** proxifié par Nitro — le client cible l'origine du
+  hors `/api`, donc **non** proxifié par Nitro - le client cible l'origine du
   backend directement).
 - En production, `NUXT_PUBLIC_API_BASE` doit être l'URL HTTPS publique du
   backend (`API_URL` dans la configuration Docker/Coolify), pour les requêtes
@@ -531,7 +610,7 @@ d'employés.
 
 Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 `DATABASE_URL` pointe vers `BCES.db` alors que le `.env` local utilise
-`bces21.db` — aligner les deux pour éviter un fichier non suivi.
+`bces21.db` - aligner les deux pour éviter un fichier non suivi.
 
 ---
 
@@ -562,6 +641,7 @@ permissions sont aussi contrôlées par les dépendances FastAPI.
 | `useToastStore.ts` | File de notifications (pause/reprise des minuteries, max 6) |
 | `useAppToast.ts` | Facade `info` / `success` / `error` / `warning` |
 | `useTimezone.ts` | Formatage des dates dans le fuseau du navigateur |
+| `useSyncApi.ts` | Synchronisation des données avec le backend |
 
 ### Composants
 
@@ -606,7 +686,7 @@ requête CDN.
 
 Points à vérifier avant une mise en production :
 
-- **`SESSION_SECRET`** doit être replaced par une valeur aléatoire
+- **`SESSION_SECRET`** doit être remplacé par une valeur aléatoire
   (`openssl rand -hex 32`). La valeur par défaut rend les sessions falsifiables.
 - **`SESSION_COOKIE_SECURE=true`** obligatoire derrière HTTPS.
 - **Discord Client ID / Secret** : ne jamais versionner le `.env` (il est ignoré
@@ -628,4 +708,4 @@ Points à vérifier avant une mise en production :
 
 ## Licence
 
-Voir [LICENCE.md](LICENCE.md) — Axioneer Studio Source-Available License (AS-SAL) v1.3.
+Voir [LICENCE.md](LICENCE.md) - Axioneer Studio Source-Available License (AS-SAL) v1.3.
