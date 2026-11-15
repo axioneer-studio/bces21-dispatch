@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_permissions import parse_app_permissions, require_app_permission, user_has_app_permission
+from app_permissions import require_app_permission, user_has_app_permission, user_role_permissions
 from database import get_db
 from deps import get_current_user, require_page_access
 from hospital_access import FORENSIC_PERMISSION, is_direction, linked_employee
@@ -73,8 +73,7 @@ async def _examiners(db: AsyncSession) -> list[Employee]:
         employee
         for employee in employees
         if employee.account_user
-        and employee.account_user.role
-        and FORENSIC_PERMISSION in parse_app_permissions(employee.account_user.role.permissions)
+        and FORENSIC_PERMISSION in user_role_permissions(employee.account_user)
     ]
 
 

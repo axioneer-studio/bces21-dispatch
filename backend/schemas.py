@@ -53,8 +53,7 @@ class UserResponse(BaseModel):
     competencies: list[str]
     rp_name_deadline: Optional[datetime]
     created_at: datetime
-    role_id: Optional[int] = None
-    role_name: Optional[str] = None
+    role_names: list[str] = Field(default_factory=list)
     # Droits super-admin actifs : faux quand le super-admin les a désactivés.
     is_super_admin: bool = False
     # Statut super-admin, actif ou non : affiche le bouton « Superadmin ».
@@ -380,15 +379,17 @@ class AdminUserOut(BaseModel):
     first_name: Optional[str]
     last_name: Optional[str]
     status: str
-    role_id: Optional[int]
-    role_name: Optional[str]
+    role_ids: list[int]
+    role_names: list[str]
     is_super_admin: bool
     super_admin_enabled: bool = True
     created_at: datetime
 
 
-class AdminUserRoleUpdateRequest(BaseModel):
-    role_id: Optional[int] = None
+class AdminUserRolesUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_ids: list[int] = Field(default_factory=list)
 
 
 class AdminUserStatusUpdateRequest(BaseModel):

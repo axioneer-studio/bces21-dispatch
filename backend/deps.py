@@ -54,13 +54,20 @@ def user_has_page_access(user: User, page: str) -> bool:
         return True
     if page in OPEN_PAGES:
         return (user.status or "active") == "active"
-    if user.role is None:
-        return False
+    return page in user_role_pages(user)
+
+
+def parse_role_pages(value: str | None) -> list[str]:
     try:
-        pages = json.loads(user.role.pages)
+        pages = json.loads(value or "[]")
     except (TypeError, ValueError):
-        return False
-    return isinstance(pages, list) and page in pages
+        return []
+    return [page for page in pages if isinstance(page, str)] if isinstance(pages, list) else []
+
+
+def user_role_pages(user: User) -> list[str]:
+    """Pages cochées dans l'ensemble des rôles du compte, sans doublon."""
+    return list(dict.fromkeys(page for role in user.roles for page in parse_role_pages(role.pages)))
 
 
 def require_any_page_access(*pages: str):

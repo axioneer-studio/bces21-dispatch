@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -9,6 +9,15 @@ from database import Base
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Rôles applicatifs d'un compte : il cumule les pages et permissions de chacun.
+user_roles = Table(
+    "user_roles",
+    Base.metadata,
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class User(Base):
@@ -30,10 +39,11 @@ class User(Base):
     competencies: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Interrupteur du super-admin lui-même (bouton « Superadmin ») : désactivé,
-    # il garde son statut mais n'a plus que les accès de son rôle et de son grade.
+    # il garde son statut mais n'a plus que les accès de ses rôles et de son grade.
     super_admin_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    role_id: Mapped[Optional[int]] = mapped_column(ForeignKey("roles.id", ondelete="SET NULL"), nullable=True)
-    role: Mapped[Optional["Role"]] = relationship(back_populates="users", lazy="selectin")
+    roles: Mapped[list["Role"]] = relationship(
+        secondary=user_roles, back_populates="users", lazy="selectin", order_by="Role.name"
+    )
 
     rp_name_deadline: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -69,7 +79,7 @@ class Role(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     pages: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
-    users: Mapped[list["User"]] = relationship(back_populates="role")
+    users: Mapped[list["User"]] = relationship(secondary=user_roles, back_populates="roles")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 

@@ -17,11 +17,11 @@ from google_sheets_service import (
     build_from_db,
     load_settings_from_db,
 )
-from models import ApplicationSetting, Employee, Role, User
+from models import ApplicationSetting, Employee, Role, User, user_roles
 from s3_service import S3ServiceError, s3_service
 from schemas import (
     AdminUserOut,
-    AdminUserRoleUpdateRequest,
+    AdminUserRolesUpdateRequest,
     AdminUserStatusUpdateRequest,
     ApplicationSettingsOut,
     ApplicationSettingsUpdateRequest,
@@ -71,8 +71,8 @@ def _admin_user_out(user: User) -> AdminUserOut:
         first_name=user.prenom_rp,
         last_name=user.nom_rp,
         status=user.status or "active",
-        role_id=user.role_id,
-        role_name=user.role.name if user.role else None,
+        role_ids=[role.id for role in user.roles],
+        role_names=[role.name for role in user.roles],
         is_super_admin=user.is_super_admin,
         super_admin_enabled=user.super_admin_enabled,
         created_at=user.created_at,
@@ -134,33 +134,37 @@ async def list_users(
     return [_admin_user_out(user) for user in users]
 
 
-@router.patch("/users/{user_id}/role", response_model=MessageResponse)
-async def update_user_role(
+@router.put("/users/{user_id}/roles", response_model=AdminUserOut)
+async def update_user_roles(
     user_id: int,
-    payload: AdminUserRoleUpdateRequest,
+    payload: AdminUserRolesUpdateRequest,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    """Remplace les rôles du compte : il cumule les pages et permissions de chacun."""
     target = await db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
-    if payload.role_id is not None and await db.get(Role, payload.role_id) is None:
+    role_ids = list(dict.fromkeys(payload.role_ids))
+    next_roles = (
+        (await db.execute(select(Role).where(Role.id.in_(role_ids)))).scalars().all()
+        if role_ids
+        else []
+    )
+    if len(next_roles) != len(role_ids):
         raise HTTPException(status_code=404, detail="Rôle introuvable.")
 
-    next_role = await db.get(Role, payload.role_id) if payload.role_id is not None else None
     removes_admin_access = _is_app_admin(target) and not (
         target.is_super_admin
-        or (
-            next_role is not None
-            and "administration" in _parse_pages(next_role.pages)
-        )
+        or any("administration" in _parse_pages(role.pages) for role in next_roles)
     )
     if removes_admin_access:
         await _ensure_another_admin_remains(db, target)
 
-    target.role_id = payload.role_id
+    target.roles = sorted(next_roles, key=lambda role: role.name.lower())
     await db.commit()
-    return MessageResponse(message="Rôle applicatif mis à jour.")
+    await db.refresh(target, ["roles"])
+    return _admin_user_out(target)
 
 
 @router.patch("/users/{user_id}/super-admin", response_model=MessageResponse)
@@ -258,11 +262,14 @@ async def list_roles(
     _: User = Depends(require_admin),
 ):
     roles = (await db.execute(select(Role).order_by(Role.name))).scalars().all()
-    output = []
-    for role in roles:
-        count = await db.scalar(select(func.count(User.id)).where(User.role_id == role.id))
-        output.append(_role_out(role, count or 0))
-    return output
+    return [_role_out(role, await _role_users_count(db, role.id)) for role in roles]
+
+
+async def _role_users_count(db: AsyncSession, role_id: int) -> int:
+    count = await db.scalar(
+        select(func.count()).select_from(user_roles).where(user_roles.c.role_id == role_id)
+    )
+    return count or 0
 
 
 @router.get("/permissions")
@@ -321,22 +328,22 @@ async def update_role(
     if "pages" in data:
         next_pages = _validate_pages(data["pages"])
         if "administration" in _parse_pages(role.pages) and "administration" not in next_pages:
-            users = (
-                await db.execute(select(User).where(User.role_id == role_id))
-            ).scalars().all()
-            active_super_admin = any(
-                user.is_super_admin and (user.status or "active") == "active"
-                for user in users
+            all_users = (await db.execute(select(User))).scalars().all()
+            role_has_users = any(
+                any(user_role.id == role_id for user_role in user.roles) for user in all_users
             )
-            external_admin = any(
-                user.role_id != role_id
-                and _is_app_admin(user)
-                and (user.status or "active") == "active"
-                for user in (
-                    await db.execute(select(User))
-                ).scalars().all()
+            admin_remains = any(
+                (user.status or "active") == "active"
+                and (
+                    user.is_super_admin
+                    or any(
+                        user_role.id != role_id and "administration" in _parse_pages(user_role.pages)
+                        for user_role in user.roles
+                    )
+                )
+                for user in all_users
             )
-            if users and not active_super_admin and not external_admin:
+            if role_has_users and not admin_remains:
                 raise HTTPException(
                     status_code=409,
                     detail="Impossible de retirer le dernier administrateur actif.",
@@ -352,8 +359,7 @@ async def update_role(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Ce rôle existe déjà.") from exc
     await db.refresh(role)
-    count = await db.scalar(select(func.count(User.id)).where(User.role_id == role_id))
-    return _role_out(role, count or 0)
+    return _role_out(role, await _role_users_count(db, role_id))
 
 
 @router.delete("/roles/{role_id}", response_model=MessageResponse)
@@ -365,11 +371,10 @@ async def delete_role(
     role = await db.get(Role, role_id)
     if role is None:
         raise HTTPException(status_code=404, detail="Rôle introuvable.")
-    count = await db.scalar(select(func.count(User.id)).where(User.role_id == role_id))
-    if count:
+    if await _role_users_count(db, role_id):
         raise HTTPException(
             status_code=409,
-            detail="Réattribuez d’abord ce rôle aux utilisateurs concernés.",
+            detail="Retirez d’abord ce rôle des comptes qui l’ont.",
         )
     await db.delete(role)
     await db.commit()
