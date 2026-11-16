@@ -34,7 +34,13 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   **Congés**, **IPT**, **Astreinte fin de service**, **Pause**, plus les
   **interventions / consultations** créées à la volée.
 - Glisser-déposer des agents entre les créneaux et la réserve « hors service ».
-- Statut d'intervention (27 statuts + 12 lieux, avec emoji) et code postal par carte.
+- Statut d'intervention, choisi dans la liste gérée dans Administration, avec
+  emoji, et code postal par carte. La liste a deux parties, toujours dans cet
+  ordre : les statuts (Patrouille, Inter, Renfort, Enterrement…), puis les lieux
+  (BCES, LSES, Zombie, salles de l'hôpital…). Une entrée peut avoir une couleur,
+  qui teinte l'intervention, et être cochée « Primo Inter » pour lier
+  l'intervention à la page Crise. Les 22 statuts et 17 lieux d'origine sont
+  injectés au démarrage quand la liste est vide.
 - Panneau **Radios** : marche/arrêt, numéro de série éditable, agent associé,
   fréquences 147 / 570 MHz, état « attente » (chargement 2,5 s).
 - Les tuiles d'employés viennent du registre RH et ne nécessitent pas de compte
@@ -57,7 +63,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   employés actifs. Désigner un Primo l'affecte aussi, sur le Dispatch, à
   l'intervention « Primo » de la crise, créée au besoin ; un Primo remplacé y
   reste affecté.
-- Dans l'autre sens, passer une intervention du Dispatch au statut « Primo » en
+- Dans l'autre sens, passer une intervention du Dispatch à un statut coché
+  « Primo Inter » dans Administration (« Primo » par défaut) en
   fait celle de la crise, si la crise n'en a pas encore. L'équipe suit alors les
   membres de cette intervention : le premier arrivé est Primo, les suivants en
   assistance ; qui en est retiré ou déplacé quitte l'équipe, et si c'était le
@@ -230,7 +237,6 @@ bces21-dispatch/
 │   │   │   ├── FleetPanel.vue
 │   │   │   ├── FrequencyPicker.vue
 │   │   │   ├── InterventionCard.vue
-│   │   │   ├── LocationPicker.vue
 │   │   │   ├── MorguePanel.vue
 │   │   │   ├── RadioPanel.vue
 │   │   │   ├── RoomsPanel.vue
@@ -271,7 +277,6 @@ bces21-dispatch/
 │   │   │   └── toast.ts
 │   │   └── utils/
 │   │       ├── agent.ts
-│   │       ├── locations.ts
 │   │       ├── radios.ts
 │   │       ├── statuses.ts
 │   │       └── toast.ts
@@ -523,6 +528,9 @@ vérifient en plus la page cochée dans le rôle.
 | `POST` | `/api/admin/registrations/{id}/reject` | Refuse une inscription |
 | `GET` / `POST` | `/api/admin/roles` | Liste ou crée des rôles applicatifs |
 | `PATCH` / `DELETE` | `/api/admin/roles/{id}` | Modifie ou supprime un rôle applicatif |
+| `GET` / `POST` | `/api/admin/intervention-statuses` | Liste (statuts puis lieux) ou crée une entrée : `kind` (`status` \| `place`), libellé, emoji, couleur facultative, « Primo Inter » |
+| `PATCH` / `DELETE` | `/api/admin/intervention-statuses/{id}` | Modifie ou supprime un statut ; suppression refusée (`409`) si une intervention l'a |
+| `POST` | `/api/admin/intervention-statuses/{id}/move?direction=-1\|1` | Monte ou descend l'entrée dans la liste de son type |
 | `GET` / `POST` | `/api/admin/groups` | Liste ou crée des groupes d'appartenance (Crise, Morgue) |
 | `PATCH` / `DELETE` | `/api/admin/groups/{id}` | Renomme ou supprime un groupe ; les blessés et défunts gardent leur appartenance |
 | `GET` | `/api/admin/permissions` | Liste les permissions applicatives configurables |
@@ -657,6 +665,7 @@ d'employés.
 |---|---|
 | `users` | Comptes Discord et accès : profil, `is_super_admin`, `status`, `last_login_at` (l'ancienne colonne `role_id` est reprise dans `user_roles` au démarrage, puis vidée) |
 | `roles` | Rôles personnalisés et pages autorisées |
+| `intervention_statuses` | Statuts d'intervention du Dispatch : `key` (valeur stockée dans `dispatch_slots.status`, fixe), `label`, `emoji`, `color` (facultative), `is_primo`, `kind` (`status` \| `place`, les statuts avant les lieux), `order` (dans son type) |
 | `affiliation_groups` | Groupes d'appartenance proposés dans la Crise et la Morgue : `name` (les fiches gardent leur appartenance en texte) |
 | `user_roles` | Rôles de chaque compte : `user_id` → `users`, `role_id` → `roles` (cascade des deux côtés) |
 | `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
@@ -744,12 +753,12 @@ tout.
 | `RoomsPanel.vue` | Onglet Chambres de la page Hôpital : chambres, lits, affectation des patients, raisons proposées |
 | `MorguePanel.vue` | Onglet Morgue de la page Hôpital : cases des corps et des urnes, ajout, modification, incinération, retrait |
 | `ChoiceField.vue` | Liste de choix non exhaustive, avec « Autre… » pour une saisie libre |
-| `StatusPicker.vue` | Liste déroulante statuts + lieux |
+| `StatusPicker.vue` | Liste déroulante des statuts d'intervention gérés dans Administration (statuts et lieux), teintée par la couleur du statut |
 | `ZipPicker.vue` | Saisie du code postal (validation différée 400 ms) |
 | `ToastStack.vue` | Pile de notifications (bas droite) |
 | `EmptySlotState.vue` | Message d'état vide |
 | `DiscordButton.vue` | Bouton OAuth Discord |
-| `AppLogo.vue`, `LocationPicker.vue`, `RadioCard.vue` | Composants non utilisés (code mort) |
+| `AppLogo.vue`, `RadioCard.vue` | Composants non utilisés (code mort) |
 
 ### Styles
 

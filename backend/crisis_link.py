@@ -13,10 +13,27 @@ Le code postal est celui de l'intervention : il se modifie d'un côté ou de l'a
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import CrisisMember, CrisisState, DispatchAssignment, DispatchSlot
+from models import (
+    CrisisMember,
+    CrisisState,
+    DispatchAssignment,
+    DispatchSlot,
+    InterventionStatus,
+    intervention_status_order,
+)
 
-# Statut d'intervention du Dispatch (voir frontend/app/utils/statuses.ts).
-PRIMO_STATUS = "primo"
+
+async def primo_status_keys(db: AsyncSession) -> list[str]:
+    """Clés des statuts cochés « Primo Inter » dans Administration, dans l'ordre de la liste."""
+    return list(
+        (
+            await db.execute(
+                select(InterventionStatus.key)
+                .where(InterventionStatus.is_primo.is_(True))
+                .order_by(*intervention_status_order())
+            )
+        ).scalars()
+    )
 
 
 async def crisis_state(db: AsyncSession) -> CrisisState:
@@ -72,7 +89,7 @@ async def sync_crisis_from_slot(db: AsyncSession, slot: DispatchSlot, joined_id:
     """
     state = await crisis_state(db)
     linked = await primo_slot(db, state)
-    newly_linked = linked is None and slot.status == PRIMO_STATUS
+    newly_linked = linked is None and slot.status is not None and slot.status in await primo_status_keys(db)
     if newly_linked:
         state.slot_id = slot.id
         if slot.zip_code:

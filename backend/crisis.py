@@ -21,7 +21,7 @@ from affiliation_groups import group_names
 from config import get_settings
 from database import get_db
 from deps import get_current_user, require_page_access
-from crisis_link import PRIMO_STATUS, crisis_state, primo_slot
+from crisis_link import crisis_state, primo_slot, primo_status_keys
 from dispatch import _renumber_slot_orders, _sync_employee_to_google_sheets, push_snapshot
 from hospital_access import linked_employee
 from hospital_rooms import clear_patient
@@ -109,16 +109,17 @@ async def _install_in_bed(db: AsyncSession, victim: CrisisVictim, bed_id: int) -
 
 async def _assign_primo_on_dispatch(db: AsyncSession, employee_id: int) -> None:
     """Affecte le Primo à l'intervention « Primo » de la crise, créée au besoin avec
-    le code postal de la crise. Comme un glisser-déposer sur le Dispatch, il quitte
-    son poste précédent et arrive en dernier."""
+    le code postal de la crise et le premier statut coché « Primo Inter ». Comme un
+    glisser-déposer sur le Dispatch, il quitte son poste précédent et arrive en dernier."""
     state = await crisis_state(db)
     slot = await primo_slot(db, state)
     if slot is None:
         last_order = await db.scalar(select(func.max(DispatchSlot.order)))
+        primo_keys = await primo_status_keys(db)
         slot = DispatchSlot(
             kind="intervention",
             title="Intervention",
-            status=PRIMO_STATUS,
+            status=primo_keys[0] if primo_keys else None,
             zip_code=state.zip_code,
             order=(last_order + 1) if last_order is not None else 0,
         )

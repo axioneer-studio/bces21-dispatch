@@ -3,6 +3,7 @@ import type { DispatchSlot } from '~/composables/useDispatchStore'
 import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 import { assignUser, deleteSlot, updateSlot } from '~/composables/useDispatchApi'
+import { findStatus } from '~/utils/statuses'
 
 const props = defineProps<{
   slot: DispatchSlot
@@ -20,6 +21,9 @@ const emit = defineEmits<{
 }>()
 
 const toast = useAppToast()
+const { snapshot } = useDispatchStore()
+/** Couleur du statut de l'intervention, choisie dans Administration (aucune par défaut). */
+const statusColor = computed(() => findStatus(snapshot.value.statuses, props.slot.status)?.color ?? null)
 const dropOver = ref<boolean>(false)
 const removing = ref<boolean>(false)
 
@@ -124,8 +128,10 @@ function unassign(agentId: number) {
     class="iv"
     :class="{
       'iv--compact': compact || !fixed,
+      'iv--colored': statusColor,
       'iv--unassigned': !fixed && !assigned.length && !dropOver
     }"
+    :style="statusColor ? { '--status-color': statusColor } : undefined"
     :data-drop-over="dropOver ? '1' : '0'"
     @dragover="onDragOver"
     @dragleave="onDragLeave"
@@ -190,6 +196,14 @@ function unassign(agentId: number) {
   border: 1px solid var(--dp-line);
   border-left: 3px solid var(--dp-accent-line);
   transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+/* Statut coloré dans Administration : bordure et fond teintés.
+   « À prendre » et le survol d'un glisser-déposer restent prioritaires. */
+.iv--colored {
+  border-color: color-mix(in srgb, var(--status-color) 55%, var(--dp-line));
+  border-left-color: var(--status-color);
+  background: color-mix(in srgb, var(--status-color) 12%, var(--dp-panel));
 }
 
 .iv[data-drop-over='1'] {

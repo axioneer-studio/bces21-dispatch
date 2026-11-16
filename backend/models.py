@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, case, Date, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -372,6 +372,38 @@ class MorgueEntry(Base):
     coffined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class InterventionStatus(Base):
+    """Statut proposé pour une intervention du Dispatch, géré dans Administration.
+
+    `key` est la valeur enregistrée dans `dispatch_slots.status` : elle ne change
+    pas quand on renomme le statut. `is_primo` marque les statuts « Primo Inter »,
+    liés à la page Crise."""
+
+    __tablename__ = "intervention_statuses"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(64), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(16), default="", nullable=False)
+    # Couleur « #rrggbb » de l'intervention ; aucune par défaut.
+    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    is_primo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # « status » (Patrouille, Inter…) ou « place » (BCES, Zombie…) : les statuts
+    # sont toujours proposés avant les lieux ; `order` range chaque type.
+    kind: Mapped[str] = mapped_column(String(16), default="status", nullable=False)
+    order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+def intervention_status_order():
+    """Tri des statuts d'intervention : les statuts, puis les lieux, chacun dans son ordre."""
+    return (
+        case((InterventionStatus.kind == "place", 1), else_=0),
+        InterventionStatus.order,
+        InterventionStatus.id,
+    )
 
 
 class AffiliationGroup(Base):

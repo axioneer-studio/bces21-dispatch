@@ -824,6 +824,8 @@ class DispatchSnapshot(BaseModel):
     fleet: list[FleetEntryOut] = Field(default_factory=list)
     vehicles: list[VehicleOut] = Field(default_factory=list)
     parking_spots: list[ParkingSpotOut] = Field(default_factory=list)
+    # Statuts d'intervention proposés, gérés dans Administration.
+    statuses: list["InterventionStatusOut"] = Field(default_factory=list)
     # Bornes des fréquences, pour le message de confirmation du tirage aléatoire.
     frequency_bounds: dict[FrequencyKind, FrequencyBounds] = Field(default_factory=dict)
 
@@ -1054,6 +1056,56 @@ class HospitalRoomsOut(BaseModel):
     rooms: list[HospitalRoomOut]
     reasons: list[HospitalBedReasonOut]
     can_manage: bool
+
+
+# --- Statuts d'intervention ---
+
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+# Statut (Patrouille, Inter…) ou lieu (BCES, Zombie…) : les statuts passent en premier.
+InterventionStatusKind = Literal["status", "place"]
+
+
+class InterventionStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    key: str
+    label: str
+    emoji: str
+    color: Optional[str]
+    is_primo: bool
+    kind: InterventionStatusKind
+
+
+class InterventionStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=64)
+    emoji: str = Field(default="", max_length=16)
+    color: Optional[str] = None
+    is_primo: bool = False
+    kind: InterventionStatusKind = "status"
+
+    @field_validator("label")
+    @classmethod
+    def _status_label(cls, value: str) -> str:
+        return _clean_required(value, "Le libellé du statut")
+
+    @field_validator("emoji")
+    @classmethod
+    def _status_emoji(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("color")
+    @classmethod
+    def _status_color(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        if not _HEX_COLOR.match(value.strip()):
+            raise ValueError("La couleur doit être au format #rrggbb.")
+        return value.strip().lower()
 
 
 # --- Groupes (appartenance) ---

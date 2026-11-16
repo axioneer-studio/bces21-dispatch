@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import type { InterventionStatus } from '~/utils/statuses'
 
 export type DispatchKind = 'centrale' | 'hopital' | 'intervention' | 'consultation'
 
@@ -69,6 +70,7 @@ export interface ParkingSpot {
   name: string
 }
 
+
 /** « radio » : fréquence BCES ; « shared » : fréquence commune, partagée avec les autres services. */
 export type FrequencyKind = 'radio' | 'shared'
 
@@ -86,6 +88,8 @@ export interface DispatchSnapshot {
   fleet: FleetEntry[]
   vehicles: Vehicle[]
   parking_spots: ParkingSpot[]
+  /** Statuts d'intervention, gérés dans Administration. */
+  statuses: InterventionStatus[]
   frequency_bounds: Partial<Record<FrequencyKind, FrequencyBounds>>
 }
 
@@ -115,6 +119,7 @@ export const useDispatchStore = () => {
     fleet: [],
     vehicles: [],
     parking_spots: [],
+    statuses: [],
     frequency_bounds: {}
   }))
   const pendingMoves = useState<Record<string, PendingEmployeeMove>>(

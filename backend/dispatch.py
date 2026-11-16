@@ -22,9 +22,11 @@ from models import (
     DispatchState,
     DispatchNote,
     FleetEntry,
+    InterventionStatus,
     ParkingSpot,
     User,
     Vehicle,
+    intervention_status_order,
     utcnow,
 )
 from google_sheets_service import GoogleSheetsError, GoogleSheetsService, load_settings_from_db
@@ -35,6 +37,7 @@ from schemas import (
     DispatchSnapshot,
     MessageResponse,
     FleetEntryOut,
+    InterventionStatusOut,
     ParkingSpotOut,
     RadioOut,
     RadioUpdateRequest,
@@ -353,6 +356,9 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
     parking_spots = (
         await db.execute(select(ParkingSpot).order_by(ParkingSpot.name.asc()))
     ).scalars().all()
+    statuses = (
+        await db.execute(select(InterventionStatus).order_by(*intervention_status_order()))
+    ).scalars().all()
 
     return {
         "slots": [SlotOut.model_validate(s).model_dump(mode="json") for s in slots],
@@ -362,6 +368,7 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
         "fleet": [FleetEntryOut.model_validate(f).model_dump(mode="json") for f in fleet],
         "vehicles": [VehicleOut.model_validate(v).model_dump(mode="json") for v in vehicles],
         "parking_spots": [ParkingSpotOut.model_validate(p).model_dump(mode="json") for p in parking_spots],
+        "statuses": [InterventionStatusOut.model_validate(s).model_dump(mode="json") for s in statuses],
         "frequency_bounds": {
             kind: bounds.model_dump(mode="json") for kind, bounds in (await read_all_bounds(db)).items()
         },
