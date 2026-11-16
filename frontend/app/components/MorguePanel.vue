@@ -41,6 +41,7 @@ interface MorgueData {
   examiners: MorgueExaminer[]
   can_manage_autopsy: boolean
   is_forensic: boolean
+  groups: string[]
 }
 
 const props = defineProps<{ active: boolean }>()
@@ -107,9 +108,8 @@ const counts = computed(() => {
   return result
 })
 
-const affiliationOptions = computed(() =>
-  [...new Set(entries.value.map((entry) => entry.affiliation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'))
-)
+/** Groupes gérés dans Administration, proposés pour l'appartenance. */
+const groups = ref<string[]>([])
 
 
 function messageFromError(cause: unknown, fallback: string) {
@@ -147,6 +147,7 @@ async function load() {
     examiners.value = data.examiners
     canManageAutopsy.value = data.can_manage_autopsy
     isForensic.value = data.is_forensic
+    groups.value = data.groups
     loadError.value = ''
   } catch (cause) {
     loadError.value = messageFromError(cause, 'Impossible de charger la morgue.')
@@ -479,10 +480,7 @@ async function remove(entry: MorgueEntry) {
             <input v-model="form.identity" type="text" maxlength="120" placeholder="Laisser vide si inconnue">
           </label>
           <label class="morgue-form__wide">Appartenance connue
-            <input v-model="form.affiliation" type="text" maxlength="64" list="morgue-affiliations" placeholder="Groupe, organisation… (facultatif)">
-            <datalist id="morgue-affiliations">
-              <option v-for="option in affiliationOptions" :key="option" :value="option" />
-            </datalist>
+            <ChoiceField v-model="form.affiliation" :options="groups" :maxlength="64" placeholder="Inconnue" label="Appartenance connue" />
           </label>
           <label class="morgue-form__wide">Contacts d’urgence (nom, numéro)
             <textarea v-model="form.emergency_contacts" maxlength="500" rows="2" placeholder="Proches à appeler pour récupérer le corps ou l’urne"></textarea>
@@ -595,7 +593,7 @@ async function remove(entry: MorgueEntry) {
 
 .morgue-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; }
 .morgue-form > label { display: grid; align-content: start; gap: 6px; color: var(--dp-text-2); font-size: 11px; font-weight: 650; }
-.morgue-form input:not([type='checkbox']), .morgue-form textarea { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 11px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
+.morgue-form input:not([type='checkbox']), .morgue-form select, .morgue-form textarea { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 11px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
 .morgue-form textarea { padding: 9px 11px; resize: vertical; }
 .morgue-form input:focus-visible, .morgue-form textarea:focus-visible { border-color: var(--dp-accent-line); outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; }
 .morgue-form__wide { grid-column: 1 / -1; }

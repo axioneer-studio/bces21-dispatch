@@ -2,25 +2,27 @@
 
 Tout compte connecté affecte un patient à un lit, met à jour sa fiche et libère
 le lit. Seuls la Direction et les rôles ayant la permission `hospital.manage`
-(« Gérer l'hôpital ») ajoutent, renomment et suppriment les chambres et les lits,
+(« Gérer l'hôpital ») ajoutent, renomment et suppriment les chambres et les lits
+(rangés dans l'ordre de création),
 ainsi que la liste des raisons proposées.
 """
 
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from deps import get_current_user, require_page_access
 from hospital_access import require_hospital_manage, user_can_manage_hospital
-from models import HospitalBed, HospitalBedReason, HospitalRoom, User
+from models import CrisisVictim, HospitalBed, HospitalBedReason, HospitalRoom, User
 from schemas import (
     HospitalBedFlagsRequest,
     HospitalBedOut,
     HospitalBedReasonOut,
     HospitalBedReasonRequest,
+    HospitalBedRenameRequest,
     HospitalPatientRequest,
     HospitalRoomOut,
     HospitalRoomRequest,
@@ -28,7 +30,7 @@ from schemas import (
     MessageResponse,
 )
 
-_BED_LABEL = re.compile(r"^Lit (\d+)$")
+_BED_LABEL = re.compile(r"^lit (\d+)$", re.IGNORECASE)
 
 router = APIRouter(prefix="/api/hospital", tags=["hospital"], dependencies=[Depends(require_page_access("hospital"))])
 require_manage = require_hospital_manage
@@ -64,7 +66,7 @@ def _next_bed_label(room: HospitalRoom) -> str:
     return f"Lit {number}"
 
 
-def _clear_patient(bed: HospitalBed) -> None:
+def clear_patient(bed: HospitalBed) -> None:
     bed.patient_name = None
     bed.accident = ""
     bed.arrival_date = None
@@ -158,6 +160,32 @@ async def create_bed(
     return HospitalBedOut.model_validate(bed)
 
 
+@router.patch("/beds/{bed_id}", response_model=HospitalBedOut)
+async def rename_bed(
+    bed_id: int,
+    payload: HospitalBedRenameRequest,
+    _: User = Depends(require_manage),
+    db: AsyncSession = Depends(get_db),
+):
+    """Renomme le lit, sans changer sa place : les lits restent dans l'ordre de création."""
+    bed = await _get_bed(db, bed_id)
+    duplicate = await db.scalar(
+        select(HospitalBed.id)
+        .where(
+            HospitalBed.room_id == bed.room_id,
+            HospitalBed.id != bed.id,
+            func.lower(HospitalBed.label) == payload.label.lower(),
+        )
+        .limit(1)
+    )
+    if duplicate is not None:
+        raise HTTPException(status_code=409, detail="Un lit de cette chambre porte déjà ce nom.")
+    bed.label = payload.label
+    await db.commit()
+    await db.refresh(bed)
+    return HospitalBedOut.model_validate(bed)
+
+
 @router.delete("/beds/{bed_id}", response_model=MessageResponse)
 async def delete_bed(
     bed_id: int,
@@ -215,7 +243,9 @@ async def release_bed(
     db: AsyncSession = Depends(get_db),
 ):
     bed = await _get_bed(db, bed_id)
-    _clear_patient(bed)
+    clear_patient(bed)
+    # Un blessé de la Crise installé dans ce lit n'y est plus.
+    await db.execute(update(CrisisVictim).where(CrisisVictim.bed_id == bed.id).values(bed_id=None))
     await db.commit()
     await db.refresh(bed)
     return HospitalBedOut.model_validate(bed)

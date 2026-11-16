@@ -96,6 +96,11 @@ interface ParkingSpot {
   name: string
 }
 
+interface AffiliationGroup {
+  id: number
+  name: string
+}
+
 const pageOptions = [
   { key: 'human-resources', label: 'Ressources humaines' },
   { key: 'direction', label: 'Direction' },
@@ -110,7 +115,8 @@ const [
   { data: initialRequests },
   { data: initialSettings },
   { data: initialVehicles },
-  { data: initialParkingSpots }
+  { data: initialParkingSpots },
+  { data: initialGroups }
 ] =
   await Promise.all([
     useAsyncData('admin-users', () =>
@@ -136,6 +142,9 @@ const [
     ),
     useAsyncData('admin-parking-spots', () =>
       $fetch<ParkingSpot[]>('/api/admin/parking-spots', { credentials: 'include', headers: requestHeaders })
+    ),
+    useAsyncData('admin-groups', () =>
+      $fetch<AffiliationGroup[]>('/api/admin/groups', { credentials: 'include', headers: requestHeaders })
     )
   ])
 
@@ -198,7 +207,7 @@ const workingUserIds = ref<number[]>([])
 const savingRole = ref(false)
 const savingRoleIds = ref<number[]>([])
 const deletingRoleIds = ref<number[]>([])
-const adminSections = ['registrations', 'users', 'roles', 'vehicles', 'parking', 'settings'] as const
+const adminSections = ['registrations', 'users', 'roles', 'vehicles', 'parking', 'groups', 'settings'] as const
 const activeAdminSection = ref<(typeof adminSections)[number]>(
   registrations.value.length ? 'registrations' : 'users'
 )
@@ -640,6 +649,60 @@ async function deleteSpot(spot: ParkingSpot) {
   })
 }
 
+// --- Groupes : appartenance proposée dans la Crise et la Morgue ---
+const byGroupName = (a: AffiliationGroup, b: AffiliationGroup) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+const groups = ref<AffiliationGroup[]>(initialGroups.value ?? [])
+const groupForm = reactive({ name: '' })
+const savingGroup = ref(false)
+const workingGroupIds = ref<number[]>([])
+
+async function createGroup() {
+  if (savingGroup.value || !groupForm.name.trim()) return
+  adminError.value = ''
+  savingGroup.value = true
+  try {
+    const group = await $fetch<AffiliationGroup>('/api/admin/groups', {
+      method: 'POST',
+      body: { name: groupForm.name },
+      credentials: 'include'
+    })
+    groups.value = [...groups.value, group].sort(byGroupName)
+    groupForm.name = ''
+  } catch (cause) {
+    adminError.value = messageFromError(cause, 'Création du groupe impossible.')
+  } finally {
+    savingGroup.value = false
+  }
+}
+
+async function saveGroup(group: AffiliationGroup) {
+  await withWorking(workingGroupIds, group.id, async () => {
+    try {
+      const saved = await $fetch<AffiliationGroup>(`/api/admin/groups/${group.id}`, {
+        method: 'PATCH',
+        body: { name: group.name },
+        credentials: 'include'
+      })
+      Object.assign(group, saved)
+      groups.value = [...groups.value].sort(byGroupName)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Modification du groupe impossible.')
+    }
+  })
+}
+
+async function deleteGroup(group: AffiliationGroup) {
+  if (!window.confirm(`Supprimer le groupe « ${group.name} » ? Les blessés et défunts gardent leur appartenance.`)) return
+  await withWorking(workingGroupIds, group.id, async () => {
+    try {
+      await $fetch(`/api/admin/groups/${group.id}`, { method: 'DELETE', credentials: 'include' })
+      groups.value = groups.value.filter((item) => item.id !== group.id)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Suppression du groupe impossible.')
+    }
+  })
+}
+
 async function loadGoogleSheetsConfig() {
   googleSheetsLoading.value = true
   googleSheetsError.value = ''
@@ -843,6 +906,9 @@ function statusLabel(status: string) {
       </button>
       <button id="admin-tab-parking" type="button" role="tab" :aria-selected="activeAdminSection === 'parking'" aria-controls="admin-parking" :class="{ 'is-active': activeAdminSection === 'parking' }" @click="activeAdminSection = 'parking'">
         <Icon name="lucide:map-pin" size="16" /> Stationnement <span>{{ parkingSpots.length }}</span>
+      </button>
+      <button id="admin-tab-groups" type="button" role="tab" :aria-selected="activeAdminSection === 'groups'" aria-controls="admin-groups" :class="{ 'is-active': activeAdminSection === 'groups' }" @click="activeAdminSection = 'groups'">
+        <Icon name="lucide:flag" size="16" /> Groupes <span>{{ groups.length }}</span>
       </button>
       <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="activeAdminSection = 'settings'">
         <Icon name="lucide:settings-2" size="16" /> Paramètres
@@ -1056,6 +1122,33 @@ function statusLabel(status: string) {
       <div v-if="!parkingSpots.length" class="admin-empty">
         <Icon name="lucide:square-parking" size="21" />
         <p>Aucun emplacement enregistré.</p>
+      </div>
+    </section>
+
+    <section id="admin-groups" v-show="activeAdminSection === 'groups'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-groups" tabindex="0">
+      <div class="admin-section__heading">
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:flag" size="18" /></span><div><h2>Groupes</h2><p>Groupes proposés pour l’appartenance d’un blessé (Crise) et d’un défunt (Morgue). La liste n’est pas exhaustive : un autre groupe peut être saisi librement.</p></div></div>
+      </div>
+      <form class="admin-catalog-create admin-catalog-create--single" @submit.prevent="createGroup">
+        <label><span>Nom du groupe</span><input v-model="groupForm.name" required maxlength="64" placeholder="Ex. Ballas"></label>
+        <button class="admin-button admin-button--primary" type="submit" :disabled="savingGroup || !groupForm.name.trim()">
+          <Icon :name="savingGroup ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingGroup }" /> {{ savingGroup ? 'Création…' : 'Ajouter ce groupe' }}
+        </button>
+      </form>
+      <form v-for="group in groups" :key="group.id" class="admin-row admin-catalog-row admin-catalog-row--single" @submit.prevent="saveGroup(group)">
+        <label><span class="sr-only">Nom du groupe</span><input v-model="group.name" required maxlength="64"></label>
+        <div class="admin-row__actions">
+          <button type="submit" class="admin-button" :disabled="workingGroupIds.includes(group.id) || !group.name.trim()">
+            <Icon name="lucide:save" size="14" /> Enregistrer
+          </button>
+          <button type="button" class="admin-button admin-button--danger" :disabled="workingGroupIds.includes(group.id)" @click="deleteGroup(group)">
+            <Icon name="lucide:trash-2" size="14" /> Supprimer
+          </button>
+        </div>
+      </form>
+      <div v-if="!groups.length" class="admin-empty">
+        <Icon name="lucide:flag" size="21" />
+        <p>Aucun groupe enregistré.</p>
       </div>
     </section>
 

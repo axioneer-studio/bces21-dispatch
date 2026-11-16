@@ -943,6 +943,8 @@ class MorgueOut(BaseModel):
     can_manage_autopsy: bool
     # Médecin légiste : incinération et mise en cercueil.
     is_forensic: bool
+    # Groupes proposés pour l'appartenance (liste non exhaustive).
+    groups: list[str]
 
 
 class HospitalRoomRequest(BaseModel):
@@ -954,6 +956,17 @@ class HospitalRoomRequest(BaseModel):
     @classmethod
     def _room_name(cls, value: str) -> str:
         return _clean_required(value, "Le nom de la chambre")
+
+
+class HospitalBedRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=32)
+
+    @field_validator("label")
+    @classmethod
+    def _bed_label(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du lit")
 
 
 class HospitalBedReasonRequest(BaseModel):
@@ -1041,3 +1054,138 @@ class HospitalRoomsOut(BaseModel):
     rooms: list[HospitalRoomOut]
     reasons: list[HospitalBedReasonOut]
     can_manage: bool
+
+
+# --- Groupes (appartenance) ---
+
+
+class AffiliationGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class AffiliationGroupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du groupe")
+
+
+# --- Gestion de crise ---
+
+
+class CrisisTeamRequest(BaseModel):
+    """Remplace l'équipe : le Primo Intervenant (ou aucun) et les agents qui l'assistent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    primo_id: Optional[int] = None
+    helper_ids: list[int] = Field(default_factory=list)
+
+
+_CRISIS_TEXT_FIELDS = ("full_name", "affiliation", "injuries", "repatriating_doctor", "treating_doctor")
+
+
+class CrisisVictimCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(default="", max_length=120)
+    affiliation: str = Field(default="", max_length=64)
+    coma: bool = False
+    severe: bool = False
+    unconscious: bool = False
+    injuries: str = Field(default="", max_length=500)
+
+    @field_validator("full_name", "affiliation", "injuries")
+    @classmethod
+    def _trim_crisis_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class CrisisVictimUpdate(BaseModel):
+    """Champs facultatifs : seuls ceux envoyés sont modifiés. `arrived` coche ou
+    décoche l'arrivée à l'hôpital, dont l'heure est prise par le serveur."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: Optional[str] = Field(default=None, max_length=120)
+    affiliation: Optional[str] = Field(default=None, max_length=64)
+    coma: Optional[bool] = None
+    severe: Optional[bool] = None
+    unconscious: Optional[bool] = None
+    injuries: Optional[str] = Field(default=None, max_length=500)
+    repatriating_doctor: Optional[str] = Field(default=None, max_length=120)
+    treating_doctor: Optional[str] = Field(default=None, max_length=120)
+    arrived: Optional[bool] = None
+    care_done: Optional[bool] = None
+    channel_added: Optional[bool] = None
+    bed_id: Optional[int] = None
+
+    @field_validator(*_CRISIS_TEXT_FIELDS)
+    @classmethod
+    def _trim_crisis_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            raise ValueError("Ce champ ne peut pas être vide ; envoyez une chaîne vide.")
+        return value.strip()
+
+    @field_validator("coma", "severe", "unconscious", "arrived", "care_done", "channel_added")
+    @classmethod
+    def _crisis_flag_required(cls, value: Optional[bool], info: ValidationInfo):
+        if value is None:
+            raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
+        return value
+
+
+class CrisisVictimOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    full_name: str
+    affiliation: str
+    coma: bool
+    severe: bool
+    unconscious: bool
+    injuries: str
+    repatriating_doctor: str
+    treating_doctor: str
+    arrived_at: Optional[datetime]
+    care_done: bool
+    channel_added: bool
+    bed_id: Optional[int]
+    created_at: datetime
+
+    @field_validator("arrived_at", "created_at")
+    @classmethod
+    def _as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """SQLite rend les dates sans fuseau : elles sont en UTC."""
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
+class CrisisEmployeeOut(BaseModel):
+    id: int
+    name: str
+
+
+class CrisisBedOut(BaseModel):
+    id: int
+    label: str
+    patient_name: Optional[str]
+
+
+class CrisisOut(BaseModel):
+    primo: Optional[CrisisEmployeeOut]
+    helpers: list[CrisisEmployeeOut]
+    victims: list[CrisisVictimOut]
+    # Choix proposés : employés actifs (Primo, assistants, médecins), lits de
+    # l'hôpital et groupes d'appartenance.
+    employees: list[CrisisEmployeeOut]
+    beds: list[CrisisBedOut]
+    groups: list[str]

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from affiliation_groups import group_names
 from app_permissions import require_app_permission, user_has_app_permission, user_role_permissions
 from database import get_db
 from deps import get_current_user, require_page_access
@@ -114,6 +115,7 @@ async def get_morgue(
         ],
         can_manage_autopsy=can_manage_autopsy,
         is_forensic=user_has_app_permission(user, FORENSIC_PERMISSION),
+        groups=await group_names(db),
     )
 
 

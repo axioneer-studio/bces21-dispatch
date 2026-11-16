@@ -65,6 +65,11 @@ const editingRoom = ref<HospitalRoom | null>(null)
 const roomName = ref('')
 const roomError = ref('')
 
+const bedDialog = ref<HTMLDialogElement | null>(null)
+const renamedBed = ref<HospitalBed | null>(null)
+const bedLabel = ref('')
+const bedError = ref('')
+
 const patientDialog = ref<HTMLDialogElement | null>(null)
 const editingBed = ref<HospitalBed | null>(null)
 const saving = ref(false)
@@ -161,7 +166,7 @@ async function load() {
 /** Rafraîchissement en arrière-plan, sans toucher à une saisie en cours. */
 function refresh() {
   if (!props.active || busy.value || saving.value) return
-  if (patientDialog.value?.open || reasonsDialog.value?.open || roomDialog.value?.open) return
+  if (patientDialog.value?.open || reasonsDialog.value?.open || roomDialog.value?.open || bedDialog.value?.open) return
   void load()
 }
 
@@ -250,6 +255,40 @@ function addBed(room: HospitalRoom) {
     `Lit ajouté à « ${room.name} ».`,
     'Impossible d’ajouter le lit.'
   )
+}
+
+function openBedDialog(bed: HospitalBed) {
+  renamedBed.value = bed
+  bedLabel.value = bed.label
+  bedError.value = ''
+  bedDialog.value?.showModal()
+}
+
+async function saveBedLabel() {
+  const bed = renamedBed.value
+  const label = bedLabel.value.trim()
+  if (!bed) return
+  if (!label) {
+    bedError.value = 'Le nom du lit est obligatoire.'
+    return
+  }
+  if (label === bed.label) {
+    bedDialog.value?.close()
+    return
+  }
+  if (busy.value) return
+  busy.value = true
+  bedError.value = ''
+  try {
+    await $fetch(`/api/hospital/beds/${bed.id}`, { method: 'PATCH', credentials: 'include', body: { label } })
+    bedDialog.value?.close()
+    await load()
+    toast.success('Lit renommé.')
+  } catch (cause) {
+    bedError.value = messageFromError(cause, 'Impossible de renommer le lit.')
+  } finally {
+    busy.value = false
+  }
 }
 
 async function deleteBed(room: HospitalRoom, bed: HospitalBed) {
@@ -408,7 +447,18 @@ function deleteReason(reason: BedReason) {
           :class="bed.patient_name ? 'bed--occupied' : 'bed--free'"
         >
           <header class="bed__head">
-            <span class="bed__label"><Icon name="lucide:bed-single" size="13" /> {{ bed.label }}</span>
+            <span class="bed__label">
+              <Icon name="lucide:bed-single" size="13" /> {{ bed.label }}
+              <button
+                v-if="canManage"
+                type="button"
+                class="bed__rename"
+                :disabled="busy"
+                :aria-label="`Renommer le ${bed.label}`"
+                title="Renommer le lit"
+                @click="openBedDialog(bed)"
+              ><Icon name="lucide:pencil" size="11" /></button>
+            </span>
             <time v-if="bed.arrival_date" :datetime="bed.arrival_date" title="Date d’arrivée">{{ formatDate(bed.arrival_date) }}</time>
             <span v-else class="bed__free">Libre</span>
           </header>
@@ -531,6 +581,30 @@ function deleteReason(reason: BedReason) {
       </form>
     </dialog>
 
+    <dialog ref="bedDialog" class="rooms-dialog rooms-dialog--small" aria-labelledby="bed-dialog-title" @cancel.prevent="!busy && bedDialog?.close()">
+      <form class="rooms-dialog__content" @submit.prevent="saveBedLabel">
+        <header class="rooms-dialog__header">
+          <h2 id="bed-dialog-title">Renommer le lit</h2>
+          <button type="button" class="rooms-dialog__close" aria-label="Fermer" :disabled="busy" @click="bedDialog?.close()">
+            <Icon name="lucide:x" size="16" />
+          </button>
+        </header>
+        <div class="rooms-form">
+          <label class="rooms-form__wide">Nom du lit
+            <input v-model="bedLabel" type="text" maxlength="32" placeholder="Ex. Lit 1, Lit fenêtre…" required>
+          </label>
+        </div>
+        <p v-if="bedError" class="rooms__error" role="alert"><Icon name="lucide:circle-alert" size="16" /><span>{{ bedError }}</span></p>
+        <footer class="rooms-dialog__footer">
+          <button type="button" class="rooms-button" :disabled="busy" @click="bedDialog?.close()">Annuler</button>
+          <button type="submit" class="rooms-button rooms-button--primary" :disabled="busy">
+            <Icon v-if="busy" name="lucide:loader-circle" size="14" class="rooms-spin" />
+            Renommer
+          </button>
+        </footer>
+      </form>
+    </dialog>
+
     <dialog ref="roomDialog" class="rooms-dialog rooms-dialog--small" aria-labelledby="room-dialog-title" @cancel.prevent="!busy && roomDialog?.close()">
       <form class="rooms-dialog__content" @submit.prevent="saveRoom">
         <header class="rooms-dialog__header">
@@ -617,6 +691,10 @@ function deleteReason(reason: BedReason) {
 .bed__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bed__label { display: inline-flex; align-items: center; gap: 5px; color: var(--dp-accent); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .bed--free .bed__label { color: var(--dp-text-dim); }
+.bed__rename { display: inline-grid; width: 20px; height: 20px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 6px; color: var(--dp-text-dim); background: transparent; cursor: pointer; }
+.bed__rename:hover:not(:disabled) { border-color: var(--dp-line-strong); color: var(--dp-text); background: var(--dp-panel-3); }
+.bed__rename:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: 1px; }
+.bed__rename:disabled { opacity: .5; cursor: not-allowed; }
 .bed__head time { color: var(--dp-text); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .bed__free { color: var(--dp-text-dim); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .bed__patient { margin: 0; overflow-wrap: anywhere; color: var(--dp-text); font-size: 14px; font-weight: 700; }

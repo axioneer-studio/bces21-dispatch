@@ -43,6 +43,7 @@ interface NavItem {
 
 const items: NavItem[] = [
   { to: '/dispatch', label: 'Dispatch', icon: 'lucide:radio-tower', page: 'dispatch' },
+  { to: '/crise', label: 'Crise', icon: 'lucide:siren', page: 'crisis' },
   { to: '/hopital', label: 'Hôpital', icon: 'lucide:hospital', page: 'hospital' },
   { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
   { to: '/stock', label: 'Stock', icon: 'lucide:boxes', page: 'stock' },
@@ -52,7 +53,7 @@ const items: NavItem[] = [
 ]
 
 /** Pages ouvertes à tout compte validé, même sans rôle : elles n'ont pas de case à cocher dans les rôles. */
-const PUBLIC_PAGES = new Set(['dispatch', 'hospital', 'agenda', 'stock'])
+const PUBLIC_PAGES = new Set(['dispatch', 'crisis', 'hospital', 'agenda', 'stock'])
 
 const visibleItems = computed(() => items.filter((item) =>
   PUBLIC_PAGES.has(item.page)

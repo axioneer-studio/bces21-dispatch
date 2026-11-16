@@ -372,3 +372,55 @@ class MorgueEntry(Base):
     coffined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class AffiliationGroup(Base):
+    """Groupe proposé pour l'appartenance d'un blessé (Crise) ou d'un défunt
+    (Morgue). La liste n'est pas exhaustive : on peut saisir un autre groupe."""
+
+    __tablename__ = "affiliation_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class CrisisMember(Base):
+    """Équipe de la crise en cours : le Primo Intervenant et les agents qui l'assistent."""
+
+    __tablename__ = "crisis_members"
+
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    employee: Mapped["Employee"] = relationship(lazy="selectin")
+    # Un seul membre est le Primo Intervenant ; les autres l'assistent.
+    is_primo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class CrisisVictim(Base):
+    """Blessé de la crise en cours, renseigné par l'équipe sur place puis suivi
+    jusqu'à l'hôpital. La « Tempête » vide la liste."""
+
+    __tablename__ = "crisis_victims"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    full_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    affiliation: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    coma: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    severe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    unconscious: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    injuries: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    repatriating_doctor: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    treating_doctor: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    # Arrivée à l'hôpital : l'heure est prise au moment où on coche la case.
+    arrived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    care_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Cases de la Centrale : blessé ajouté au canal radio, et lit où il est installé.
+    channel_added: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    bed_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("hospital_beds.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
