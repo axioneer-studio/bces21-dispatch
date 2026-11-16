@@ -9,6 +9,7 @@ Choisir un lit installe le blessé dans ce lit de l'onglet Chambres, avec la rai
 retiré de la liste), il quitte le lit, qui redevient libre.
 """
 
+import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -20,9 +21,23 @@ from affiliation_groups import group_names
 from config import get_settings
 from database import get_db
 from deps import get_current_user, require_page_access
+from crisis_link import PRIMO_STATUS, crisis_state, primo_slot
+from dispatch import _renumber_slot_orders, _sync_employee_to_google_sheets, push_snapshot
 from hospital_access import linked_employee
 from hospital_rooms import clear_patient
-from models import CrisisMember, CrisisVictim, Employee, HospitalBed, HospitalBedReason, HospitalRoom, User, utcnow
+from models import (
+    CrisisMember,
+    CrisisState,
+    CrisisVictim,
+    DispatchAssignment,
+    DispatchSlot,
+    Employee,
+    HospitalBed,
+    HospitalBedReason,
+    HospitalRoom,
+    User,
+    utcnow,
+)
 from schemas import (
     CrisisBedOut,
     CrisisEmployeeOut,
@@ -31,6 +46,7 @@ from schemas import (
     CrisisVictimCreate,
     CrisisVictimOut,
     CrisisVictimUpdate,
+    CrisisZipRequest,
     MessageResponse,
 )
 
@@ -91,6 +107,35 @@ async def _install_in_bed(db: AsyncSession, victim: CrisisVictim, bed_id: int) -
     victim.bed_id = bed.id
 
 
+async def _assign_primo_on_dispatch(db: AsyncSession, employee_id: int) -> None:
+    """Affecte le Primo à l'intervention « Primo » de la crise, créée au besoin avec
+    le code postal de la crise. Comme un glisser-déposer sur le Dispatch, il quitte
+    son poste précédent et arrive en dernier."""
+    state = await crisis_state(db)
+    slot = await primo_slot(db, state)
+    if slot is None:
+        last_order = await db.scalar(select(func.max(DispatchSlot.order)))
+        slot = DispatchSlot(
+            kind="intervention",
+            title="Intervention",
+            status=PRIMO_STATUS,
+            zip_code=state.zip_code,
+            order=(last_order + 1) if last_order is not None else 0,
+        )
+        db.add(slot)
+        await db.flush()
+        state.slot_id = slot.id
+    assignment = await db.scalar(select(DispatchAssignment).where(DispatchAssignment.employee_id == employee_id))
+    if assignment is None:
+        db.add(DispatchAssignment(employee_id=employee_id, slot_id=slot.id, order=0))
+    elif assignment.slot_id != slot.id:
+        assignment.slot_id = slot.id
+        assignment.order = 0
+        assignment.created_at = utcnow()
+    await db.flush()
+    await _renumber_slot_orders(db, slot.id)
+
+
 async def _get_victim(db: AsyncSession, victim_id: int) -> CrisisVictim:
     victim = await db.get(CrisisVictim, victim_id)
     if not victim:
@@ -124,7 +169,10 @@ async def get_crisis(
             .order_by(HospitalRoom.order, HospitalRoom.id, HospitalBed.id)
         )
     ).all()
+    state = await db.get(CrisisState, 1)
+    slot = await primo_slot(db, state)
     return CrisisOut(
+        zip_code=slot.zip_code if slot else (state.zip_code if state else None),
         primo=_employee_out(primo) if primo else None,
         helpers=[_employee_out(member.employee) for member in members if not member.is_primo],
         victims=[CrisisVictimOut.model_validate(victim) for victim in victims],
@@ -143,7 +191,9 @@ async def set_team(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remplace l'équipe. Le Primo n'est pas compté parmi les agents qui l'assistent."""
+    """Remplace l'équipe. Le Primo n'est pas compté parmi les agents qui l'assistent.
+    Un nouveau Primo est aussi affecté à l'intervention « Primo » du Dispatch."""
+    previous_primo_id = await db.scalar(select(CrisisMember.employee_id).where(CrisisMember.is_primo.is_(True)))
     helper_ids = [
         employee_id for employee_id in dict.fromkeys(payload.helper_ids) if employee_id != payload.primo_id
     ]
@@ -163,8 +213,32 @@ async def set_team(
         db.add(CrisisMember(employee_id=payload.primo_id, is_primo=True))
     for employee_id in helper_ids:
         db.add(CrisisMember(employee_id=employee_id, is_primo=False))
+    on_dispatch = payload.primo_id is not None and payload.primo_id != previous_primo_id
+    if on_dispatch:
+        await _assign_primo_on_dispatch(db, payload.primo_id)
     await db.commit()
+    if on_dispatch:
+        await push_snapshot(db)
+        asyncio.create_task(_sync_employee_to_google_sheets())
     return {"message": "Équipe de crise mise à jour."}
+
+
+@router.put("/zip", response_model=MessageResponse)
+async def set_zip(
+    payload: CrisisZipRequest,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Code postal de la crise, repris sur l'intervention « Primo » du Dispatch."""
+    state = await crisis_state(db)
+    state.zip_code = payload.zip_code
+    slot = await primo_slot(db, state)
+    if slot is not None:
+        slot.zip_code = payload.zip_code
+    await db.commit()
+    if slot is not None:
+        await push_snapshot(db)
+    return {"message": "Code postal de la crise mis à jour."}
 
 
 @router.post("/victims", response_model=CrisisVictimOut, status_code=status.HTTP_201_CREATED)
@@ -251,11 +325,13 @@ async def reset_crisis(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Tempête : vide la liste des blessés et l'équipe de crise, et libère les lits
-    où des blessés de la crise étaient installés."""
+    """Tempête : vide la liste des blessés, l'équipe et le code postal de la crise,
+    et libère les lits où des blessés de la crise étaient installés."""
     for victim in (await db.execute(select(CrisisVictim).where(CrisisVictim.bed_id.is_not(None)))).scalars():
         await _release_bed(db, victim)
     await db.execute(delete(CrisisVictim))
     await db.execute(delete(CrisisMember))
+    # L'intervention « Primo » reste sur le Dispatch, mais n'est plus celle de la crise.
+    await db.execute(delete(CrisisState))
     await db.commit()
     return {"message": "Crise réinitialisée."}

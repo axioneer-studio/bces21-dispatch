@@ -1089,6 +1089,17 @@ class CrisisTeamRequest(BaseModel):
     helper_ids: list[int] = Field(default_factory=list)
 
 
+class CrisisZipRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    zip_code: Optional[str] = Field(default=None, max_length=16)
+
+    @field_validator("zip_code")
+    @classmethod
+    def _zip(cls, value: Optional[str]) -> Optional[str]:
+        return (value or "").strip() or None
+
+
 _CRISIS_TEXT_FIELDS = ("full_name", "affiliation", "injuries", "repatriating_doctor", "treating_doctor")
 
 
@@ -1181,6 +1192,8 @@ class CrisisBedOut(BaseModel):
 
 
 class CrisisOut(BaseModel):
+    # Code postal de la crise : celui de l'intervention « Primo » du Dispatch quand elle existe.
+    zip_code: Optional[str]
     primo: Optional[CrisisEmployeeOut]
     helpers: list[CrisisEmployeeOut]
     victims: list[CrisisVictimOut]

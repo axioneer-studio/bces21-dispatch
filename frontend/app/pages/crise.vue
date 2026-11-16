@@ -33,6 +33,7 @@ interface CrisisVictim {
 }
 
 interface CrisisData {
+  zip_code: string | null
   primo: CrisisEmployee | null
   helpers: CrisisEmployee[]
   victims: CrisisVictim[]
@@ -50,6 +51,10 @@ type VictimPatch = Partial<Record<VictimText, string> & Record<VictimFlag, boole
 
 const toast = useAppToast()
 
+/** Code postal de la crise : celui de l'intervention « Primo » du Dispatch quand elle existe. */
+const zipCode = ref<string | null>(null)
+const zipDraft = ref('')
+const zipInput = ref<HTMLInputElement | null>(null)
 const primo = ref<CrisisEmployee | null>(null)
 const helpers = ref<CrisisEmployee[]>([])
 const victims = ref<CrisisVictim[]>([])
@@ -76,8 +81,12 @@ function groupKey(victim: CrisisVictim) {
  * apparus, et dans chaque groupe les blessés dans l'ordre de saisie (le plus
  * récent en bas de son groupe). Les appartenances inconnues forment un groupe.
  */
+const sortedByCreation = computed(() =>
+  [...victims.value].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id)
+)
+
 const sortedVictims = computed(() => {
-  const byCreation = [...victims.value].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id)
+  const byCreation = sortedByCreation.value
   const groupRank = new Map<string, number>()
   for (const victim of byCreation) {
     if (!groupRank.has(groupKey(victim))) groupRank.set(groupKey(victim), groupRank.size)
@@ -94,6 +103,9 @@ const nextToTreatId = computed(() => {
   waiting.sort((a, b) => Date.parse(a.arrived_at!) - Date.parse(b.arrived_at!) || a.id - b.id)
   return waiting[0]?.id ?? null
 })
+
+/** Heure de saisie de la première ligne de la crise. */
+const firstEntryAt = computed(() => sortedByCreation.value[0]?.created_at ?? null)
 
 const counts = computed(() => ({
   total: victims.value.length,
@@ -138,6 +150,8 @@ function formatTime(value: string) {
 async function load() {
   try {
     const data = await $fetch<CrisisData>('/api/crisis', { credentials: 'include' })
+    zipCode.value = data.zip_code
+    if (document.activeElement !== zipInput.value) zipDraft.value = data.zip_code ?? ''
     primo.value = data.primo
     helpers.value = data.helpers
     victims.value = data.victims
@@ -200,6 +214,22 @@ async function saveTeam(nextPrimo: CrisisEmployee | null, nextHelpers: CrisisEmp
   if (done === undefined) {
     primo.value = previous.primo
     helpers.value = previous.helpers
+  }
+}
+
+async function saveZip() {
+  const value = zipDraft.value.trim() || null
+  zipDraft.value = value ?? ''
+  if (value === zipCode.value) return
+  const previous = zipCode.value
+  zipCode.value = value
+  const done = await request(
+    () => $fetch('/api/crisis/zip', { method: 'PUT', credentials: 'include', body: { zip_code: value } }),
+    'Impossible d’enregistrer le code postal.'
+  )
+  if (done === undefined) {
+    zipCode.value = previous
+    zipDraft.value = previous ?? ''
   }
 }
 
@@ -322,10 +352,26 @@ async function resetCrisis() {
             {{ counts.arrived }} arrivé{{ counts.arrived > 1 ? 's' : '' }} ·
             {{ counts.cared }} soigné{{ counts.cared > 1 ? 's' : '' }}
           </p>
+          <p class="crisis-bar__start">
+            <Icon name="lucide:clock" size="12" />
+            {{ firstEntryAt ? `Première ligne à ${formatTime(firstEntryAt)}` : 'Aucune ligne' }}
+          </p>
         </div>
       </div>
 
       <div class="crisis-team">
+        <label class="crisis-team__zip">
+          <span>ZIP</span>
+          <input
+            ref="zipInput"
+            v-model="zipDraft"
+            type="text"
+            maxlength="16"
+            placeholder="—"
+            @change="saveZip"
+            @keydown.enter="zipInput?.blur()"
+          >
+        </label>
         <label class="crisis-team__primo">
           <span>Primo Intervenant</span>
           <select :value="primo?.id ?? ''" @change="onPrimoChange">
@@ -523,6 +569,10 @@ async function resetCrisis() {
 .crisis-bar__icon { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--dp-danger-line); border-radius: 11px; color: var(--dp-danger); background: var(--dp-danger-soft); }
 .crisis-bar h1 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
 .crisis-bar__title p { margin: 3px 0 0; color: var(--dp-text-dim); font-size: 11px; }
+.crisis-bar__title .crisis-bar__start { display: flex; align-items: center; gap: 5px; color: var(--dp-text-2); font-variant-numeric: tabular-nums; }
+.crisis-team__zip { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
+.crisis-team__zip input { width: 90px; min-height: 34px; padding: 0 9px; border: 1px solid var(--dp-line); border-radius: 8px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; }
+.crisis-team__zip input:focus-visible { border-color: var(--dp-accent-line); outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; }
 
 .crisis-team { display: flex; flex: 1; flex-wrap: wrap; align-items: flex-start; gap: 12px 18px; min-width: 0; }
 .crisis-team__primo, .crisis-team__helpers { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }

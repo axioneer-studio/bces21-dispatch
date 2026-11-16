@@ -385,6 +385,19 @@ class AffiliationGroup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class CrisisState(Base):
+    """Ligne unique `id = 1` : code postal de la crise et intervention « Primo » du
+    Dispatch où le Primo Intervenant est affecté."""
+
+    __tablename__ = "crisis_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    zip_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    slot_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("dispatch_slots.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class CrisisMember(Base):
     """Équipe de la crise en cours : le Primo Intervenant et les agents qui l'assistent."""
 

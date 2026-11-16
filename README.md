@@ -54,7 +54,18 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Page ouverte à tout compte validé, même sans rôle, pour gérer une situation de
   crise. En pratique, c'est la Centrale du Dispatch qui la pilote.
 - Équipe : un Primo Intervenant et les agents qui l'assistent, choisis parmi les
-  employés actifs.
+  employés actifs. Désigner un Primo l'affecte aussi, sur le Dispatch, à
+  l'intervention « Primo » de la crise, créée au besoin ; un Primo remplacé y
+  reste affecté.
+- Dans l'autre sens, passer une intervention du Dispatch au statut « Primo » en
+  fait celle de la crise, si la crise n'en a pas encore. L'équipe suit alors les
+  membres de cette intervention : le premier arrivé est Primo, les suivants en
+  assistance ; qui en est retiré ou déplacé quitte l'équipe, et si c'était le
+  Primo, le suivant de l'intervention prend sa place. Supprimer ou vider
+  l'intervention (Tempête du Dispatch) vide l'équipe (`backend/crisis_link.py`).
+- En-tête : code postal (ZIP) de la crise, partagé avec l'intervention « Primo »
+  du Dispatch (modifiable d'un côté ou de l'autre), et heure de saisie de la
+  première ligne.
 - Liste des blessés, sous forme de tableau modifiable sur place : nom et prénom,
   appartenance (groupe), coma, blessure grave, inconscient, analyse sommaire des
   blessures, médecin qui rapatrie, médecin soignant, arrivée à l'hôpital (l'heure
@@ -580,7 +591,8 @@ Toutes les routes sont ouvertes à tout compte validé.
 | Méthode | Chemin | Description |
 |---|---|---|
 | `GET` | `/api/crisis` | Équipe (Primo et agents en assistance), blessés, employés actifs, lits et groupes proposés |
-| `PUT` | `/api/crisis/team` | Remplace l'équipe : `primo_id` (ou `null`) et `helper_ids` |
+| `PUT` | `/api/crisis/team` | Remplace l'équipe : `primo_id` (ou `null`) et `helper_ids` ; un nouveau Primo est affecté à l'intervention « Primo » du Dispatch |
+| `PUT` | `/api/crisis/zip` | Code postal de la crise, repris sur l'intervention « Primo » |
 | `POST` | `/api/crisis/victims` | Ajoute un blessé |
 | `PATCH` | `/api/crisis/victims/{id}` | Modifie un blessé ; `arrived: true` prend l'heure d'arrivée, `false` l'efface. Cocher l'arrivée ou les soins renseigne le médecin correspondant s'il est vide ; `channel_added` exige `care_done` (`409` sinon) |
 | `DELETE` | `/api/crisis/victims/{id}` | Retire un blessé de la liste |
@@ -657,6 +669,7 @@ d'employés.
 | `hospital_beds` | Lits : `room_id` → `hospital_rooms` (cascade), `label`, puis le patient : `patient_name` (vide si le lit est libre), `accident`, `arrival_date`, `care_done`, `police_status` (`none` \| `to_notify` \| `notified`), `reason` |
 | `hospital_bed_reasons` | Raisons proposées pour la présence d’un patient dans un lit |
 | `morgue_entries` | Défunts de la morgue : `death_date`, `identity`, `affiliation`, `info_shareable`, `autopsy_done`, `examiner_id` → `employees`, `emergency_contacts`, `recoverable`, `incinerated_at` (vide tant que le corps est en cellule) |
+| `crisis_state` | Ligne unique `id = 1` : `zip_code` de la crise et `slot_id` → `dispatch_slots`, l'intervention « Primo » (vidée si elle est supprimée) |
 | `crisis_members` | Équipe de crise : `employee_id` → `employees` (cascade), `is_primo` (un seul Primo) |
 | `crisis_victims` | Blessés de la crise : `full_name`, `affiliation`, `coma`, `severe`, `unconscious`, `injuries`, `repatriating_doctor`, `treating_doctor`, `arrived_at`, `care_done`, `channel_added`, `bed_id` → `hospital_beds` (vidé si le lit est supprimé) |
 | `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_bces`, `freq_shared` (fréquences actuelles, vides tant qu'elles ne sont pas réglées ; bornes dans `application_settings`), `radio_codes` |
