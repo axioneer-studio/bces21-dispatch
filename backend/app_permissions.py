@@ -29,9 +29,15 @@ def parse_app_permissions(value: str | None) -> list[str]:
 def user_has_app_permission(user: User, permission: str) -> bool:
     if user.has_super_admin_rights:
         return True
-    return bool(
-        user.role
-        and permission in parse_app_permissions(user.role.permissions)
+    return permission in user_role_permissions(user)
+
+
+def user_role_permissions(user: User) -> list[str]:
+    """Permissions de l'ensemble des rôles du compte, sans doublon."""
+    return list(
+        dict.fromkeys(
+            permission for role in user.roles for permission in parse_app_permissions(role.permissions)
+        )
     )
 
 

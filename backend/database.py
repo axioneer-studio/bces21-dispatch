@@ -121,6 +121,31 @@ async def _run_role_migrations(conn) -> None:
         except Exception:
             pass
     await _clean_role_pages(conn)
+    await _move_user_role_to_user_roles(conn)
+
+
+async def _move_user_role_to_user_roles(conn) -> None:
+    """Reprend l'ancien rôle unique (`users.role_id`) dans `user_roles`, puis le vide
+    pour que la reprise ne se refasse pas après un retrait de rôle."""
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """
+                    INSERT INTO user_roles (user_id, role_id)
+                    SELECT u.id, u.role_id FROM users u
+                    WHERE u.role_id IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM roles r WHERE r.id = u.role_id)
+                      AND NOT EXISTS (
+                          SELECT 1 FROM user_roles ur
+                          WHERE ur.user_id = u.id AND ur.role_id = u.role_id
+                      )
+                    """
+                )
+            )
+            await conn.execute(text("UPDATE users SET role_id = NULL WHERE role_id IS NOT NULL"))
+    except Exception:
+        pass  # base créée sans la colonne users.role_id
 
 
 async def _clean_role_pages(conn) -> None:

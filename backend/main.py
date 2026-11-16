@@ -1,4 +1,3 @@
-import json
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -11,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agents import router as agents_router
 from agenda import router as agenda_router
 from administration import router as administration_router
-from app_permissions import parse_app_permissions
+from app_permissions import user_role_permissions
 from auth.router import router as auth_router
 from cleanup import cleanup_loop
 from config import get_settings
 from database import get_db, init_db
-from deps import get_current_user
+from deps import get_current_user, user_role_pages
 from dispatch import router as dispatch_router
 from direction import router as direction_router
 from fleet import router as fleet_router
@@ -120,10 +119,6 @@ async def toggle_own_super_admin(
 
 async def _me_response(db: AsyncSession, user: User) -> UserResponse:
     response = UserResponse.model_validate(user)
-    try:
-        pages = json.loads(user.role.pages) if user.role else []
-    except (TypeError, ValueError):
-        pages = []
     grade_permissions = await db.scalar(
         select(Grade.permissions)
         .join(Employee, Employee.grade_id == Grade.id)
@@ -131,14 +126,12 @@ async def _me_response(db: AsyncSession, user: User) -> UserResponse:
     )
     return response.model_copy(
         update={
-            "role_name": user.role.name if user.role else None,
+            "role_names": [role.name for role in user.roles],
             "is_super_admin": user.has_super_admin_rights,
             "super_admin_available": user.is_super_admin,
             "super_admin_enabled": user.super_admin_enabled,
-            "page_access": pages if isinstance(pages, list) else [],
-            "app_permissions": parse_app_permissions(
-                user.role.permissions if user.role else None
-            ),
+            "page_access": user_role_pages(user),
+            "app_permissions": user_role_permissions(user),
             "grade_permissions": parse_grade_permissions(grade_permissions),
         }
     )

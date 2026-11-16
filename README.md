@@ -105,6 +105,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Comptes en attente de validation : traitement par un administrateur. Un
   compte validé accède au Dispatch, à l'Hôpital, à l'Agenda et au Stock, même
   sans rôle ; un rôle ajoute les autres pages.
+- Un compte peut avoir plusieurs rôles (par exemple Légiste et Gestion de
+  l'hôpital) : il cumule les pages et les permissions de tous ses rôles.
 - Désactiver un compte le suspend : il ne peut plus se connecter ni appeler
   l'API. Le réactiver lui rend ses accès sans nouvelle validation.
 
@@ -466,7 +468,7 @@ vérifient en plus la page cochée dans le rôle.
 | Méthode | Chemin | Description |
 |---|---|---|
 | `GET` | `/api/admin/users` | Liste les utilisateurs et leur état (Administration) |
-| `PATCH` | `/api/admin/users/{id}/role` | Attribue un rôle applicatif |
+| `PUT` | `/api/admin/users/{id}/roles` | Remplace les rôles applicatifs du compte (`role_ids`, liste éventuellement vide) |
 | `PATCH` | `/api/admin/users/{id}/activation` | Active ou désactive un compte |
 | `DELETE` | `/api/admin/users/{id}` | Supprime un compte en conservant sa tuile RH |
 | `POST` | `/api/admin/registrations/{id}/approve` | Valide une inscription |
@@ -588,8 +590,9 @@ d'employés.
 
 | Table | Contenu |
 |---|---|
-| `users` | Comptes Discord et accès : profil, `role_id`, `is_super_admin`, `status`, `last_login_at` |
+| `users` | Comptes Discord et accès : profil, `is_super_admin`, `status`, `last_login_at` (l'ancienne colonne `role_id` est reprise dans `user_roles` au démarrage, puis vidée) |
 | `roles` | Rôles personnalisés et pages autorisées |
+| `user_roles` | Rôles de chaque compte : `user_id` → `users`, `role_id` → `roles` (cascade des deux côtés) |
 | `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
 | `grades` | Hiérarchie de service et permissions opérationnelles par grade |
 | `application_settings` | Paramètres généraux configurés dans Administration |
@@ -642,8 +645,9 @@ accessibles » des rôles : ils sont ouverts à tout compte validé, même sans 
 (`OPEN_PAGES` dans `backend/deps.py`). Un compte en attente ou désactivé reçoit
 un `403` sur `/api/me` et repart vers la connexion. Les rôles ne cochent que
 Ressources humaines, Direction et Administration ; au démarrage, les pages qui
-ne sont plus à cocher sont retirées des rôles existants. Les super-admins ont
-accès à tout.
+ne sont plus à cocher sont retirées des rôles existants. Un compte à plusieurs
+rôles cumule leurs pages et leurs permissions. Les super-admins ont accès à
+tout.
 
 ### Composables
 

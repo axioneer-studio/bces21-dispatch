@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import type { Ref } from 'vue'
 
 definePageMeta({ layout: 'dispatch' })
@@ -24,8 +24,8 @@ interface AppUser {
   first_name: string | null
   last_name: string | null
   status: string
-  role_id: number | null
-  role_name: string | null
+  role_ids: number[]
+  role_names: string[]
   is_super_admin: boolean
   super_admin_enabled: boolean
   created_at: string
@@ -227,7 +227,7 @@ const filteredUsers = computed(() => {
   const query = userSearch.value.trim().toLocaleLowerCase('fr')
   if (!query) return users.value
   return users.value.filter((user) =>
-    [user.first_name, user.last_name, user.discord_username, user.role_name, statusLabel(user.status)]
+    [user.first_name, user.last_name, user.discord_username, ...user.role_names, statusLabel(user.status)]
       .filter(Boolean)
       .join(' ')
       .toLocaleLowerCase('fr')
@@ -314,12 +314,19 @@ async function refreshRoles() {
 
 async function deleteRole(role: AppRole) {
   if (deletingRoleIds.value.includes(role.id)) return
-  if (!window.confirm(`Supprimer le rôle « ${role.name} » ?`)) return
+  const usersCount = role.users_count || 0
+  if (
+    !window.confirm(
+      `Supprimer le rôle « ${role.name} » ?\nIl sera retiré de ${usersCount} compte${usersCount > 1 ? 's' : ''} qui le possèdent.`
+    )
+  )
+    return
   adminError.value = ''
   deletingRoleIds.value.push(role.id)
   try {
     await $fetch(`/api/admin/roles/${role.id}`, { method: 'DELETE', credentials: 'include' })
     roles.value = roles.value.filter((item) => item.id !== role.id)
+    await refreshUsers()
   } catch (cause) {
     adminError.value = messageFromError(cause, 'Suppression du rôle impossible.')
   } finally {
@@ -327,20 +334,33 @@ async function deleteRole(role: AppRole) {
   }
 }
 
-async function assignRole(user: AppUser, event: Event) {
+function closeRoleMenus(event: MouseEvent) {
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.admin-role[open]')) {
+    if (!menu.contains(event.target as Node)) menu.open = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', closeRoleMenus))
+onBeforeUnmount(() => document.removeEventListener('click', closeRoleMenus))
+
+async function toggleUserRole(user: AppUser, roleId: number, event: Event) {
   if (workingUserIds.value.includes(user.id)) return
-  const rawId = (event.target as HTMLSelectElement).value
-  const roleId = rawId ? Number(rawId) : null
+  const checked = (event.target as HTMLInputElement).checked
+  const roleIds = checked
+    ? [...user.role_ids, roleId]
+    : user.role_ids.filter((id) => id !== roleId)
   adminError.value = ''
   workingUserIds.value.push(user.id)
   try {
-    await $fetch(`/api/admin/users/${user.id}/role`, {
-      method: 'PATCH',
-      body: { role_id: roleId },
+    const updated = await $fetch<AppUser>(`/api/admin/users/${user.id}/roles`, {
+      method: 'PUT',
+      body: { role_ids: roleIds },
       credentials: 'include'
     })
-    user.role_id = roleId
-    user.role_name = roles.value.find((role) => role.id === roleId)?.name ?? null
+    const role = roles.value.find((item) => item.id === roleId)
+    if (role) role.users_count += updated.role_ids.includes(roleId) ? 1 : -1
+    user.role_ids = updated.role_ids
+    user.role_names = updated.role_names
   } catch (cause) {
     adminError.value = messageFromError(cause, 'Attribution du rôle impossible.')
     await refreshUsers()
@@ -871,13 +891,24 @@ function statusLabel(status: string) {
           <strong>{{ user.first_name || user.discord_username }} {{ user.last_name || '' }}</strong>
           <small>{{ user.discord_username }} <span class="admin-status" :class="`admin-status--${user.status}`">{{ statusLabel(user.status) }}</span><span v-if="user.is_super_admin" class="admin-super-admin" :class="{ 'admin-super-admin--off': !user.super_admin_enabled }" :title="user.super_admin_enabled ? undefined : 'Droits super-admin désactivés par l’utilisateur'"><Icon :name="user.super_admin_enabled ? 'lucide:shield-check' : 'lucide:shield-off'" size="12" /> {{ user.super_admin_enabled ? 'Super-admin' : 'Super-admin désactivé' }}</span></small>
         </div>
-        <label class="admin-role">
-          <span class="sr-only">Rôle applicatif de {{ user.discord_username }}</span>
-          <select :value="user.role_id ?? ''" :disabled="workingUserIds.includes(user.id)" @change="assignRole(user, $event)">
-            <option value="">Aucun rôle</option>
-            <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
-          </select>
-        </label>
+        <details class="admin-role">
+          <summary :aria-label="`Rôles applicatifs de ${user.discord_username}`">
+            <span>{{ user.role_names.length ? user.role_names.join(', ') : 'Aucun rôle' }}</span>
+            <Icon class="admin-role__chevron" name="lucide:chevron-down" size="14" />
+          </summary>
+          <div class="admin-role__menu">
+            <label v-for="role in roles" :key="role.id">
+              <input
+                type="checkbox"
+                :checked="user.role_ids.includes(role.id)"
+                :disabled="workingUserIds.includes(user.id)"
+                @change="toggleUserRole(user, role.id, $event)"
+              >
+              {{ role.name }}
+            </label>
+            <p v-if="!roles.length" class="admin-muted">Aucun rôle créé.</p>
+          </div>
+        </details>
         <button
           v-if="user.status !== 'pending'"
           type="button"
@@ -1339,7 +1370,18 @@ function statusLabel(status: string) {
 .admin-super-admin { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; color: var(--dp-accent); }
 .admin-super-admin--off { color: var(--dp-text-dim); }
 .admin-role, .admin-role-card__top > label { display: grid; min-width: 150px; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
-.admin-role select, .admin-role-create input:not([type='checkbox']), .admin-role-card input:not([type='checkbox']) { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
+.admin-role { position: relative; width: 220px; }
+.admin-role > summary { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text); background: var(--dp-bg); font-size: 11px; cursor: pointer; list-style: none; }
+.admin-role > summary::-webkit-details-marker { display: none; }
+.admin-role > summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-role > summary:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: 1px; }
+.admin-role__chevron { flex: 0 0 auto; color: var(--dp-text-dim); transition: transform .15s ease; }
+.admin-role[open] .admin-role__chevron { transform: rotate(180deg); }
+.admin-role__menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; display: grid; width: 100%; max-height: 260px; gap: 2px; overflow-y: auto; padding: 6px; border: 1px solid var(--dp-line-strong); border-radius: 10px; background: var(--dp-panel-2); box-shadow: 0 10px 24px rgba(0, 0, 0, .35); }
+.admin-role__menu label { display: flex; align-items: center; gap: 7px; padding: 7px 8px; border-radius: 7px; color: var(--dp-text-2); font-size: 11px; cursor: pointer; }
+.admin-role__menu label:hover { background: var(--dp-panel-3); }
+.admin-role__menu .admin-muted { margin: 0; padding: 7px 8px; }
+.admin-role-create input:not([type='checkbox']), .admin-role-card input:not([type='checkbox']) { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
 .admin-row__actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .admin-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text-2); background: transparent; font-size: 10px; font-weight: 650; cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
 .admin-button--allow { color: var(--dp-accent); background: var(--dp-accent-soft); }.admin-button--danger { color: var(--dp-danger); background: var(--dp-danger-soft); }.admin-button--primary { color: #0c1710; border-color: transparent; background: var(--dp-accent); }
