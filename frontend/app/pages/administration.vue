@@ -314,12 +314,19 @@ async function refreshRoles() {
 
 async function deleteRole(role: AppRole) {
   if (deletingRoleIds.value.includes(role.id)) return
-  if (!window.confirm(`Supprimer le rôle « ${role.name} » ?`)) return
+  const usersCount = role.users_count || 0
+  if (
+    !window.confirm(
+      `Supprimer le rôle « ${role.name} » ?\nIl sera retiré de ${usersCount} compte${usersCount > 1 ? 's' : ''} qui le possèdent.`
+    )
+  )
+    return
   adminError.value = ''
   deletingRoleIds.value.push(role.id)
   try {
     await $fetch(`/api/admin/roles/${role.id}`, { method: 'DELETE', credentials: 'include' })
     roles.value = roles.value.filter((item) => item.id !== role.id)
+    await refreshUsers()
   } catch (cause) {
     adminError.value = messageFromError(cause, 'Suppression du rôle impossible.')
   } finally {

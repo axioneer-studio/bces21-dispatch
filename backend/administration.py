@@ -3,9 +3,10 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database import get_db
 from dispatch import push_employees_changed
@@ -371,14 +372,36 @@ async def delete_role(
     role = await db.get(Role, role_id)
     if role is None:
         raise HTTPException(status_code=404, detail="Rôle introuvable.")
-    if await _role_users_count(db, role_id):
-        raise HTTPException(
-            status_code=409,
-            detail="Retirez d’abord ce rôle des comptes qui l’ont.",
+
+    # Si le rôle donne accès à l’administration, s’assurer qu’un autre
+    # administrateur actif restera après son retrait des comptes.
+    if "administration" in _parse_pages(role.pages):
+        users = (
+            await db.execute(select(User).options(selectinload(User.roles)))
+        ).scalars().all()
+        admin_remains = any(
+            (user.status or "active") == "active"
+            and (
+                user.is_super_admin
+                or any(
+                    user_role.id != role_id
+                    and "administration" in _parse_pages(user_role.pages)
+                    for user_role in user.roles
+                )
+            )
+            for user in users
         )
+        if not admin_remains:
+            raise HTTPException(
+                status_code=409,
+                detail="Impossible de supprimer le dernier rôle administrateur actif.",
+            )
+
+    # Retire le rôle de tous les comptes qui le possèdent avant de le supprimer.
+    await db.execute(delete(user_roles).where(user_roles.c.role_id == role_id))
     await db.delete(role)
     await db.commit()
-    return MessageResponse(message="Rôle supprimé.")
+    return MessageResponse(message="Rôle retiré des comptes et supprimé.")
 
 
 @router.get("/settings", response_model=ApplicationSettingsOut)
