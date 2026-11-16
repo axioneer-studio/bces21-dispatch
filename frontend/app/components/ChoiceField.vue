@@ -11,13 +11,23 @@ const props = withDefaults(defineProps<{
   label: string
   disabled?: boolean
   maxlength?: number
+  /** Couleur « #rrggbb » qui teinte le menu (ex. celle du groupe choisi). */
+  color?: string | null
 }>(), {
   placeholder: '—',
   disabled: false,
-  maxlength: 120
+  maxlength: 120,
+  color: null
 })
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
+
+/** Teinte en style direct : elle passe devant les styles de menu de la page. */
+const colorStyle = computed(() =>
+  props.color
+    ? { background: `color-mix(in srgb, ${props.color} 30%, var(--dp-bg))` }
+    : undefined
+)
 
 const OTHER = '__other__'
 const typing = ref(false)
@@ -72,6 +82,7 @@ function cancel() {
   <select
     v-else
     class="choice-field"
+    :style="colorStyle"
     :value="modelValue"
     :aria-label="label"
     :disabled="disabled"

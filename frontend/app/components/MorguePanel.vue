@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { groupColor, type AffiliationGroup } from '~/utils/groups'
 
 interface MorgueEntry {
   id: number
@@ -41,7 +42,7 @@ interface MorgueData {
   examiners: MorgueExaminer[]
   can_manage_autopsy: boolean
   is_forensic: boolean
-  groups: string[]
+  groups: AffiliationGroup[]
 }
 
 const props = defineProps<{ active: boolean }>()
@@ -108,8 +109,9 @@ const counts = computed(() => {
   return result
 })
 
-/** Groupes gérés dans Administration, proposés pour l'appartenance. */
-const groups = ref<string[]>([])
+/** Groupes gérés dans Administration, proposés pour l'appartenance avec leur couleur. */
+const groups = ref<AffiliationGroup[]>([])
+const groupNames = computed(() => groups.value.map((group) => group.name))
 
 
 function messageFromError(cause: unknown, fallback: string) {
@@ -138,6 +140,12 @@ function affiliationHue(name: string) {
   let hash = 0
   for (const char of name.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) % 360
   return hash
+}
+
+/** Couleur du groupe dans Administration si elle existe, sinon une teinte tirée du nom. */
+function affiliationStyle(name: string) {
+  const color = groupColor(groups.value, name)
+  return color ? { '--affiliation-color': color } : { '--affiliation-hue': affiliationHue(name) }
 }
 
 async function load() {
@@ -361,7 +369,8 @@ async function remove(entry: MorgueEntry) {
         <span
           v-if="entry.affiliation"
           class="morgue-case__affiliation"
-          :style="{ '--affiliation-hue': affiliationHue(entry.affiliation) }"
+          :class="{ 'morgue-case__affiliation--colored': groupColor(groups, entry.affiliation) }"
+          :style="affiliationStyle(entry.affiliation)"
         >{{ entry.affiliation }}</span>
         <span v-else class="morgue-case__affiliation morgue-case__affiliation--none">Appartenance inconnue</span>
 
@@ -480,7 +489,7 @@ async function remove(entry: MorgueEntry) {
             <input v-model="form.identity" type="text" maxlength="120" placeholder="Laisser vide si inconnue">
           </label>
           <label class="morgue-form__wide">Appartenance connue
-            <ChoiceField v-model="form.affiliation" :options="groups" :maxlength="64" placeholder="Inconnue" label="Appartenance connue" />
+            <ChoiceField v-model="form.affiliation" :options="groupNames" :color="groupColor(groups, form.affiliation)" :maxlength="64" placeholder="Inconnue" label="Appartenance connue" />
           </label>
           <label class="morgue-form__wide">Contacts d’urgence (nom, numéro)
             <textarea v-model="form.emergency_contacts" maxlength="500" rows="2" placeholder="Proches à appeler pour récupérer le corps ou l’urne"></textarea>
@@ -545,6 +554,7 @@ async function remove(entry: MorgueEntry) {
 .morgue-case__identity { margin: 0; overflow-wrap: anywhere; text-align: center; color: var(--dp-text); font-size: 14px; font-weight: 700; }
 .morgue-case__identity.is-unknown { color: var(--dp-text-dim); font-style: italic; font-weight: 600; }
 .morgue-case__affiliation { align-self: center; max-width: 100%; overflow: hidden; padding: 3px 9px; border: 1px solid hsl(var(--affiliation-hue) 55% 55% / .5); border-radius: 999px; color: hsl(var(--affiliation-hue) 70% 72%); background: hsl(var(--affiliation-hue) 55% 45% / .16); font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.morgue-case__affiliation--colored { border-color: color-mix(in srgb, var(--affiliation-color) 60%, transparent); color: color-mix(in srgb, var(--affiliation-color) 65%, #fff); background: color-mix(in srgb, var(--affiliation-color) 18%, transparent); }
 .morgue-case__affiliation--none { border-color: var(--dp-line); color: var(--dp-text-dim); background: transparent; font-weight: 500; }
 /* Une ligne par information : libellé à gauche, valeur à droite, toutes alignées. */
 .morgue-case__rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 7px 12px; margin: 0; padding: 10px 0; border-top: 1px solid var(--dp-line); border-bottom: 1px solid var(--dp-line); }

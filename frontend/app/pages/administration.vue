@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import type { Ref } from 'vue'
 import { STATUS_KINDS } from '~/utils/statuses'
 import type { InterventionStatusKind } from '~/utils/statuses'
+import type { AffiliationGroup } from '~/utils/groups'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Administration • BCES' })
@@ -94,11 +95,6 @@ interface VehicleImportResult {
 }
 
 interface ParkingSpot {
-  id: number
-  name: string
-}
-
-interface AffiliationGroup {
   id: number
   name: string
 }
@@ -665,9 +661,14 @@ async function deleteSpot(spot: ParkingSpot) {
   })
 }
 
+/** Couleur proposée quand on active la couleur d'un statut ou d'un groupe. */
+const DEFAULT_COLOR = '#46996d'
+
+function toggleColor(item: { color: string | null }, event: Event) {
+  item.color = (event.target as HTMLInputElement).checked ? DEFAULT_COLOR : null
+}
+
 // --- Statuts d'intervention du Dispatch ---
-/** Couleur proposée quand on active la couleur d'un statut. */
-const DEFAULT_STATUS_COLOR = '#46996d'
 const interventionStatuses = ref<AdminInterventionStatus[]>(initialStatuses.value ?? [])
 const statusForm = reactive({
   label: '',
@@ -694,10 +695,6 @@ function statusBody(status: {
   kind: InterventionStatusKind
 }) {
   return { label: status.label, emoji: status.emoji, color: status.color, is_primo: status.is_primo, kind: status.kind }
-}
-
-function toggleStatusColor(status: { color: string | null }, event: Event) {
-  status.color = (event.target as HTMLInputElement).checked ? DEFAULT_STATUS_COLOR : null
 }
 
 async function createStatus() {
@@ -779,9 +776,13 @@ async function deleteStatus(status: AdminInterventionStatus) {
 // --- Groupes : appartenance proposée dans la Crise et la Morgue ---
 const byGroupName = (a: AffiliationGroup, b: AffiliationGroup) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
 const groups = ref<AffiliationGroup[]>(initialGroups.value ?? [])
-const groupForm = reactive({ name: '' })
+const groupForm = reactive({ name: '', color: null as string | null })
 const savingGroup = ref(false)
 const workingGroupIds = ref<number[]>([])
+
+function groupBody(group: { name: string; color: string | null }) {
+  return { name: group.name, color: group.color }
+}
 
 async function createGroup() {
   if (savingGroup.value || !groupForm.name.trim()) return
@@ -790,11 +791,11 @@ async function createGroup() {
   try {
     const group = await $fetch<AffiliationGroup>('/api/admin/groups', {
       method: 'POST',
-      body: { name: groupForm.name },
+      body: groupBody(groupForm),
       credentials: 'include'
     })
     groups.value = [...groups.value, group].sort(byGroupName)
-    groupForm.name = ''
+    Object.assign(groupForm, { name: '', color: null })
   } catch (cause) {
     adminError.value = messageFromError(cause, 'Création du groupe impossible.')
   } finally {
@@ -807,7 +808,7 @@ async function saveGroup(group: AffiliationGroup) {
     try {
       const saved = await $fetch<AffiliationGroup>(`/api/admin/groups/${group.id}`, {
         method: 'PATCH',
-        body: { name: group.name },
+        body: groupBody(group),
         credentials: 'include'
       })
       Object.assign(group, saved)
@@ -1268,7 +1269,7 @@ function statusLabel(status: string) {
         <label class="admin-status-row__emoji"><span>Emoji</span><input v-model="statusForm.emoji" maxlength="16" placeholder="🚑"></label>
         <label><span>Libellé</span><input v-model="statusForm.label" required maxlength="64" :placeholder="statusForm.kind === 'status' ? 'Ex. Patrouille' : 'Ex. BCES'"></label>
         <div class="admin-status-row__color">
-          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(statusForm.color)" @change="toggleStatusColor(statusForm, $event)"> Couleur</label>
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(statusForm.color)" @change="toggleColor(statusForm, $event)"> Couleur</label>
           <input v-if="statusForm.color" v-model="statusForm.color" type="color" aria-label="Couleur du statut">
         </div>
         <label class="admin-status-row__check"><input v-model="statusForm.is_primo" type="checkbox"> Primo Inter</label>
@@ -1282,8 +1283,8 @@ function statusLabel(status: string) {
         v-for="(status, index) in group.items"
         :key="status.id"
         class="admin-row admin-status-row"
-        :style="status.color ? { '--status-color': status.color } : undefined"
-        :class="{ 'admin-status-row--colored': status.color }"
+        :style="status.color ? { '--row-color': status.color } : undefined"
+        :class="{ 'admin-row--colored': status.color }"
         @submit.prevent="saveStatus(status)"
       >
         <label><span class="sr-only">Type</span>
@@ -1294,7 +1295,7 @@ function statusLabel(status: string) {
         <label class="admin-status-row__emoji"><span class="sr-only">Emoji</span><input v-model="status.emoji" maxlength="16"></label>
         <label><span class="sr-only">Libellé</span><input v-model="status.label" required maxlength="64"></label>
         <div class="admin-status-row__color">
-          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(status.color)" @change="toggleStatusColor(status, $event)"> Couleur</label>
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(status.color)" @change="toggleColor(status, $event)"> Couleur</label>
           <input v-if="status.color" v-model="status.color" type="color" :aria-label="`Couleur du statut ${status.label}`">
         </div>
         <label class="admin-status-row__check"><input v-model="status.is_primo" type="checkbox"> Primo Inter</label>
@@ -1317,16 +1318,31 @@ function statusLabel(status: string) {
 
     <section id="admin-groups" v-show="activeAdminSection === 'groups'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-groups" tabindex="0">
       <div class="admin-section__heading">
-        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:flag" size="18" /></span><div><h2>Groupes</h2><p>Groupes proposés pour l’appartenance d’un blessé (Crise) et d’un défunt (Morgue). La liste n’est pas exhaustive : un autre groupe peut être saisi librement.</p></div></div>
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:flag" size="18" /></span><div><h2>Groupes</h2><p>Groupes proposés pour l’appartenance d’un blessé (Crise) et d’un défunt (Morgue). La liste n’est pas exhaustive : un autre groupe peut être saisi librement. Une couleur teinte l’appartenance dans la Crise et la Morgue.</p></div></div>
       </div>
-      <form class="admin-catalog-create admin-catalog-create--single" @submit.prevent="createGroup">
+      <form class="admin-catalog-create admin-catalog-create--group" @submit.prevent="createGroup">
         <label><span>Nom du groupe</span><input v-model="groupForm.name" required maxlength="64" placeholder="Ex. Ballas"></label>
+        <div class="admin-status-row__color">
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(groupForm.color)" @change="toggleColor(groupForm, $event)"> Couleur</label>
+          <input v-if="groupForm.color" v-model="groupForm.color" type="color" aria-label="Couleur du groupe">
+        </div>
         <button class="admin-button admin-button--primary" type="submit" :disabled="savingGroup || !groupForm.name.trim()">
           <Icon :name="savingGroup ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingGroup }" /> {{ savingGroup ? 'Création…' : 'Ajouter ce groupe' }}
         </button>
       </form>
-      <form v-for="group in groups" :key="group.id" class="admin-row admin-catalog-row admin-catalog-row--single" @submit.prevent="saveGroup(group)">
+      <form
+        v-for="group in groups"
+        :key="group.id"
+        class="admin-row admin-catalog-row admin-catalog-row--group"
+        :class="{ 'admin-row--colored': group.color }"
+        :style="group.color ? { '--row-color': group.color } : undefined"
+        @submit.prevent="saveGroup(group)"
+      >
         <label><span class="sr-only">Nom du groupe</span><input v-model="group.name" required maxlength="64"></label>
+        <div class="admin-status-row__color">
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(group.color)" @change="toggleColor(group, $event)"> Couleur</label>
+          <input v-if="group.color" v-model="group.color" type="color" :aria-label="`Couleur du groupe ${group.name}`">
+        </div>
         <div class="admin-row__actions">
           <button type="submit" class="admin-button" :disabled="workingGroupIds.includes(group.id) || !group.name.trim()">
             <Icon name="lucide:save" size="14" /> Enregistrer
@@ -1695,6 +1711,7 @@ function statusLabel(status: string) {
 .admin-catalog-create > label { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
 .admin-catalog-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; }
 .admin-catalog-row--single { grid-template-columns: minmax(160px, 1fr) auto; }
+.admin-catalog-create--group, .admin-catalog-row--group { grid-template-columns: minmax(160px, 1fr) auto auto; }
 .admin-status-row { display: grid; grid-template-columns: 90px 70px minmax(150px, 1fr) auto auto auto; align-items: center; gap: 12px; }
 .admin-status-row select { width: 100%; min-height: 36px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 8px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
 .admin-status-group { display: flex; align-items: center; gap: 8px; margin: 20px 0 10px; color: var(--dp-text); font-size: 13px; }
@@ -1707,7 +1724,7 @@ function statusLabel(status: string) {
 .admin-status-row__color { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .admin-status-row__color input[type='color'] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--dp-line); border-radius: 7px; background: transparent; cursor: pointer; }
 .admin-status-row__check { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: var(--dp-text-2); font-size: 11px; white-space: nowrap; cursor: pointer; }
-.admin-status-row--colored { border-left: 3px solid var(--status-color); }
+.admin-row--colored { border-left: 3px solid var(--row-color); }
 @media (max-width: 900px) { .admin-status-row { grid-template-columns: 90px 64px minmax(0, 1fr); } .admin-status-row .admin-row__actions, .admin-status-row--create > button { grid-column: 1 / -1; } }
 .admin-catalog-row + .admin-catalog-row { margin-top: 9px; }
 .admin-catalog-create input, .admin-catalog-row input { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }

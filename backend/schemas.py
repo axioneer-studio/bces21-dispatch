@@ -945,8 +945,8 @@ class MorgueOut(BaseModel):
     can_manage_autopsy: bool
     # Médecin légiste : incinération et mise en cercueil.
     is_forensic: bool
-    # Groupes proposés pour l'appartenance (liste non exhaustive).
-    groups: list[str]
+    # Groupes proposés pour l'appartenance (liste non exhaustive), avec leur couleur.
+    groups: list["AffiliationGroupOut"]
 
 
 class HospitalRoomRequest(BaseModel):
@@ -1063,6 +1063,16 @@ class HospitalRoomsOut(BaseModel):
 
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+
+def _optional_color(value: Optional[str]) -> Optional[str]:
+    """Couleur facultative « #rrggbb » (statut, groupe) : vide = aucune couleur."""
+    if value is None or not value.strip():
+        return None
+    if not _HEX_COLOR.match(value.strip()):
+        raise ValueError("La couleur doit être au format #rrggbb.")
+    return value.strip().lower()
+
+
 # Statut (Patrouille, Inter…) ou lieu (BCES, Zombie…) : les statuts passent en premier.
 InterventionStatusKind = Literal["status", "place"]
 
@@ -1101,11 +1111,7 @@ class InterventionStatusRequest(BaseModel):
     @field_validator("color")
     @classmethod
     def _status_color(cls, value: Optional[str]) -> Optional[str]:
-        if value is None or not value.strip():
-            return None
-        if not _HEX_COLOR.match(value.strip()):
-            raise ValueError("La couleur doit être au format #rrggbb.")
-        return value.strip().lower()
+        return _optional_color(value)
 
 
 # --- Groupes (appartenance) ---
@@ -1116,17 +1122,27 @@ class AffiliationGroupOut(BaseModel):
 
     id: int
     name: str
+    color: Optional[str]
+
+
+MorgueOut.model_rebuild()
 
 
 class AffiliationGroupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
+    color: Optional[str] = None
 
     @field_validator("name")
     @classmethod
     def _name(cls, value: str) -> str:
         return _clean_required(value, "Le nom du groupe")
+
+    @field_validator("color")
+    @classmethod
+    def _group_color(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_color(value)
 
 
 # --- Gestion de crise ---
@@ -1250,7 +1266,7 @@ class CrisisOut(BaseModel):
     helpers: list[CrisisEmployeeOut]
     victims: list[CrisisVictimOut]
     # Choix proposés : employés actifs (Primo, assistants, médecins), lits de
-    # l'hôpital et groupes d'appartenance.
+    # l'hôpital et groupes d'appartenance (avec leur couleur).
     employees: list[CrisisEmployeeOut]
     beds: list[CrisisBedOut]
-    groups: list[str]
+    groups: list[AffiliationGroupOut]

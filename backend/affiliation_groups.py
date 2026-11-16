@@ -17,11 +17,12 @@ from schemas import AffiliationGroupOut, AffiliationGroupRequest, MessageRespons
 router = APIRouter(prefix="/api/admin/groups", tags=["administration"], dependencies=[Depends(require_admin)])
 
 
-async def group_names(db: AsyncSession) -> list[str]:
-    """Noms des groupes, triés, pour les listes de la Crise et de la Morgue."""
-    return list(
-        (await db.execute(select(AffiliationGroup.name).order_by(func.lower(AffiliationGroup.name)))).scalars()
-    )
+async def group_choices(db: AsyncSession) -> list[AffiliationGroupOut]:
+    """Groupes triés par nom, avec leur couleur, pour les listes de la Crise et de la Morgue."""
+    groups = (
+        await db.execute(select(AffiliationGroup).order_by(func.lower(AffiliationGroup.name)))
+    ).scalars().all()
+    return [AffiliationGroupOut.model_validate(group) for group in groups]
 
 
 async def _ensure_name_available(db: AsyncSession, name: str, group_id: int | None = None) -> None:
@@ -41,16 +42,13 @@ async def _get_group(db: AsyncSession, group_id: int) -> AffiliationGroup:
 
 @router.get("", response_model=list[AffiliationGroupOut])
 async def list_groups(db: AsyncSession = Depends(get_db)):
-    groups = (
-        await db.execute(select(AffiliationGroup).order_by(func.lower(AffiliationGroup.name)))
-    ).scalars().all()
-    return [AffiliationGroupOut.model_validate(group) for group in groups]
+    return await group_choices(db)
 
 
 @router.post("", response_model=AffiliationGroupOut, status_code=status.HTTP_201_CREATED)
 async def create_group(payload: AffiliationGroupRequest, db: AsyncSession = Depends(get_db)):
     await _ensure_name_available(db, payload.name)
-    group = AffiliationGroup(name=payload.name)
+    group = AffiliationGroup(name=payload.name, color=payload.color)
     db.add(group)
     await db.commit()
     await db.refresh(group)
@@ -58,14 +56,16 @@ async def create_group(payload: AffiliationGroupRequest, db: AsyncSession = Depe
 
 
 @router.patch("/{group_id}", response_model=AffiliationGroupOut)
-async def rename_group(
+async def update_group(
     group_id: int,
     payload: AffiliationGroupRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """Renomme le groupe et change sa couleur."""
     group = await _get_group(db, group_id)
     await _ensure_name_available(db, payload.name, group.id)
     group.name = payload.name
+    group.color = payload.color
     await db.commit()
     await db.refresh(group)
     return AffiliationGroupOut.model_validate(group)

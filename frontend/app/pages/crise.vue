@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { groupColor, type AffiliationGroup } from '~/utils/groups'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Crise • BCES' })
@@ -39,7 +40,7 @@ interface CrisisData {
   victims: CrisisVictim[]
   employees: CrisisEmployee[]
   beds: CrisisBed[]
-  groups: string[]
+  groups: AffiliationGroup[]
 }
 
 type VictimText = 'full_name' | 'affiliation' | 'injuries' | 'repatriating_doctor' | 'treating_doctor'
@@ -60,8 +61,9 @@ const helpers = ref<CrisisEmployee[]>([])
 const victims = ref<CrisisVictim[]>([])
 const employees = ref<CrisisEmployee[]>([])
 const beds = ref<CrisisBed[]>([])
-/** Groupes gérés dans Administration, proposés pour l'appartenance. */
-const groups = ref<string[]>([])
+/** Groupes gérés dans Administration, proposés pour l'appartenance avec leur couleur. */
+const groups = ref<AffiliationGroup[]>([])
+const groupNames = computed(() => groups.value.map((group) => group.name))
 const loaded = ref(false)
 const loadError = ref('')
 /** Requêtes en cours : le rafraîchissement attend qu'elles soient finies. */
@@ -470,7 +472,8 @@ async function resetCrisis() {
                 <td class="is-choice">
                   <ChoiceField
                     :model-value="victim.affiliation"
-                    :options="groups"
+                    :options="groupNames"
+                    :color="groupColor(groups, victim.affiliation)"
                     :maxlength="64"
                     placeholder="Inconnue"
                     label="Appartenance"
@@ -601,8 +604,7 @@ async function resetCrisis() {
 .crisis-table tbody tr.is-next td:first-child { box-shadow: inset 3px 0 0 var(--dp-warn), inset 0 1px 0 var(--dp-warn), inset 0 -1px 0 var(--dp-warn); }
 .crisis-table tbody tr.is-next.is-severe td:first-child { box-shadow: inset 3px 0 0 var(--dp-danger), inset 0 1px 0 var(--dp-warn), inset 0 -1px 0 var(--dp-warn); }
 @keyframes crisis-next { 50% { background: transparent; } }
-@media (prefers-reduced-motion: reduce) { .crisis-table tbody tr.is-next td { animation: none; } }
-.crisis-table input[type='checkbox']:disabled { opacity: .35; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .crisis-table tbody tr.is-next td { animation: none; } }.crisis-table input[type='checkbox']:disabled { opacity: .35; cursor: not-allowed; }
 .crisis-table .is-check, .crisis-table .is-time, .crisis-table .is-action { width: 1%; text-align: center; white-space: nowrap; }
 /* Coma, Grave et Inconscient : titres de même largeur, pour un espacement régulier. */
 .crisis-check-head { display: inline-block; min-width: 58px; }

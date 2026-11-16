@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from affiliation_groups import group_names
+from affiliation_groups import group_choices
 from config import get_settings
 from database import get_db
 from deps import get_current_user, require_page_access
@@ -182,7 +182,7 @@ async def get_crisis(
             CrisisBedOut(id=bed.id, label=f"{room_name} · {bed.label}", patient_name=bed.patient_name)
             for bed, room_name in beds
         ],
-        groups=await group_names(db),
+        groups=await group_choices(db),
     )
 
 

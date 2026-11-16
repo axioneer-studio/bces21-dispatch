@@ -87,7 +87,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   la ligne de crise.
 - L'appartenance se choisit parmi les Groupes gérés dans Administration, et les
   médecins parmi les employés ; ces listes ne sont pas exhaustives : « Autre… »
-  permet de saisir une autre valeur.
+  permet de saisir une autre valeur. Un groupe qui a une couleur teinte la case
+  Appartenance.
 - Celui qui coche « Arrivé » devient le médecin qui rapatrie, et celui qui coche
   « Soigné » le médecin soignant, si ces cases sont vides (nom de sa tuile
   employé, sinon son nom RP).
@@ -117,7 +118,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   raisons de la liste. Un lit est créé sous le nom « Lit N » et peut être
   renommé ensuite ; les lits restent affichés dans leur ordre de création.
 - **Morgue** : défunts pris en charge, avec date du décès, identité, appartenance
-  connue (Groupes d'Administration, ou « Autre… »), informations communicables ou non, autopsie, médecin légiste, contacts
+  connue (Groupes d'Administration, ou « Autre… » ; l'étiquette prend la couleur
+  du groupe, ou à défaut une teinte tirée du nom), informations communicables ou non, autopsie, médecin légiste, contacts
   d'urgence et possibilité de récupération par les proches. Un corps en cellule
   réfrigérée et une urne s'affichent dans deux formes de case différentes.
   L'autopsie et la récupération se renseignent après l'ajout, d'un clic sur la
@@ -532,7 +534,7 @@ vérifient en plus la page cochée dans le rôle.
 | `PATCH` / `DELETE` | `/api/admin/intervention-statuses/{id}` | Modifie ou supprime un statut ; suppression refusée (`409`) si une intervention l'a |
 | `POST` | `/api/admin/intervention-statuses/{id}/move?direction=-1\|1` | Monte ou descend l'entrée dans la liste de son type |
 | `GET` / `POST` | `/api/admin/groups` | Liste ou crée des groupes d'appartenance (Crise, Morgue) |
-| `PATCH` / `DELETE` | `/api/admin/groups/{id}` | Renomme ou supprime un groupe ; les blessés et défunts gardent leur appartenance |
+| `PATCH` / `DELETE` | `/api/admin/groups/{id}` | Renomme un groupe et change sa couleur, ou le supprime ; les blessés et défunts gardent leur appartenance |
 | `GET` | `/api/admin/permissions` | Liste les permissions applicatives configurables |
 | `GET` / `PUT` | `/api/admin/settings` | Lit ou modifie les paramètres généraux |
 | `GET` | `/api/direction/grades` | Liste les grades et leurs permissions |
@@ -666,7 +668,7 @@ d'employés.
 | `users` | Comptes Discord et accès : profil, `is_super_admin`, `status`, `last_login_at` (l'ancienne colonne `role_id` est reprise dans `user_roles` au démarrage, puis vidée) |
 | `roles` | Rôles personnalisés et pages autorisées |
 | `intervention_statuses` | Statuts d'intervention du Dispatch : `key` (valeur stockée dans `dispatch_slots.status`, fixe), `label`, `emoji`, `color` (facultative), `is_primo`, `kind` (`status` \| `place`, les statuts avant les lieux), `order` (dans son type) |
-| `affiliation_groups` | Groupes d'appartenance proposés dans la Crise et la Morgue : `name` (les fiches gardent leur appartenance en texte) |
+| `affiliation_groups` | Groupes d'appartenance proposés dans la Crise et la Morgue : `name`, `color` facultative (les fiches gardent leur appartenance en texte) |
 | `user_roles` | Rôles de chaque compte : `user_id` → `users`, `role_id` → `roles` (cascade des deux côtés) |
 | `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
 | `grades` | Hiérarchie de service et permissions opérationnelles par grade |
