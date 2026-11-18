@@ -22,12 +22,15 @@ FORENSIC_PERMISSION = "hospital.forensic"
 # Droit RH : ouvre la page Ressources humaines, où il permet de gérer les fiches
 # et les tuiles des employés et de lier un compte à une tuile.
 HR_PERMISSION = "human_resources.manage"
+# Droit Stock : gestion des stocks du BCES (page Stock).
+STOCK_PERMISSION = "stock.manage"
 
 # Droits qu'une formation générale peut donner.
 TRAINING_PERMISSION_CATALOG = {
     TRAINER_PERMISSION: "Formateur",
     FORENSIC_PERMISSION: "Médecin légiste",
     HR_PERMISSION: "Ressources humaines",
+    STOCK_PERMISSION: "Stock",
 }
 
 

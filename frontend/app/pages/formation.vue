@@ -73,7 +73,8 @@ interface TrainingPage {
 const PERMISSION_HINTS: Record<string, string> = {
   'training.validate': 'Valide les formations de période d’essai et de période de formation.',
   'hospital.forensic': 'Autopsie, incinération et mise en cercueil à la morgue.',
-  'human_resources.manage': 'Ouvre Ressources humaines : gérer les employés et leurs compétences.'
+  'human_resources.manage': 'Ouvre Ressources humaines : gérer les employés et leurs compétences.',
+  'stock.manage': 'Gestion des stocks du BCES (page Stock).'
 }
 
 const KIND_LABELS: Record<TrainingKind, string> = {
@@ -370,8 +371,32 @@ function refresh() {
   void load()
 }
 
+// --- Sections repliables : retenues par le navigateur, d'une visite à l'autre ---
+
+const COLLAPSED_KEY = 'bces.formation.collapsed'
+const collapsed = reactive<Record<TrainingKind, boolean>>({ trial: false, training: false, general: false })
+
+function toggleSection(kind: TrainingKind) {
+  collapsed[kind] = !collapsed[kind]
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed))
+  } catch {
+    // Stockage indisponible (navigation privée…) : l'état reste pour cette visite.
+  }
+}
+
+function restoreCollapsed() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') as Partial<Record<TrainingKind, unknown>>
+    for (const kind of Object.keys(collapsed) as TrainingKind[]) collapsed[kind] = saved[kind] === true
+  } catch {
+    // Valeur illisible ou stockage indisponible : tout reste ouvert.
+  }
+}
+
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
+  restoreCollapsed()
   void load()
   refreshTimer = setInterval(refresh, 10_000)
   window.addEventListener('focus', refresh)
@@ -401,31 +426,46 @@ onBeforeUnmount(() => {
     <p v-if="loadError" class="training-error"><Icon name="lucide:circle-alert" size="15" /> {{ loadError }}</p>
     <div v-else-if="!loaded" class="training-empty"><Icon name="lucide:loader-circle" size="20" class="training-spin" /></div>
     <template v-else>
-      <section v-for="track in tracks" :key="track.kind" class="training-section">
+      <section v-for="track in tracks" :key="track.kind" class="training-section" :class="{ 'is-collapsed': collapsed[track.kind] }">
         <header class="training-section__head">
-          <div>
-            <h2>{{ track.title }}<span v-for="grade in track.grades" :key="grade.id" class="training-grade">{{ grade.name }}</span></h2>
-            <p>{{ track.detail }}</p>
-          </div>
+          <button
+            type="button"
+            class="training-section__toggle"
+            :aria-expanded="!collapsed[track.kind]"
+            :aria-controls="`training-section-${track.kind}`"
+            :title="collapsed[track.kind] ? 'Afficher la liste' : 'Réduire la liste'"
+            @click="toggleSection(track.kind)"
+          >
+            <Icon name="lucide:chevron-down" size="16" class="training-section__chevron" />
+            <span class="training-section__label">
+              <span class="training-section__title">
+                {{ track.title }}
+                <span v-for="grade in track.grades" :key="grade.id" class="training-grade">{{ grade.name }}</span>
+                <span class="training-count">{{ track.trainings.length }}</span>
+              </span>
+              <span class="training-section__detail">{{ track.detail }}</span>
+            </span>
+          </button>
           <button v-if="canManage" type="button" class="training-button" @click="openDialog(track.kind)">
             <Icon name="lucide:plus" size="14" /> Ajouter
           </button>
         </header>
 
+        <div v-show="!collapsed[track.kind]" :id="`training-section-${track.kind}`" class="training-section__body">
         <p v-if="!track.grades.length" class="training-muted">
           Aucun grade {{ track.gradeLabel }} : cochez-le sur les grades concernés dans Direction › Hiérarchie des grades.
         </p>
         <p v-else-if="!track.trainings.length" class="training-muted">Aucune formation de ce type.</p>
         <p v-else-if="!track.employees.length" class="training-muted">Aucun employé concerné.</p>
         <div v-else class="training-table-wrap">
-          <table class="training-table">
+          <table class="training-table" :style="{ '--training-columns': track.trainings.length }">
             <thead>
               <tr>
                 <th class="is-employee">Employé</th>
                 <th v-for="training in track.trainings" :key="training.id" class="is-training">
                   <span class="training-head">
                     <span class="training-head__emoji">{{ training.emoji }}</span>
-                    <span>{{ training.name }}</span>
+                    <span class="training-head__name" :title="training.name">{{ training.name }}</span>
                     <span v-if="canManage" class="training-head__actions">
                       <button type="button" :aria-label="`Modifier ${training.name}`" title="Modifier" @click="openDialog(training.kind, training)"><Icon name="lucide:pencil" size="12" /></button>
                       <button type="button" class="is-danger" :aria-label="`Supprimer ${training.name}`" title="Supprimer" @click="askDelete(training)"><Icon name="lucide:trash-2" size="12" /></button>
@@ -462,18 +502,30 @@ onBeforeUnmount(() => {
             </tbody>
           </table>
         </div>
+        </div>
       </section>
 
-      <section class="training-section">
+      <section class="training-section" :class="{ 'is-collapsed': collapsed.general }">
         <header class="training-section__head">
-          <div>
-            <h2>Formations générales</h2>
-            <p>Ouvertes à tous les grades, ex. Pilote Medicopter.</p>
-          </div>
+          <button
+            type="button"
+            class="training-section__toggle"
+            :aria-expanded="!collapsed.general"
+            aria-controls="training-section-general"
+            :title="collapsed.general ? 'Afficher la liste' : 'Réduire la liste'"
+            @click="toggleSection('general')"
+          >
+            <Icon name="lucide:chevron-down" size="16" class="training-section__chevron" />
+            <span class="training-section__label">
+              <span class="training-section__title">Formations générales <span class="training-count">{{ generalTrainings.length }}</span></span>
+              <span class="training-section__detail">Ouvertes à tous les grades, ex. Pilote Medicopter.</span>
+            </span>
+          </button>
           <button v-if="canManage" type="button" class="training-button" @click="openDialog('general')">
             <Icon name="lucide:plus" size="14" /> Ajouter
           </button>
         </header>
+        <div v-show="!collapsed.general" id="training-section-general" class="training-section__body">
         <p v-if="!generalTrainings.length" class="training-muted">Aucune formation générale.</p>
         <div v-else class="training-cards">
           <article v-for="training in generalTrainings" :key="training.id" class="training-card">
@@ -540,6 +592,7 @@ onBeforeUnmount(() => {
               </select>
             </div>
           </article>
+        </div>
         </div>
       </section>
     </template>
@@ -618,8 +671,17 @@ onBeforeUnmount(() => {
 
 .training-section { display: grid; gap: 12px; min-width: 0; padding: 14px 16px; border: 1px solid var(--dp-line); border-radius: 16px; background: var(--dp-panel); }
 .training-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.training-section__head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
-.training-section__head p { margin: 3px 0 0; color: var(--dp-text-dim); font-size: 11px; }
+.training-section__label { display: grid; gap: 3px; min-width: 0; }
+.training-section__title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--dp-text); font-size: 14px; font-weight: 700; }
+.training-section__detail { color: var(--dp-text-dim); font-size: 11px; }
+/* Titre cliquable : réduit ou rouvre la liste de la section. */
+.training-section__toggle { display: flex; flex: 1; align-items: flex-start; gap: 8px; min-width: 0; margin: -4px; padding: 4px; border: 0; border-radius: 9px; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.training-section__toggle:hover { background: var(--dp-panel-2); }
+.training-section__toggle:focus-visible { outline: 2px solid var(--dp-accent-line); outline-offset: 1px; }
+.training-section__chevron { flex-shrink: 0; margin-top: 1px; color: var(--dp-text-2); transition: transform .15s; }
+.training-section.is-collapsed .training-section__chevron { transform: rotate(-90deg); }
+.training-section__body { display: grid; gap: 12px; min-width: 0; }
+.training-count { padding: 1px 8px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-dim); font-size: 10px; font-weight: 600; }
 .training-grade { padding: 2px 8px; border: 1px solid var(--dp-line); border-radius: 999px; color: var(--dp-text-2); font-size: 10px; font-weight: 600; }
 .training-muted { margin: 0; color: var(--dp-text-dim); font-size: 11px; }
 .training-error { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid var(--dp-danger-line); border-radius: 12px; color: var(--dp-danger); background: var(--dp-danger-soft); font-size: 12px; }
@@ -627,19 +689,29 @@ onBeforeUnmount(() => {
 .training-spin { animation: training-spin 1s linear infinite; }
 @keyframes training-spin { to { transform: rotate(360deg); } }
 
-.training-table-wrap { overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 11px; }
-.training-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.training-table th { padding: 8px; border-bottom: 1px solid var(--dp-line-strong); color: var(--dp-text-2); background: var(--dp-panel-2); font-size: 10px; font-weight: 700; text-align: center; vertical-align: bottom; }
+.training-table-wrap { overflow: hidden; border: 1px solid var(--dp-line); border-radius: 11px; }
+/*
+ * Le tableau tient toujours dans la largeur, sans barre de défilement : les
+ * formations se partagent à parts égales la place à droite de « Employé ».
+ * « Employé » prend la moitié du tableau, et cède de la place (jusqu'au quart)
+ * quand il y a beaucoup de formations (--training-columns).
+ */
+.training-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
+.training-table th { padding: 7px 8px; border-bottom: 1px solid var(--dp-line-strong); color: var(--dp-text-2); background: var(--dp-panel-2); font-size: 10px; font-weight: 700; text-align: center; vertical-align: middle; }
 .training-table td { padding: 7px 8px; border-bottom: 1px solid var(--dp-line); text-align: center; vertical-align: middle; }
 .training-table tbody tr:last-child td { border-bottom: 0; }
-.training-table .is-employee { min-width: 200px; text-align: left; }
-.training-table .is-training { min-width: 96px; }
-.training-table .is-progress { width: 1%; color: var(--dp-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.training-table .is-employee { width: clamp(25%, calc(100% - 80px - var(--training-columns, 1) * 150px), 50%); text-align: left; }
+.training-table .is-progress { width: 80px; color: var(--dp-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .training-table td.is-progress.is-complete { color: var(--dp-accent); font-weight: 700; }
 .training-table input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--dp-accent); cursor: pointer; }
-.training-head { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; }
-.training-head__emoji { font-size: 17px; line-height: 1; }
+/* En-tête d'une formation : emoji et nom centrés au-dessus des cases ; modifier / supprimer juste à droite du nom, au survol. */
+.training-head { position: relative; display: inline-flex; max-width: 100%; align-items: center; gap: 5px; white-space: nowrap; }
+.training-head__emoji { flex-shrink: 0; font-size: 14px; line-height: 1; }
+.training-head__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .training-head__actions { display: inline-flex; gap: 2px; }
+.training-table th.is-training .training-head__actions { position: absolute; top: 50%; left: 100%; margin-left: 4px; padding: 1px; border-radius: 7px; background: var(--dp-panel-2); opacity: 0; transform: translateY(-50%); transition: opacity .15s; }
+.training-table th.is-training:hover .training-head__actions,
+.training-table th.is-training:focus-within .training-head__actions { opacity: 1; }
 .training-head__actions button { display: grid; width: 22px; height: 22px; place-items: center; border: 0; border-radius: 6px; color: var(--dp-text-dim); background: transparent; cursor: pointer; }
 .training-head__actions button:hover { color: var(--dp-text); background: var(--dp-panel); }
 .training-head__actions button.is-danger:hover { color: var(--dp-danger); background: var(--dp-danger-soft); }

@@ -150,8 +150,9 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Les grades « Période d'essai » et « En formation » se cochent dans Direction,
   sur autant de grades que nécessaire.
 - Une formation générale peut donner des droits à ceux qui l'ont validée (qui
-  ont son emoji) : **Formateur**, **Médecin légiste** et **Ressources
-  humaines**. Le compte lié à la tuile de l'employé reçoit ces droits ; ils ne
+  ont son emoji) : **Formateur**, **Médecin légiste**, **Ressources humaines**
+  et **Stock** (gestion des stocks, pour la future page Stock). Le compte lié à
+  la tuile de l'employé reçoit ces droits ; ils ne
   se donnent plus par les rôles d'Administration ni par les grades. La
   Direction a le droit Ressources humaines par défaut.
 - Chaque section a son bouton « Ajouter », qui fixe le type de la formation.
@@ -667,7 +668,7 @@ Les super-admins ont tous les droits.
 | Méthode | Chemin | Description |
 |---|---|---|
 | `GET` | `/api/trainings` | Formations, employés actifs (compétences, grade, téléphone), rôles des formations générales, grades « Période d'essai » et « En formation », droits qu'une formation peut donner, `can_manage` et `can_validate` |
-| `POST` | `/api/trainings` | Crée une formation : `name`, `emoji` (unique), `kind` (`trial` \| `training` \| `general`), `permissions` (droits donnés, formation générale seulement : `training.validate`, `hospital.forensic`, `human_resources.manage`) |
+| `POST` | `/api/trainings` | Crée une formation : `name`, `emoji` (unique), `kind` (`trial` \| `training` \| `general`), `permissions` (droits donnés, formation générale seulement : `training.validate`, `hospital.forensic`, `human_resources.manage`, `stock.manage`) |
 | `PATCH` | `/api/trainings/{id}` | Modifie une formation ; un nouvel emoji remplace l'ancien chez les employés |
 | `DELETE` | `/api/trainings/{id}` | Supprime la formation et retire son emoji des compétences |
 | `PUT` | `/api/trainings/{id}/employees/{employee_id}` | Valide la formation ; `status` facultatif (`validated` par défaut, `lead`, `second`, `in_progress` pour une formation générale) |
