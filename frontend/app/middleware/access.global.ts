@@ -1,5 +1,6 @@
 const protectedPages: Record<string, string> = {
   '/dispatch': 'dispatch',
+  '/crise': 'crisis',
   '/hopital': 'hospital',
   '/stock': 'stock',
   '/agenda': 'agenda',
@@ -13,7 +14,7 @@ const protectedPages: Record<string, string> = {
  * cocher dans les rôles. Un compte en attente ou désactivé reçoit un 403 sur
  * /api/me et repart vers la connexion.
  */
-const publicPages = new Set(['dispatch', 'hospital', 'agenda', 'stock'])
+const publicPages = new Set(['dispatch', 'crisis', 'hospital', 'agenda', 'stock'])
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const page = protectedPages[to.path]

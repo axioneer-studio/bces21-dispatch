@@ -88,6 +88,10 @@ _MORGUE_ALTER_STATEMENTS = [
     "ALTER TABLE morgue_entries ADD COLUMN coffined_at TIMESTAMP WITH TIME ZONE",
 ]
 
+_GROUP_ALTER_STATEMENTS = [
+    "ALTER TABLE affiliation_groups ADD COLUMN color VARCHAR(7)",
+]
+
 
 async def _run_user_migrations(conn) -> None:
     for stmt in _USER_ALTER_STATEMENTS:
@@ -205,6 +209,15 @@ async def _run_morgue_migrations(conn) -> None:
             pass
 
 
+async def _run_group_migrations(conn) -> None:
+    for stmt in _GROUP_ALTER_STATEMENTS:
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
+
+
 _DISPATCH_STATE_RENAMES = [
     ("freq_147", "freq_bces"),
     ("freq_570", "freq_shared"),
@@ -273,6 +286,54 @@ async def _run_access_migrations(conn) -> None:
             AND NOT EXISTS (SELECT 1 FROM users WHERE is_super_admin = TRUE)
             """
         )
+    )
+
+
+async def _seed_intervention_statuses(conn) -> None:
+    """Injecte les statuts d'intervention par défaut quand la table est vide.
+
+    Une base où la colonne `kind` vient d'être ajoutée range ses lieux d'origine
+    (BCES, Zombie, salles de l'hôpital…) dans les lieux, une seule fois."""
+    from intervention_status_defaults import DEFAULT_INTERVENTION_STATUSES, DEFAULT_PLACES, PLACE_KIND
+
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text("ALTER TABLE intervention_statuses ADD COLUMN kind VARCHAR(16) DEFAULT 'status' NOT NULL")
+            )
+        kind_added = True
+    except Exception:
+        kind_added = False
+    if kind_added:
+        for order, (key, _label, _emoji) in enumerate(DEFAULT_PLACES):
+            await conn.execute(
+                text('UPDATE intervention_statuses SET kind = :kind, "order" = :order WHERE key = :key'),
+                {"kind": PLACE_KIND, "order": order, "key": key},
+            )
+
+    if await conn.scalar(text("SELECT COUNT(*) FROM intervention_statuses")):
+        return
+    orders: dict[str, int] = {}
+    rows = []
+    for key, label, emoji, is_primo, kind in DEFAULT_INTERVENTION_STATUSES:
+        orders[kind] = orders.get(kind, -1) + 1
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "emoji": emoji,
+                "is_primo": is_primo,
+                "kind": kind,
+                "order": orders[kind],
+                "created_at": datetime.now(timezone.utc),
+            }
+        )
+    await conn.execute(
+        text(
+            'INSERT INTO intervention_statuses (key, label, emoji, color, is_primo, kind, "order", created_at) '
+            "VALUES (:key, :label, :emoji, NULL, :is_primo, :kind, :order, :created_at)"
+        ),
+        rows,
     )
 
 
@@ -352,8 +413,10 @@ async def init_db() -> None:
         await _run_grade_migrations(conn)
         await _run_vehicle_migrations(conn)
         await _run_morgue_migrations(conn)
+        await _run_group_migrations(conn)
         await _run_access_migrations(conn)
         await _run_dispatch_migrations(conn)
+        await _seed_intervention_statuses(conn)
 
     await _backfill_employees()
 

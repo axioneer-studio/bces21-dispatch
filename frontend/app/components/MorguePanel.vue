@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { groupColor, type AffiliationGroup } from '~/utils/groups'
 
 interface MorgueEntry {
   id: number
@@ -41,6 +42,7 @@ interface MorgueData {
   examiners: MorgueExaminer[]
   can_manage_autopsy: boolean
   is_forensic: boolean
+  groups: AffiliationGroup[]
 }
 
 const props = defineProps<{ active: boolean }>()
@@ -107,9 +109,9 @@ const counts = computed(() => {
   return result
 })
 
-const affiliationOptions = computed(() =>
-  [...new Set(entries.value.map((entry) => entry.affiliation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'))
-)
+/** Groupes gérés dans Administration, proposés pour l'appartenance avec leur couleur. */
+const groups = ref<AffiliationGroup[]>([])
+const groupNames = computed(() => groups.value.map((group) => group.name))
 
 
 function messageFromError(cause: unknown, fallback: string) {
@@ -140,6 +142,12 @@ function affiliationHue(name: string) {
   return hash
 }
 
+/** Couleur du groupe dans Administration si elle existe, sinon une teinte tirée du nom. */
+function affiliationStyle(name: string) {
+  const color = groupColor(groups.value, name)
+  return color ? { '--affiliation-color': color } : { '--affiliation-hue': affiliationHue(name) }
+}
+
 async function load() {
   try {
     const data = await $fetch<MorgueData>('/api/hospital/morgue', { credentials: 'include' })
@@ -147,6 +155,7 @@ async function load() {
     examiners.value = data.examiners
     canManageAutopsy.value = data.can_manage_autopsy
     isForensic.value = data.is_forensic
+    groups.value = data.groups
     loadError.value = ''
   } catch (cause) {
     loadError.value = messageFromError(cause, 'Impossible de charger la morgue.')
@@ -360,7 +369,8 @@ async function remove(entry: MorgueEntry) {
         <span
           v-if="entry.affiliation"
           class="morgue-case__affiliation"
-          :style="{ '--affiliation-hue': affiliationHue(entry.affiliation) }"
+          :class="{ 'morgue-case__affiliation--colored': groupColor(groups, entry.affiliation) }"
+          :style="affiliationStyle(entry.affiliation)"
         >{{ entry.affiliation }}</span>
         <span v-else class="morgue-case__affiliation morgue-case__affiliation--none">Appartenance inconnue</span>
 
@@ -479,10 +489,7 @@ async function remove(entry: MorgueEntry) {
             <input v-model="form.identity" type="text" maxlength="120" placeholder="Laisser vide si inconnue">
           </label>
           <label class="morgue-form__wide">Appartenance connue
-            <input v-model="form.affiliation" type="text" maxlength="64" list="morgue-affiliations" placeholder="Groupe, organisation… (facultatif)">
-            <datalist id="morgue-affiliations">
-              <option v-for="option in affiliationOptions" :key="option" :value="option" />
-            </datalist>
+            <ChoiceField v-model="form.affiliation" :options="groupNames" :color="groupColor(groups, form.affiliation)" :maxlength="64" placeholder="Inconnue" label="Appartenance connue" />
           </label>
           <label class="morgue-form__wide">Contacts d’urgence (nom, numéro)
             <textarea v-model="form.emergency_contacts" maxlength="500" rows="2" placeholder="Proches à appeler pour récupérer le corps ou l’urne"></textarea>
@@ -547,6 +554,7 @@ async function remove(entry: MorgueEntry) {
 .morgue-case__identity { margin: 0; overflow-wrap: anywhere; text-align: center; color: var(--dp-text); font-size: 14px; font-weight: 700; }
 .morgue-case__identity.is-unknown { color: var(--dp-text-dim); font-style: italic; font-weight: 600; }
 .morgue-case__affiliation { align-self: center; max-width: 100%; overflow: hidden; padding: 3px 9px; border: 1px solid hsl(var(--affiliation-hue) 55% 55% / .5); border-radius: 999px; color: hsl(var(--affiliation-hue) 70% 72%); background: hsl(var(--affiliation-hue) 55% 45% / .16); font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.morgue-case__affiliation--colored { border-color: color-mix(in srgb, var(--affiliation-color) 60%, transparent); color: color-mix(in srgb, var(--affiliation-color) 65%, #fff); background: color-mix(in srgb, var(--affiliation-color) 18%, transparent); }
 .morgue-case__affiliation--none { border-color: var(--dp-line); color: var(--dp-text-dim); background: transparent; font-weight: 500; }
 /* Une ligne par information : libellé à gauche, valeur à droite, toutes alignées. */
 .morgue-case__rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 7px 12px; margin: 0; padding: 10px 0; border-top: 1px solid var(--dp-line); border-bottom: 1px solid var(--dp-line); }
@@ -595,7 +603,7 @@ async function remove(entry: MorgueEntry) {
 
 .morgue-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; }
 .morgue-form > label { display: grid; align-content: start; gap: 6px; color: var(--dp-text-2); font-size: 11px; font-weight: 650; }
-.morgue-form input:not([type='checkbox']), .morgue-form textarea { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 11px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
+.morgue-form input:not([type='checkbox']), .morgue-form select, .morgue-form textarea { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 11px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
 .morgue-form textarea { padding: 9px 11px; resize: vertical; }
 .morgue-form input:focus-visible, .morgue-form textarea:focus-visible { border-color: var(--dp-accent-line); outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; }
 .morgue-form__wide { grid-column: 1 / -1; }

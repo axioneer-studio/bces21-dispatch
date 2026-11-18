@@ -9,7 +9,7 @@ from database import get_db
 from models import User
 
 # Pages ouvertes à tout compte validé par un admin, même sans rôle.
-OPEN_PAGES = frozenset({"dispatch", "hospital", "agenda", "stock"})
+OPEN_PAGES = frozenset({"dispatch", "crisis", "hospital", "agenda", "stock"})
 # Pages à cocher dans un rôle (« Pages accessibles »).
 PAGE_KEYS = frozenset({"human-resources", "direction", "administration"})
 

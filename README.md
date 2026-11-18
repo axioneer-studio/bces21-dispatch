@@ -34,7 +34,13 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   **Congés**, **IPT**, **Astreinte fin de service**, **Pause**, plus les
   **interventions / consultations** créées à la volée.
 - Glisser-déposer des agents entre les créneaux et la réserve « hors service ».
-- Statut d'intervention (27 statuts + 12 lieux, avec emoji) et code postal par carte.
+- Statut d'intervention, choisi dans la liste gérée dans Administration, avec
+  emoji, et code postal par carte. La liste a deux parties, toujours dans cet
+  ordre : les statuts (Patrouille, Inter, Renfort, Enterrement…), puis les lieux
+  (BCES, LSES, Zombie, salles de l'hôpital…). Une entrée peut avoir une couleur,
+  qui teinte l'intervention, et être cochée « Primo Inter » pour lier
+  l'intervention à la page Crise. Les 22 statuts et 17 lieux d'origine sont
+  injectés au démarrage quand la liste est vide.
 - Panneau **Radios** : marche/arrêt, numéro de série éditable, agent associé,
   fréquences 147 / 570 MHz, état « attente » (chargement 2,5 s).
 - Les tuiles d'employés viennent du registre RH et ne nécessitent pas de compte
@@ -49,6 +55,55 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   grades autorisés.
 - Mises à jour temps réel via WebSocket, sans rafraîchissement de page.
 
+### Crise (`/crise`)
+
+- Page ouverte à tout compte validé, même sans rôle, pour gérer une situation de
+  crise. En pratique, c'est la Centrale du Dispatch qui la pilote.
+- Équipe : un Primo Intervenant et les agents qui l'assistent, choisis parmi les
+  employés actifs. Désigner un Primo l'affecte aussi, sur le Dispatch, à
+  l'intervention « Primo » de la crise, créée au besoin ; un Primo remplacé y
+  reste affecté.
+- Dans l'autre sens, passer une intervention du Dispatch à un statut coché
+  « Primo Inter » dans Administration (« Primo » par défaut) en
+  fait celle de la crise, si la crise n'en a pas encore. L'équipe suit alors les
+  membres de cette intervention : le premier arrivé est Primo, les suivants en
+  assistance ; qui en est retiré ou déplacé quitte l'équipe, et si c'était le
+  Primo, le suivant de l'intervention prend sa place. Supprimer ou vider
+  l'intervention (Tempête du Dispatch) vide l'équipe (`backend/crisis_link.py`).
+- En-tête : code postal (ZIP) de la crise, partagé avec l'intervention « Primo »
+  du Dispatch (modifiable d'un côté ou de l'autre), et heure de saisie de la
+  première ligne.
+- Liste des blessés, sous forme de tableau modifiable sur place : nom et prénom,
+  appartenance (groupe), coma, blessure grave, inconscient, analyse sommaire des
+  blessures, médecin qui rapatrie, médecin soignant, arrivée à l'hôpital (l'heure
+  est prise automatiquement quand on coche) et soins terminés. Côté Centrale :
+  ajout au canal radio et chambre (lit de l'onglet Chambres) où le blessé est
+  installé.
+- Choisir un lit y installe le blessé dans l'onglet Chambres (nom, accident
+  « Crise », date du jour), avec la raison de présence « En attente
+  d'opération », ajoutée à la liste des raisons si besoin. Seuls les lits libres sont
+  proposés. Une fois soigné, ou retiré de la liste, le blessé quitte le lit, qui
+  redevient libre ; libérer le lit depuis l'onglet Chambres le retire aussi de
+  la ligne de crise.
+- L'appartenance se choisit parmi les Groupes gérés dans Administration, et les
+  médecins parmi les employés ; ces listes ne sont pas exhaustives : « Autre… »
+  permet de saisir une autre valeur. Un groupe qui a une couleur teinte la case
+  Appartenance.
+- Celui qui coche « Arrivé » devient le médecin qui rapatrie, et celui qui coche
+  « Soigné » le médecin soignant, si ces cases sont vides (nom de sa tuile
+  employé, sinon son nom RP).
+- « Canal » ne se coche qu'une fois le blessé soigné ; décocher « Soigné »
+  décoche aussi « Canal ». Une ligne soignée mais pas encore au canal est
+  surlignée en vert ; soignée et au canal, elle est grisée.
+- La « Tempête » vide la liste des blessés et l'équipe, et libère les lits
+  occupés par des blessés de la crise.
+- Les blessés sont regroupés par appartenance : les groupes dans l'ordre où ils
+  sont apparus, et dans chaque groupe l'ordre de saisie (le plus récent en bas
+  de son groupe). Le blessé arrivé à l'hôpital depuis le plus longtemps sans
+  médecin soignant est surligné en orange, sans changer de place.
+- La page se rafraîchit toutes les 5 secondes, sauf pendant une saisie dans le
+  tableau.
+
 ### Hôpital (`/hopital`)
 
 - Page ouverte à tout compte validé, même sans rôle, avec deux onglets : Chambres et
@@ -60,9 +115,11 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   une liste, ou se saisit avec « Autre… ». Seuls la Direction (grade Direction,
   par défaut) et les rôles ayant la permission applicative « Gérer l'hôpital »
   ajoutent, renomment et suppriment les chambres et les lits, ainsi que les
-  raisons de la liste.
+  raisons de la liste. Un lit est créé sous le nom « Lit N » et peut être
+  renommé ensuite ; les lits restent affichés dans leur ordre de création.
 - **Morgue** : défunts pris en charge, avec date du décès, identité, appartenance
-  connue, informations communicables ou non, autopsie, médecin légiste, contacts
+  connue (Groupes d'Administration, ou « Autre… » ; l'étiquette prend la couleur
+  du groupe, ou à défaut une teinte tirée du nom), informations communicables ou non, autopsie, médecin légiste, contacts
   d'urgence et possibilité de récupération par les proches. Un corps en cellule
   réfrigérée et une urne s'affichent dans deux formes de case différentes.
   L'autopsie et la récupération se renseignent après l'ajout, d'un clic sur la
@@ -103,7 +160,7 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Complétion du profil (prénom RP / nom RP / téléphone) obligatoire, avec délai de 24 h.
 - Brouillon de profil sauvegardé en `localStorage` (`bces:profile-draft`).
 - Comptes en attente de validation : traitement par un administrateur. Un
-  compte validé accède au Dispatch, à l'Hôpital, à l'Agenda et au Stock, même
+  compte validé accède au Dispatch, à la Crise, à l'Hôpital, à l'Agenda et au Stock, même
   sans rôle ; un rôle ajoute les autres pages.
 - Un compte peut avoir plusieurs rôles (par exemple Légiste et Gestion de
   l'hôpital) : il cumule les pages et les permissions de tous ses rôles.
@@ -182,7 +239,6 @@ bces21-dispatch/
 │   │   │   ├── FleetPanel.vue
 │   │   │   ├── FrequencyPicker.vue
 │   │   │   ├── InterventionCard.vue
-│   │   │   ├── LocationPicker.vue
 │   │   │   ├── MorguePanel.vue
 │   │   │   ├── RadioPanel.vue
 │   │   │   ├── RoomsPanel.vue
@@ -223,7 +279,6 @@ bces21-dispatch/
 │   │   │   └── toast.ts
 │   │   └── utils/
 │   │       ├── agent.ts
-│   │       ├── locations.ts
 │   │       ├── radios.ts
 │   │       ├── statuses.ts
 │   │       └── toast.ts
@@ -444,8 +499,8 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 ## API REST
 
 Les routes authentifiées exigent une session valide et un compte validé : un
-compte en attente ou désactivé reçoit un `403`. Les API du Dispatch, de
-l'Hôpital et de l'Agenda sont ouvertes à tout compte validé, même sans rôle ;
+compte en attente ou désactivé reçoit un `403`. Les API du Dispatch, de la
+Crise, de l'Hôpital et de l'Agenda sont ouvertes à tout compte validé, même sans rôle ;
 celles des ressources humaines, de la Direction et de l'administration
 vérifient en plus la page cochée dans le rôle.
 
@@ -475,6 +530,11 @@ vérifient en plus la page cochée dans le rôle.
 | `POST` | `/api/admin/registrations/{id}/reject` | Refuse une inscription |
 | `GET` / `POST` | `/api/admin/roles` | Liste ou crée des rôles applicatifs |
 | `PATCH` / `DELETE` | `/api/admin/roles/{id}` | Modifie ou supprime un rôle applicatif |
+| `GET` / `POST` | `/api/admin/intervention-statuses` | Liste (statuts puis lieux) ou crée une entrée : `kind` (`status` \| `place`), libellé, emoji, couleur facultative, « Primo Inter » |
+| `PATCH` / `DELETE` | `/api/admin/intervention-statuses/{id}` | Modifie ou supprime un statut ; suppression refusée (`409`) si une intervention l'a |
+| `POST` | `/api/admin/intervention-statuses/{id}/move?direction=-1\|1` | Monte ou descend l'entrée dans la liste de son type |
+| `GET` / `POST` | `/api/admin/groups` | Liste ou crée des groupes d'appartenance (Crise, Morgue) |
+| `PATCH` / `DELETE` | `/api/admin/groups/{id}` | Renomme un groupe et change sa couleur, ou le supprime ; les blessés et défunts gardent leur appartenance |
 | `GET` | `/api/admin/permissions` | Liste les permissions applicatives configurables |
 | `GET` / `PUT` | `/api/admin/settings` | Lit ou modifie les paramètres généraux |
 | `GET` | `/api/direction/grades` | Liste les grades et leurs permissions |
@@ -519,19 +579,34 @@ vérifient en plus la page cochée dans le rôle.
 | `PATCH` | `/api/hospital/rooms/{id}` | Renomme une chambre (`hospital.manage`) |
 | `DELETE` | `/api/hospital/rooms/{id}` | Supprime une chambre et ses lits, s’ils sont tous libres (`hospital.manage`) |
 | `POST` | `/api/hospital/rooms/{id}/beds` | Ajoute un lit vide à la chambre (`hospital.manage`) |
+| `PATCH` | `/api/hospital/beds/{id}` | Renomme un lit ; nom unique dans sa chambre (`hospital.manage`) |
 | `DELETE` | `/api/hospital/beds/{id}` | Supprime un lit libre (`hospital.manage`) |
 | `PUT` | `/api/hospital/beds/{id}/patient` | Affecte un patient au lit ou met à jour sa fiche (compte connecté) |
 | `PATCH` | `/api/hospital/beds/{id}/flags` | Soins faits, forces de l’ordre à prévenir (compte connecté) |
 | `DELETE` | `/api/hospital/beds/{id}/patient` | Libère le lit (compte connecté) |
 | `POST` | `/api/hospital/bed-reasons` | Ajoute une raison proposée (`hospital.manage`) |
 | `DELETE` | `/api/hospital/bed-reasons/{id}` | Supprime une raison proposée (`hospital.manage`) |
-| `GET` | `/api/hospital/morgue` | Défunts, et droits du compte connecté sur l’autopsie et l’incinération |
+| `GET` | `/api/hospital/morgue` | Défunts, groupes proposés, et droits du compte connecté sur l’autopsie et l’incinération |
 | `POST` | `/api/hospital/morgue` | Ajoute un défunt (compte connecté) |
 | `PATCH` | `/api/hospital/morgue/{id}` | Modifie la fiche d’un défunt et sa récupération (compte connecté) |
 | `PUT` | `/api/hospital/morgue/{id}/autopsy` | Déclare l’autopsie faite ou non ; le légiste qui la déclare devient le légiste du défunt (`hospital.forensic` ou grade Direction) |
 | `PUT` | `/api/hospital/morgue/{id}/examiner` | Change le légiste du défunt, parmi les employés au rôle de légiste (`hospital.forensic` ou grade Direction) |
 | `POST` | `/api/hospital/morgue/{id}/incinerate` | Incinère le corps, qui devient une urne (`hospital.forensic`) |
 | `DELETE` | `/api/hospital/morgue/{id}` | Retire un corps ou une urne de la morgue (compte connecté) |
+
+### Crise
+
+Toutes les routes sont ouvertes à tout compte validé.
+
+| Méthode | Chemin | Description |
+|---|---|---|
+| `GET` | `/api/crisis` | Équipe (Primo et agents en assistance), blessés, employés actifs, lits et groupes proposés |
+| `PUT` | `/api/crisis/team` | Remplace l'équipe : `primo_id` (ou `null`) et `helper_ids` ; un nouveau Primo est affecté à l'intervention « Primo » du Dispatch |
+| `PUT` | `/api/crisis/zip` | Code postal de la crise, repris sur l'intervention « Primo » |
+| `POST` | `/api/crisis/victims` | Ajoute un blessé |
+| `PATCH` | `/api/crisis/victims/{id}` | Modifie un blessé ; `arrived: true` prend l'heure d'arrivée, `false` l'efface. Cocher l'arrivée ou les soins renseigne le médecin correspondant s'il est vide ; `channel_added` exige `care_done` (`409` sinon) |
+| `DELETE` | `/api/crisis/victims/{id}` | Retire un blessé de la liste |
+| `POST` | `/api/crisis/reset` | Tempête : vide la liste des blessés et l'équipe, libère leurs lits |
 
 ---
 
@@ -592,6 +667,8 @@ d'employés.
 |---|---|
 | `users` | Comptes Discord et accès : profil, `is_super_admin`, `status`, `last_login_at` (l'ancienne colonne `role_id` est reprise dans `user_roles` au démarrage, puis vidée) |
 | `roles` | Rôles personnalisés et pages autorisées |
+| `intervention_statuses` | Statuts d'intervention du Dispatch : `key` (valeur stockée dans `dispatch_slots.status`, fixe), `label`, `emoji`, `color` (facultative), `is_primo`, `kind` (`status` \| `place`, les statuts avant les lieux), `order` (dans son type) |
+| `affiliation_groups` | Groupes d'appartenance proposés dans la Crise et la Morgue : `name`, `color` facultative (les fiches gardent leur appartenance en texte) |
 | `user_roles` | Rôles de chaque compte : `user_id` → `users`, `role_id` → `roles` (cascade des deux côtés) |
 | `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
 | `grades` | Hiérarchie de service et permissions opérationnelles par grade |
@@ -603,6 +680,9 @@ d'employés.
 | `hospital_beds` | Lits : `room_id` → `hospital_rooms` (cascade), `label`, puis le patient : `patient_name` (vide si le lit est libre), `accident`, `arrival_date`, `care_done`, `police_status` (`none` \| `to_notify` \| `notified`), `reason` |
 | `hospital_bed_reasons` | Raisons proposées pour la présence d’un patient dans un lit |
 | `morgue_entries` | Défunts de la morgue : `death_date`, `identity`, `affiliation`, `info_shareable`, `autopsy_done`, `examiner_id` → `employees`, `emergency_contacts`, `recoverable`, `incinerated_at` (vide tant que le corps est en cellule) |
+| `crisis_state` | Ligne unique `id = 1` : `zip_code` de la crise et `slot_id` → `dispatch_slots`, l'intervention « Primo » (vidée si elle est supprimée) |
+| `crisis_members` | Équipe de crise : `employee_id` → `employees` (cascade), `is_primo` (un seul Primo) |
+| `crisis_victims` | Blessés de la crise : `full_name`, `affiliation`, `coma`, `severe`, `unconscious`, `injuries`, `repatriating_doctor`, `treating_doctor`, `arrived_at`, `care_done`, `channel_added`, `bed_id` → `hospital_beds` (vidé si le lit est supprimé) |
 | `dispatch_state` | Ligne unique `id = 1` : `hospital_status`, `lses_status`, `safd_status`, `freq_bces`, `freq_shared` (fréquences actuelles, vides tant qu'elles ne sont pas réglées ; bornes dans `application_settings`), `radio_codes` |
 
 ### Créneaux amorcés
@@ -631,6 +711,7 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 |---|---|---|
 | `/` | `app/pages/index.vue` | Connexion Discord, gestion des erreurs `?error=` / `?status=pending` |
 | `/dispatch` | `app/pages/dispatch.vue` | Plateau de dispatch temps réel |
+| `/crise` | `app/pages/crise.vue` | Gestion de crise : équipe et liste des blessés |
 | `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres et Morgue |
 | `/stock` | `app/pages/stock.vue` | Stock du BCES (à venir) |
 | `/agenda` | `app/pages/agenda.vue` | Agenda partagé |
@@ -640,7 +721,7 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 Le middleware global vérifie `/api/me` avant l'accès aux pages privées. Les
 permissions sont aussi contrôlées par les dépendances FastAPI.
 
-Dispatch, Hôpital, Agenda et Stock n'ont pas de case dans les « Pages
+Dispatch, Crise, Hôpital, Agenda et Stock n'ont pas de case dans les « Pages
 accessibles » des rôles : ils sont ouverts à tout compte validé, même sans rôle
 (`OPEN_PAGES` dans `backend/deps.py`). Un compte en attente ou désactivé reçoit
 un `403` sur `/api/me` et repart vers la connexion. Les rôles ne cochent que
@@ -673,12 +754,13 @@ tout.
 | `RadioPanel.vue` | Colonne radios (marche/arrêt, série, agent, fréquences) |
 | `RoomsPanel.vue` | Onglet Chambres de la page Hôpital : chambres, lits, affectation des patients, raisons proposées |
 | `MorguePanel.vue` | Onglet Morgue de la page Hôpital : cases des corps et des urnes, ajout, modification, incinération, retrait |
-| `StatusPicker.vue` | Liste déroulante statuts + lieux |
+| `ChoiceField.vue` | Liste de choix non exhaustive, avec « Autre… » pour une saisie libre |
+| `StatusPicker.vue` | Liste déroulante des statuts d'intervention gérés dans Administration (statuts et lieux), teintée par la couleur du statut |
 | `ZipPicker.vue` | Saisie du code postal (validation différée 400 ms) |
 | `ToastStack.vue` | Pile de notifications (bas droite) |
 | `EmptySlotState.vue` | Message d'état vide |
 | `DiscordButton.vue` | Bouton OAuth Discord |
-| `AppLogo.vue`, `LocationPicker.vue`, `RadioCard.vue` | Composants non utilisés (code mort) |
+| `AppLogo.vue`, `RadioCard.vue` | Composants non utilisés (code mort) |
 
 ### Styles
 

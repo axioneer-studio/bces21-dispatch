@@ -23,6 +23,9 @@ from frequencies import router as frequencies_router
 from human_resources import router as human_resources_router
 from hospital_rooms import router as hospital_rooms_router
 from morgue import router as morgue_router
+from crisis import router as crisis_router
+from affiliation_groups import router as affiliation_groups_router
+from intervention_statuses import router as intervention_statuses_router
 from grade_permissions import parse_grade_permissions
 from models import Employee, Grade, User
 from schemas import HealthResponse, SuperAdminToggleRequest, UserResponse
@@ -148,3 +151,6 @@ app.include_router(frequencies_router)
 app.include_router(human_resources_router)
 app.include_router(hospital_rooms_router)
 app.include_router(morgue_router)
+app.include_router(crisis_router)
+app.include_router(affiliation_groups_router)
+app.include_router(intervention_statuses_router)

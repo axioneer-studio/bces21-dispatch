@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue'
 import type { Ref } from 'vue'
+import { STATUS_KINDS } from '~/utils/statuses'
+import type { InterventionStatusKind } from '~/utils/statuses'
+import type { AffiliationGroup } from '~/utils/groups'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Administration • BCES' })
@@ -96,6 +99,16 @@ interface ParkingSpot {
   name: string
 }
 
+interface AdminInterventionStatus {
+  id: number
+  key: string
+  label: string
+  emoji: string
+  color: string | null
+  is_primo: boolean
+  kind: InterventionStatusKind
+}
+
 const pageOptions = [
   { key: 'human-resources', label: 'Ressources humaines' },
   { key: 'direction', label: 'Direction' },
@@ -110,7 +123,9 @@ const [
   { data: initialRequests },
   { data: initialSettings },
   { data: initialVehicles },
-  { data: initialParkingSpots }
+  { data: initialParkingSpots },
+  { data: initialGroups },
+  { data: initialStatuses }
 ] =
   await Promise.all([
     useAsyncData('admin-users', () =>
@@ -136,6 +151,12 @@ const [
     ),
     useAsyncData('admin-parking-spots', () =>
       $fetch<ParkingSpot[]>('/api/admin/parking-spots', { credentials: 'include', headers: requestHeaders })
+    ),
+    useAsyncData('admin-groups', () =>
+      $fetch<AffiliationGroup[]>('/api/admin/groups', { credentials: 'include', headers: requestHeaders })
+    ),
+    useAsyncData('admin-intervention-statuses', () =>
+      $fetch<AdminInterventionStatus[]>('/api/admin/intervention-statuses', { credentials: 'include', headers: requestHeaders })
     )
   ])
 
@@ -198,7 +219,7 @@ const workingUserIds = ref<number[]>([])
 const savingRole = ref(false)
 const savingRoleIds = ref<number[]>([])
 const deletingRoleIds = ref<number[]>([])
-const adminSections = ['registrations', 'users', 'roles', 'vehicles', 'parking', 'settings'] as const
+const adminSections = ['registrations', 'users', 'roles', 'vehicles', 'parking', 'statuses', 'groups', 'settings'] as const
 const activeAdminSection = ref<(typeof adminSections)[number]>(
   registrations.value.length ? 'registrations' : 'users'
 )
@@ -640,6 +661,176 @@ async function deleteSpot(spot: ParkingSpot) {
   })
 }
 
+/** Couleur proposée quand on active la couleur d'un statut ou d'un groupe. */
+const DEFAULT_COLOR = '#46996d'
+
+function toggleColor(item: { color: string | null }, event: Event) {
+  item.color = (event.target as HTMLInputElement).checked ? DEFAULT_COLOR : null
+}
+
+// --- Statuts d'intervention du Dispatch ---
+const interventionStatuses = ref<AdminInterventionStatus[]>(initialStatuses.value ?? [])
+const statusForm = reactive({
+  label: '',
+  emoji: '',
+  color: null as string | null,
+  is_primo: false,
+  kind: 'status' as InterventionStatusKind
+})
+/** Statuts puis lieux, chacun dans sa liste, dans l'ordre du menu du Dispatch. */
+const statusGroups = computed(() =>
+  STATUS_KINDS.map((kind) => ({
+    ...kind,
+    items: interventionStatuses.value.filter((status) => status.kind === kind.value)
+  }))
+)
+const savingStatus = ref(false)
+const workingStatusIds = ref<number[]>([])
+
+function statusBody(status: {
+  label: string
+  emoji: string
+  color: string | null
+  is_primo: boolean
+  kind: InterventionStatusKind
+}) {
+  return { label: status.label, emoji: status.emoji, color: status.color, is_primo: status.is_primo, kind: status.kind }
+}
+
+async function createStatus() {
+  if (savingStatus.value || !statusForm.label.trim()) return
+  adminError.value = ''
+  savingStatus.value = true
+  try {
+    const created = await $fetch<AdminInterventionStatus>('/api/admin/intervention-statuses', {
+      method: 'POST',
+      body: statusBody(statusForm),
+      credentials: 'include'
+    })
+    // En fin de tableau : il arrive en dernier dans la liste de son type.
+    interventionStatuses.value = [...interventionStatuses.value, created]
+    Object.assign(statusForm, { label: '', emoji: '', color: null, is_primo: false, kind: statusForm.kind })
+  } catch (cause) {
+    adminError.value = messageFromError(cause, 'Création du statut impossible.')
+  } finally {
+    savingStatus.value = false
+  }
+}
+
+async function saveStatus(status: AdminInterventionStatus) {
+  await withWorking(workingStatusIds, status.id, async () => {
+    try {
+      const saved = await $fetch<AdminInterventionStatus>(`/api/admin/intervention-statuses/${status.id}`, {
+        method: 'PATCH',
+        body: statusBody(status),
+        credentials: 'include'
+      })
+      Object.assign(status, saved)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Modification du statut impossible.')
+    }
+  })
+}
+
+/** Passe un statut dans les lieux (ou l'inverse) : enregistré tout de suite, il arrive en fin de liste. */
+async function changeStatusKind(status: AdminInterventionStatus, event: Event) {
+  const previous = status.kind
+  status.kind = (event.target as HTMLSelectElement).value as InterventionStatusKind
+  adminError.value = ''
+  await saveStatus(status)
+  if (adminError.value) {
+    status.kind = previous
+    return
+  }
+  interventionStatuses.value = [...interventionStatuses.value.filter((item) => item.id !== status.id), status]
+}
+
+async function moveStatus(status: AdminInterventionStatus, direction: -1 | 1) {
+  await withWorking(workingStatusIds, status.id, async () => {
+    try {
+      const ordered = await $fetch<AdminInterventionStatus[]>(
+        `/api/admin/intervention-statuses/${status.id}/move`,
+        { method: 'POST', query: { direction }, credentials: 'include' }
+      )
+      // Garde les saisies en cours : seul l'ordre vient du serveur.
+      const byId = new Map(interventionStatuses.value.map((item) => [item.id, item]))
+      interventionStatuses.value = ordered.map((item) => byId.get(item.id) ?? item)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Déplacement du statut impossible.')
+    }
+  })
+}
+
+async function deleteStatus(status: AdminInterventionStatus) {
+  if (!window.confirm(`Supprimer le statut « ${status.emoji} ${status.label} » ?`)) return
+  await withWorking(workingStatusIds, status.id, async () => {
+    try {
+      await $fetch(`/api/admin/intervention-statuses/${status.id}`, { method: 'DELETE', credentials: 'include' })
+      interventionStatuses.value = interventionStatuses.value.filter((item) => item.id !== status.id)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Suppression du statut impossible.')
+    }
+  })
+}
+
+// --- Groupes : appartenance proposée dans la Crise et la Morgue ---
+const byGroupName = (a: AffiliationGroup, b: AffiliationGroup) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+const groups = ref<AffiliationGroup[]>(initialGroups.value ?? [])
+const groupForm = reactive({ name: '', color: null as string | null })
+const savingGroup = ref(false)
+const workingGroupIds = ref<number[]>([])
+
+function groupBody(group: { name: string; color: string | null }) {
+  return { name: group.name, color: group.color }
+}
+
+async function createGroup() {
+  if (savingGroup.value || !groupForm.name.trim()) return
+  adminError.value = ''
+  savingGroup.value = true
+  try {
+    const group = await $fetch<AffiliationGroup>('/api/admin/groups', {
+      method: 'POST',
+      body: groupBody(groupForm),
+      credentials: 'include'
+    })
+    groups.value = [...groups.value, group].sort(byGroupName)
+    Object.assign(groupForm, { name: '', color: null })
+  } catch (cause) {
+    adminError.value = messageFromError(cause, 'Création du groupe impossible.')
+  } finally {
+    savingGroup.value = false
+  }
+}
+
+async function saveGroup(group: AffiliationGroup) {
+  await withWorking(workingGroupIds, group.id, async () => {
+    try {
+      const saved = await $fetch<AffiliationGroup>(`/api/admin/groups/${group.id}`, {
+        method: 'PATCH',
+        body: groupBody(group),
+        credentials: 'include'
+      })
+      Object.assign(group, saved)
+      groups.value = [...groups.value].sort(byGroupName)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Modification du groupe impossible.')
+    }
+  })
+}
+
+async function deleteGroup(group: AffiliationGroup) {
+  if (!window.confirm(`Supprimer le groupe « ${group.name} » ? Les blessés et défunts gardent leur appartenance.`)) return
+  await withWorking(workingGroupIds, group.id, async () => {
+    try {
+      await $fetch(`/api/admin/groups/${group.id}`, { method: 'DELETE', credentials: 'include' })
+      groups.value = groups.value.filter((item) => item.id !== group.id)
+    } catch (cause) {
+      adminError.value = messageFromError(cause, 'Suppression du groupe impossible.')
+    }
+  })
+}
+
 async function loadGoogleSheetsConfig() {
   googleSheetsLoading.value = true
   googleSheetsError.value = ''
@@ -843,6 +1034,12 @@ function statusLabel(status: string) {
       </button>
       <button id="admin-tab-parking" type="button" role="tab" :aria-selected="activeAdminSection === 'parking'" aria-controls="admin-parking" :class="{ 'is-active': activeAdminSection === 'parking' }" @click="activeAdminSection = 'parking'">
         <Icon name="lucide:map-pin" size="16" /> Stationnement <span>{{ parkingSpots.length }}</span>
+      </button>
+      <button id="admin-tab-statuses" type="button" role="tab" :aria-selected="activeAdminSection === 'statuses'" aria-controls="admin-statuses" :class="{ 'is-active': activeAdminSection === 'statuses' }" @click="activeAdminSection = 'statuses'">
+        <Icon name="lucide:list-checks" size="16" /> Statuts d’inter <span>{{ interventionStatuses.length }}</span>
+      </button>
+      <button id="admin-tab-groups" type="button" role="tab" :aria-selected="activeAdminSection === 'groups'" aria-controls="admin-groups" :class="{ 'is-active': activeAdminSection === 'groups' }" @click="activeAdminSection = 'groups'">
+        <Icon name="lucide:flag" size="16" /> Groupes <span>{{ groups.length }}</span>
       </button>
       <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="activeAdminSection = 'settings'">
         <Icon name="lucide:settings-2" size="16" /> Paramètres
@@ -1056,6 +1253,108 @@ function statusLabel(status: string) {
       <div v-if="!parkingSpots.length" class="admin-empty">
         <Icon name="lucide:square-parking" size="21" />
         <p>Aucun emplacement enregistré.</p>
+      </div>
+    </section>
+
+    <section id="admin-statuses" v-show="activeAdminSection === 'statuses'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-statuses" tabindex="0">
+      <div class="admin-section__heading">
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:list-checks" size="18" /></span><div><h2>Statuts d’intervention</h2><p>Statuts et lieux proposés sur les interventions du Dispatch, dans cet ordre : les statuts d’abord, puis les lieux. Une couleur teinte l’intervention ; « Primo Inter » lie l’intervention à la page Crise.</p></div></div>
+      </div>
+      <form class="admin-status-row admin-status-row--create" @submit.prevent="createStatus">
+        <label><span>Type</span>
+          <select v-model="statusForm.kind">
+            <option v-for="kind in STATUS_KINDS" :key="kind.value" :value="kind.value">{{ kind.value === 'status' ? 'Statut' : 'Lieu' }}</option>
+          </select>
+        </label>
+        <label class="admin-status-row__emoji"><span>Emoji</span><input v-model="statusForm.emoji" maxlength="16" placeholder="🚑"></label>
+        <label><span>Libellé</span><input v-model="statusForm.label" required maxlength="64" :placeholder="statusForm.kind === 'status' ? 'Ex. Patrouille' : 'Ex. BCES'"></label>
+        <div class="admin-status-row__color">
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(statusForm.color)" @change="toggleColor(statusForm, $event)"> Couleur</label>
+          <input v-if="statusForm.color" v-model="statusForm.color" type="color" aria-label="Couleur du statut">
+        </div>
+        <label class="admin-status-row__check"><input v-model="statusForm.is_primo" type="checkbox"> Primo Inter</label>
+        <button class="admin-button admin-button--primary" type="submit" :disabled="savingStatus || !statusForm.label.trim()">
+          <Icon :name="savingStatus ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingStatus }" /> {{ savingStatus ? 'Création…' : statusForm.kind === 'status' ? 'Ajouter ce statut' : 'Ajouter ce lieu' }}
+        </button>
+      </form>
+      <template v-for="group in statusGroups" :key="group.value">
+      <h3 class="admin-status-group">{{ group.label }} <span>{{ group.items.length }}</span></h3>
+      <form
+        v-for="(status, index) in group.items"
+        :key="status.id"
+        class="admin-row admin-status-row"
+        :style="status.color ? { '--row-color': status.color } : undefined"
+        :class="{ 'admin-row--colored': status.color }"
+        @submit.prevent="saveStatus(status)"
+      >
+        <label><span class="sr-only">Type</span>
+          <select :value="status.kind" :disabled="workingStatusIds.includes(status.id)" @change="changeStatusKind(status, $event)">
+            <option v-for="kind in STATUS_KINDS" :key="kind.value" :value="kind.value">{{ kind.value === 'status' ? 'Statut' : 'Lieu' }}</option>
+          </select>
+        </label>
+        <label class="admin-status-row__emoji"><span class="sr-only">Emoji</span><input v-model="status.emoji" maxlength="16"></label>
+        <label><span class="sr-only">Libellé</span><input v-model="status.label" required maxlength="64"></label>
+        <div class="admin-status-row__color">
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(status.color)" @change="toggleColor(status, $event)"> Couleur</label>
+          <input v-if="status.color" v-model="status.color" type="color" :aria-label="`Couleur du statut ${status.label}`">
+        </div>
+        <label class="admin-status-row__check"><input v-model="status.is_primo" type="checkbox"> Primo Inter</label>
+        <div class="admin-row__actions">
+          <button type="button" class="admin-button" :disabled="workingStatusIds.includes(status.id) || index === 0" aria-label="Monter" title="Monter" @click="moveStatus(status, -1)"><Icon name="lucide:arrow-up" size="14" /></button>
+          <button type="button" class="admin-button" :disabled="workingStatusIds.includes(status.id) || index === group.items.length - 1" aria-label="Descendre" title="Descendre" @click="moveStatus(status, 1)"><Icon name="lucide:arrow-down" size="14" /></button>
+          <button type="submit" class="admin-button" :disabled="workingStatusIds.includes(status.id) || !status.label.trim()">
+            <Icon name="lucide:save" size="14" /> Enregistrer
+          </button>
+          <button type="button" class="admin-button admin-button--danger" :disabled="workingStatusIds.includes(status.id)" @click="deleteStatus(status)">
+            <Icon name="lucide:trash-2" size="14" /> Supprimer
+          </button>
+        </div>
+      </form>
+      <p v-if="!group.items.length" class="admin-muted admin-status-group__empty">
+        {{ group.value === 'status' ? 'Aucun statut.' : 'Aucun lieu.' }}
+      </p>
+      </template>
+    </section>
+
+    <section id="admin-groups" v-show="activeAdminSection === 'groups'" class="admin-section" role="tabpanel" aria-labelledby="admin-tab-groups" tabindex="0">
+      <div class="admin-section__heading">
+        <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:flag" size="18" /></span><div><h2>Groupes</h2><p>Groupes proposés pour l’appartenance d’un blessé (Crise) et d’un défunt (Morgue). La liste n’est pas exhaustive : un autre groupe peut être saisi librement. Une couleur teinte l’appartenance dans la Crise et la Morgue.</p></div></div>
+      </div>
+      <form class="admin-catalog-create admin-catalog-create--group" @submit.prevent="createGroup">
+        <label><span>Nom du groupe</span><input v-model="groupForm.name" required maxlength="64" placeholder="Ex. Ballas"></label>
+        <div class="admin-status-row__color">
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(groupForm.color)" @change="toggleColor(groupForm, $event)"> Couleur</label>
+          <input v-if="groupForm.color" v-model="groupForm.color" type="color" aria-label="Couleur du groupe">
+        </div>
+        <button class="admin-button admin-button--primary" type="submit" :disabled="savingGroup || !groupForm.name.trim()">
+          <Icon :name="savingGroup ? 'lucide:loader-circle' : 'lucide:plus'" size="14" :class="{ 'admin-spin': savingGroup }" /> {{ savingGroup ? 'Création…' : 'Ajouter ce groupe' }}
+        </button>
+      </form>
+      <form
+        v-for="group in groups"
+        :key="group.id"
+        class="admin-row admin-catalog-row admin-catalog-row--group"
+        :class="{ 'admin-row--colored': group.color }"
+        :style="group.color ? { '--row-color': group.color } : undefined"
+        @submit.prevent="saveGroup(group)"
+      >
+        <label><span class="sr-only">Nom du groupe</span><input v-model="group.name" required maxlength="64"></label>
+        <div class="admin-status-row__color">
+          <label class="admin-status-row__check"><input type="checkbox" :checked="Boolean(group.color)" @change="toggleColor(group, $event)"> Couleur</label>
+          <input v-if="group.color" v-model="group.color" type="color" :aria-label="`Couleur du groupe ${group.name}`">
+        </div>
+        <div class="admin-row__actions">
+          <button type="submit" class="admin-button" :disabled="workingGroupIds.includes(group.id) || !group.name.trim()">
+            <Icon name="lucide:save" size="14" /> Enregistrer
+          </button>
+          <button type="button" class="admin-button admin-button--danger" :disabled="workingGroupIds.includes(group.id)" @click="deleteGroup(group)">
+            <Icon name="lucide:trash-2" size="14" /> Supprimer
+          </button>
+        </div>
+      </form>
+      <div v-if="!groups.length" class="admin-empty">
+        <Icon name="lucide:flag" size="21" />
+        <p>Aucun groupe enregistré.</p>
       </div>
     </section>
 
@@ -1335,7 +1634,7 @@ function statusLabel(status: string) {
 </template>
 
 <style scoped>
-.admin-page { flex: 1; min-height: 0; overflow: auto; padding: clamp(22px, 4vw, 48px); background: radial-gradient(ellipse at 86% 0, rgba(70, 153, 109, .11), transparent 40%), var(--dp-bg); }
+.admin-page { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: clamp(22px, 4vw, 48px); background: radial-gradient(ellipse at 86% 0, rgba(70, 153, 109, .11), transparent 40%), var(--dp-bg); }
 .admin-header, .admin-section, .admin-error { width: min(1180px, 100%); margin-right: auto; margin-left: auto; }
 .admin-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 22px; padding: clamp(22px, 3vw, 34px); border: 1px solid var(--dp-line); border-radius: 22px; background: linear-gradient(110deg, rgba(70, 153, 109, .12), transparent 72%), var(--dp-panel); box-shadow: 0 18px 48px rgba(0, 0, 0, .16); }
 .admin-eyebrow { margin-bottom: 9px; color: var(--dp-accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
@@ -1412,6 +1711,21 @@ function statusLabel(status: string) {
 .admin-catalog-create > label { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
 .admin-catalog-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .5fr) minmax(140px, .8fr) auto; }
 .admin-catalog-row--single { grid-template-columns: minmax(160px, 1fr) auto; }
+.admin-catalog-create--group, .admin-catalog-row--group { grid-template-columns: minmax(160px, 1fr) auto auto; }
+.admin-status-row { display: grid; grid-template-columns: 90px 70px minmax(150px, 1fr) auto auto auto; align-items: center; gap: 12px; }
+.admin-status-row select { width: 100%; min-height: 36px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 8px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
+.admin-status-group { display: flex; align-items: center; gap: 8px; margin: 20px 0 10px; color: var(--dp-text); font-size: 13px; }
+.admin-status-group span { padding: 1px 8px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-dim); font-size: 10px; font-weight: 600; }
+.admin-status-group__empty { margin: 0 0 8px; }
+.admin-status-row--create { align-items: end; margin-bottom: 8px; padding: 16px; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel-2); }
+.admin-status-row > label:not(.admin-status-row__check) { display: grid; gap: 5px; color: var(--dp-text-2); font-size: 10px; }
+.admin-status-row input:not([type='checkbox']):not([type='color']) { width: 100%; min-height: 36px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
+.admin-status-row__emoji input { text-align: center; }
+.admin-status-row__color { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.admin-status-row__color input[type='color'] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--dp-line); border-radius: 7px; background: transparent; cursor: pointer; }
+.admin-status-row__check { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: var(--dp-text-2); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.admin-row--colored { border-left: 3px solid var(--row-color); }
+@media (max-width: 900px) { .admin-status-row { grid-template-columns: 90px 64px minmax(0, 1fr); } .admin-status-row .admin-row__actions, .admin-status-row--create > button { grid-column: 1 / -1; } }
 .admin-catalog-row + .admin-catalog-row { margin-top: 9px; }
 .admin-catalog-create input, .admin-catalog-row input { width: 100%; min-height: 40px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 10px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
 .admin-catalog-create input:focus, .admin-catalog-row input:focus { border-color: var(--dp-accent-line); outline: 0; }

@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, case, Date, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -370,5 +370,104 @@ class MorgueEntry(Base):
     recoverable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     incinerated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     coffined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class InterventionStatus(Base):
+    """Statut proposé pour une intervention du Dispatch, géré dans Administration.
+
+    `key` est la valeur enregistrée dans `dispatch_slots.status` : elle ne change
+    pas quand on renomme le statut. `is_primo` marque les statuts « Primo Inter »,
+    liés à la page Crise."""
+
+    __tablename__ = "intervention_statuses"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(64), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(16), default="", nullable=False)
+    # Couleur « #rrggbb » de l'intervention ; aucune par défaut.
+    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    is_primo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # « status » (Patrouille, Inter…) ou « place » (BCES, Zombie…) : les statuts
+    # sont toujours proposés avant les lieux ; `order` range chaque type.
+    kind: Mapped[str] = mapped_column(String(16), default="status", nullable=False)
+    order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+def intervention_status_order():
+    """Tri des statuts d'intervention : les statuts, puis les lieux, chacun dans son ordre."""
+    return (
+        case((InterventionStatus.kind == "place", 1), else_=0),
+        InterventionStatus.order,
+        InterventionStatus.id,
+    )
+
+
+class AffiliationGroup(Base):
+    """Groupe proposé pour l'appartenance d'un blessé (Crise) ou d'un défunt
+    (Morgue). La liste n'est pas exhaustive : on peut saisir un autre groupe."""
+
+    __tablename__ = "affiliation_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # Couleur « #rrggbb » de l'appartenance dans la Crise et la Morgue, ou aucune.
+    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class CrisisState(Base):
+    """Ligne unique `id = 1` : code postal de la crise et intervention « Primo » du
+    Dispatch où le Primo Intervenant est affecté."""
+
+    __tablename__ = "crisis_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    zip_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    slot_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("dispatch_slots.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class CrisisMember(Base):
+    """Équipe de la crise en cours : le Primo Intervenant et les agents qui l'assistent."""
+
+    __tablename__ = "crisis_members"
+
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    employee: Mapped["Employee"] = relationship(lazy="selectin")
+    # Un seul membre est le Primo Intervenant ; les autres l'assistent.
+    is_primo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class CrisisVictim(Base):
+    """Blessé de la crise en cours, renseigné par l'équipe sur place puis suivi
+    jusqu'à l'hôpital. La « Tempête » vide la liste."""
+
+    __tablename__ = "crisis_victims"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    full_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    affiliation: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    coma: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    severe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    unconscious: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    injuries: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    repatriating_doctor: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    treating_doctor: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    # Arrivée à l'hôpital : l'heure est prise au moment où on coche la case.
+    arrived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    care_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Cases de la Centrale : blessé ajouté au canal radio, et lit où il est installé.
+    channel_added: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    bed_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("hospital_beds.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

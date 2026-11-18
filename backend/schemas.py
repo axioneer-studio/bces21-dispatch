@@ -824,6 +824,8 @@ class DispatchSnapshot(BaseModel):
     fleet: list[FleetEntryOut] = Field(default_factory=list)
     vehicles: list[VehicleOut] = Field(default_factory=list)
     parking_spots: list[ParkingSpotOut] = Field(default_factory=list)
+    # Statuts d'intervention proposés, gérés dans Administration.
+    statuses: list["InterventionStatusOut"] = Field(default_factory=list)
     # Bornes des fréquences, pour le message de confirmation du tirage aléatoire.
     frequency_bounds: dict[FrequencyKind, FrequencyBounds] = Field(default_factory=dict)
 
@@ -943,6 +945,8 @@ class MorgueOut(BaseModel):
     can_manage_autopsy: bool
     # Médecin légiste : incinération et mise en cercueil.
     is_forensic: bool
+    # Groupes proposés pour l'appartenance (liste non exhaustive), avec leur couleur.
+    groups: list["AffiliationGroupOut"]
 
 
 class HospitalRoomRequest(BaseModel):
@@ -954,6 +958,17 @@ class HospitalRoomRequest(BaseModel):
     @classmethod
     def _room_name(cls, value: str) -> str:
         return _clean_required(value, "Le nom de la chambre")
+
+
+class HospitalBedRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=32)
+
+    @field_validator("label")
+    @classmethod
+    def _bed_label(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du lit")
 
 
 class HospitalBedReasonRequest(BaseModel):
@@ -1041,3 +1056,217 @@ class HospitalRoomsOut(BaseModel):
     rooms: list[HospitalRoomOut]
     reasons: list[HospitalBedReasonOut]
     can_manage: bool
+
+
+# --- Statuts d'intervention ---
+
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _optional_color(value: Optional[str]) -> Optional[str]:
+    """Couleur facultative « #rrggbb » (statut, groupe) : vide = aucune couleur."""
+    if value is None or not value.strip():
+        return None
+    if not _HEX_COLOR.match(value.strip()):
+        raise ValueError("La couleur doit être au format #rrggbb.")
+    return value.strip().lower()
+
+
+# Statut (Patrouille, Inter…) ou lieu (BCES, Zombie…) : les statuts passent en premier.
+InterventionStatusKind = Literal["status", "place"]
+
+
+class InterventionStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    key: str
+    label: str
+    emoji: str
+    color: Optional[str]
+    is_primo: bool
+    kind: InterventionStatusKind
+
+
+class InterventionStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=64)
+    emoji: str = Field(default="", max_length=16)
+    color: Optional[str] = None
+    is_primo: bool = False
+    kind: InterventionStatusKind = "status"
+
+    @field_validator("label")
+    @classmethod
+    def _status_label(cls, value: str) -> str:
+        return _clean_required(value, "Le libellé du statut")
+
+    @field_validator("emoji")
+    @classmethod
+    def _status_emoji(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("color")
+    @classmethod
+    def _status_color(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_color(value)
+
+
+# --- Groupes (appartenance) ---
+
+
+class AffiliationGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    color: Optional[str]
+
+
+MorgueOut.model_rebuild()
+
+
+class AffiliationGroupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    color: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du groupe")
+
+    @field_validator("color")
+    @classmethod
+    def _group_color(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_color(value)
+
+
+# --- Gestion de crise ---
+
+
+class CrisisTeamRequest(BaseModel):
+    """Remplace l'équipe : le Primo Intervenant (ou aucun) et les agents qui l'assistent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    primo_id: Optional[int] = None
+    helper_ids: list[int] = Field(default_factory=list)
+
+
+class CrisisZipRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    zip_code: Optional[str] = Field(default=None, max_length=16)
+
+    @field_validator("zip_code")
+    @classmethod
+    def _zip(cls, value: Optional[str]) -> Optional[str]:
+        return (value or "").strip() or None
+
+
+_CRISIS_TEXT_FIELDS = ("full_name", "affiliation", "injuries", "repatriating_doctor", "treating_doctor")
+
+
+class CrisisVictimCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(default="", max_length=120)
+    affiliation: str = Field(default="", max_length=64)
+    coma: bool = False
+    severe: bool = False
+    unconscious: bool = False
+    injuries: str = Field(default="", max_length=500)
+
+    @field_validator("full_name", "affiliation", "injuries")
+    @classmethod
+    def _trim_crisis_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class CrisisVictimUpdate(BaseModel):
+    """Champs facultatifs : seuls ceux envoyés sont modifiés. `arrived` coche ou
+    décoche l'arrivée à l'hôpital, dont l'heure est prise par le serveur."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: Optional[str] = Field(default=None, max_length=120)
+    affiliation: Optional[str] = Field(default=None, max_length=64)
+    coma: Optional[bool] = None
+    severe: Optional[bool] = None
+    unconscious: Optional[bool] = None
+    injuries: Optional[str] = Field(default=None, max_length=500)
+    repatriating_doctor: Optional[str] = Field(default=None, max_length=120)
+    treating_doctor: Optional[str] = Field(default=None, max_length=120)
+    arrived: Optional[bool] = None
+    care_done: Optional[bool] = None
+    channel_added: Optional[bool] = None
+    bed_id: Optional[int] = None
+
+    @field_validator(*_CRISIS_TEXT_FIELDS)
+    @classmethod
+    def _trim_crisis_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            raise ValueError("Ce champ ne peut pas être vide ; envoyez une chaîne vide.")
+        return value.strip()
+
+    @field_validator("coma", "severe", "unconscious", "arrived", "care_done", "channel_added")
+    @classmethod
+    def _crisis_flag_required(cls, value: Optional[bool], info: ValidationInfo):
+        if value is None:
+            raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
+        return value
+
+
+class CrisisVictimOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    full_name: str
+    affiliation: str
+    coma: bool
+    severe: bool
+    unconscious: bool
+    injuries: str
+    repatriating_doctor: str
+    treating_doctor: str
+    arrived_at: Optional[datetime]
+    care_done: bool
+    channel_added: bool
+    bed_id: Optional[int]
+    created_at: datetime
+
+    @field_validator("arrived_at", "created_at")
+    @classmethod
+    def _as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """SQLite rend les dates sans fuseau : elles sont en UTC."""
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
+class CrisisEmployeeOut(BaseModel):
+    id: int
+    name: str
+
+
+class CrisisBedOut(BaseModel):
+    id: int
+    label: str
+    patient_name: Optional[str]
+
+
+class CrisisOut(BaseModel):
+    # Code postal de la crise : celui de l'intervention « Primo » du Dispatch quand elle existe.
+    zip_code: Optional[str]
+    primo: Optional[CrisisEmployeeOut]
+    helpers: list[CrisisEmployeeOut]
+    victims: list[CrisisVictimOut]
+    # Choix proposés : employés actifs (Primo, assistants, médecins), lits de
+    # l'hôpital et groupes d'appartenance (avec leur couleur).
+    employees: list[CrisisEmployeeOut]
+    beds: list[CrisisBedOut]
+    groups: list[AffiliationGroupOut]

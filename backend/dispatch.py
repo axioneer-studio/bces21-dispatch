@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from auth.session import decode_token, get_session_cookie_name
+from crisis_link import employee_left_slot, linked_slot_id, slot_emptied, sync_crisis_from_slot
 from database import SessionLocal, get_db
 from deps import require_page_access, user_has_page_access
 from frequency_settings import read_all_bounds
@@ -21,9 +22,11 @@ from models import (
     DispatchState,
     DispatchNote,
     FleetEntry,
+    InterventionStatus,
     ParkingSpot,
     User,
     Vehicle,
+    intervention_status_order,
     utcnow,
 )
 from google_sheets_service import GoogleSheetsError, GoogleSheetsService, load_settings_from_db
@@ -34,6 +37,7 @@ from schemas import (
     DispatchSnapshot,
     MessageResponse,
     FleetEntryOut,
+    InterventionStatusOut,
     ParkingSpotOut,
     RadioOut,
     RadioUpdateRequest,
@@ -352,6 +356,9 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
     parking_spots = (
         await db.execute(select(ParkingSpot).order_by(ParkingSpot.name.asc()))
     ).scalars().all()
+    statuses = (
+        await db.execute(select(InterventionStatus).order_by(*intervention_status_order()))
+    ).scalars().all()
 
     return {
         "slots": [SlotOut.model_validate(s).model_dump(mode="json") for s in slots],
@@ -361,6 +368,7 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
         "fleet": [FleetEntryOut.model_validate(f).model_dump(mode="json") for f in fleet],
         "vehicles": [VehicleOut.model_validate(v).model_dump(mode="json") for v in vehicles],
         "parking_spots": [ParkingSpotOut.model_validate(p).model_dump(mode="json") for p in parking_spots],
+        "statuses": [InterventionStatusOut.model_validate(s).model_dump(mode="json") for s in statuses],
         "frequency_bounds": {
             kind: bounds.model_dump(mode="json") for kind, bounds in (await read_all_bounds(db)).items()
         },
@@ -468,6 +476,9 @@ async def reset_assignments(
             detail="Votre grade ne vous autorise pas à supprimer les interventions.",
         )
 
+    linked_id = await linked_slot_id(db)
+    if linked_id is not None:
+        await slot_emptied(db, linked_id)
     await db.execute(delete(DispatchAssignment))
     # Plus personne n'est en service : les radios ON ou indisponibles passent OFF.
     await db.execute(
@@ -555,6 +566,9 @@ async def update_slot(
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():
         setattr(slot, k, v)
+    # Intervention passée « Primo » : elle devient celle de la crise (voir crisis_link).
+    if "status" in data:
+        await sync_crisis_from_slot(db, slot)
     await db.commit()
     await db.refresh(slot)
     await push_snapshot(db)
@@ -573,6 +587,7 @@ async def delete_slot(
         raise HTTPException(status_code=404, detail="Slot introuvable")
     if slot.kind in FIXED_SLOT_KINDS:
         raise HTTPException(status_code=400, detail="Case fixe — non supprimable")
+    await slot_emptied(db, slot.id)
     await db.delete(slot)
     await db.commit()
     await push_snapshot(db)
@@ -621,6 +636,10 @@ async def assign_user(
         select(DispatchAssignment).where(DispatchAssignment.employee_id == employee.id)
     )
     assignment = result.scalar_one_or_none()
+    joined = assignment is None or assignment.slot_id != slot.id
+    if assignment is not None and joined:
+        # Quitte son ancienne intervention : peut-être celle de la crise.
+        await employee_left_slot(db, assignment.slot_id, employee.id)
     if assignment is None:
         assignment = DispatchAssignment(employee_id=employee.id, order=0)
         assignment.slot_id = slot.id
@@ -631,6 +650,9 @@ async def assign_user(
         assignment.order = 0
         assignment.created_at = utcnow()  # redevient le dernier arrivé
 
+    # Arrivée sur l'intervention « Primo » de la crise : Primo s'il n'y en a pas, sinon en assistance.
+    if joined:
+        await sync_crisis_from_slot(db, slot, joined_id=employee.id)
     await db.commit()
     # Renumérotation propre : 0, 1, 2… par ordre d'arrivée (created_at)
     await _renumber_slot_orders(db, slot_id)
@@ -677,6 +699,9 @@ async def unassign_user(
         if radio is not None and (radio.is_on or radio.is_loading):
             radio.is_on = False
             radio.is_loading = False
+        await db.flush()
+        # Retiré de l'intervention « Primo » : il quitte l'équipe de crise.
+        await employee_left_slot(db, slot_id, employee_id)
         await db.commit()
 
         # Renuméroter les affectations restantes pour fermer les trous
