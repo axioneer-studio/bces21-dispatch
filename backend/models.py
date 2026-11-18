@@ -117,6 +117,11 @@ class Grade(Base):
     permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     # Les employés de ce grade peuvent recevoir une radio Direction.
     is_direction: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Grades en formation initiale (période d'essai : CDD, Interne) ou en formation
+    # complémentaire (CDI, Résident) : leurs employés sont suivis dans les tableaux
+    # de la page Formation.
+    is_trial: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_training: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     employees: Mapped[list["Employee"]] = relationship(back_populates="grade")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -471,3 +476,37 @@ class CrisisVictim(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class Training(Base):
+    """Formation de la page Formation. La valider pour un employé ajoute son emoji
+    aux compétences de l'employé : l'emoji est la trace de la validation.
+
+    `kind` : « trial » (période d'essai : CDD, Interne), « training » (période de
+    formation : CDI, Résident) ou « general » (ex. Pilote Medicopter).
+    """
+
+    __tablename__ = "trainings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), default="general", nullable=False)
+    # Droits donnés à ceux qui l'ont validée (formation générale), en JSON : voir
+    # training_rights.
+    permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TrainingMember(Base):
+    """Rôle d'un employé dans une formation générale, quand ce n'est pas un simple
+    « Validé » (qui ne tient qu'à l'emoji dans ses compétences) : « lead »
+    (Responsable) et « second » (Second) ont l'emoji, « in_progress » (En cours)
+    ne l'a pas encore."""
+
+    __tablename__ = "training_members"
+
+    training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id", ondelete="CASCADE"), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

@@ -61,8 +61,20 @@ async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
         color=grade.color,
         permissions=_validated_permissions(permissions if isinstance(permissions, list) else []),
         is_direction=grade.is_direction,
+        is_trial=grade.is_trial,
+        is_training=grade.is_training,
         employees_count=count or 0,
     )
+
+
+def _check_training_flags(grade: Grade) -> None:
+    """Un grade est en période d'essai (formation initiale) ou en formation
+    (formation complémentaire), pas les deux."""
+    if grade.is_trial and grade.is_training:
+        raise HTTPException(
+            status_code=422,
+            detail="Un grade ne peut pas être à la fois « Période d’essai » et « En formation ».",
+        )
 
 
 @router.get("/permissions")
@@ -104,9 +116,12 @@ async def create_grade(
         color=payload.color,
         permissions=json.dumps(_validated_permissions(payload.permissions)),
         is_direction=payload.is_direction,
+        is_trial=payload.is_trial,
+        is_training=payload.is_training,
     )
     db.add(grade)
     try:
+        _check_training_flags(grade)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -141,6 +156,7 @@ async def update_grade(
     for key, value in data.items():
         setattr(grade, key, value)
     try:
+        _check_training_flags(grade)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()

@@ -14,7 +14,6 @@ GRADE_PERMISSION_CATALOG = {
     "dispatch.manage_radios": "Modifier les radios et leurs affectations",
     "dispatch.manage_state": "Modifier l’état et les fréquences du service",
     "agenda.manage_events": "Créer, modifier et supprimer les événements de l’agenda",
-    "human_resources.manage_employees": "Gérer les fiches et les tuiles des employés",
 }
 
 

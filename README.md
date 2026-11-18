@@ -126,23 +126,67 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   case.
 - Tout compte connecté ajoute, modifie et retire un défunt, et indique s’il est
   récupérable. L’autopsie et le légiste ne se renseignent que par un médecin légiste
-  (permission applicative « Médecin légiste ») ou par la Direction (grade
-  Direction) ; le légiste qui la déclare devient le légiste du défunt. Seuls
-  les légistes procèdent à l’incinération.
+  (compte lié à un employé qui a validé une formation donnant le droit « Médecin
+  légiste », voir Formation) ou par la Direction (grade Direction) ; le légiste
+  qui la déclare devient le légiste du défunt. Seuls les légistes procèdent à
+  l’incinération.
+
+### Formation (`/formation`)
+
+- Ouverte à tout compte validé. Valider une formation pour un employé ajoute
+  l'emoji de la formation à ses compétences (Ressources humaines) ; la retirer
+  enlève l'emoji. L'emoji est la trace de la validation : un emoji ajouté à la
+  main dans Ressources humaines compte aussi.
+- Trois types de formation, choisis à la création :
+  - **Période d'essai** (CDD, Interne), obligatoire pour passer Résident :
+    tableau de suivi des employés des grades « Période d'essai », une case par
+    formation ;
+  - **Période de formation** (CDI, Résident), obligatoire pour passer Médecin :
+    même tableau, pour les employés des grades « En formation » ;
+  - **Formation générale** (ex. Pilote Medicopter) : une carte par formation,
+    avec son équipe et le numéro de chacun. Rôles : Responsable, Second, Validé
+    (ils ont l'emoji) et En cours (pas encore).
+  Un employé qui a passé le grade n'apparaît plus dans le tableau.
+- Les grades « Période d'essai » et « En formation » se cochent dans Direction,
+  sur autant de grades que nécessaire.
+- Une formation générale peut donner des droits à ceux qui l'ont validée (qui
+  ont son emoji) : **Formateur**, **Médecin légiste** et **Ressources
+  humaines**. Le compte lié à la tuile de l'employé reçoit ces droits ; ils ne
+  se donnent plus par les rôles d'Administration ni par les grades. La
+  Direction a le droit Ressources humaines par défaut.
+- Chaque section a son bouton « Ajouter », qui fixe le type de la formation.
+  Ajouter, modifier et supprimer une formation est réservé à ceux qui gèrent
+  l'hôpital (rôle « Gérer l'hôpital » ou grade de la Direction). Seuls les
+  formateurs (droit « Formateur » donné par une formation) valident les
+  formations de période d'essai et de période de formation.
+- L'équipe d'une formation générale se gère par la Direction et par son
+  Responsable (Second, Validé, En cours) ; seule la Direction nomme ou retire
+  un Responsable.
+- Les descriptions des sections reprennent les noms des grades de Direction :
+  la période d'essai mène aux grades « En formation », la période de formation
+  au grade juste au-dessus. Changer l'emoji d'une
+  formation le remplace chez les employés qui l'ont ; la supprimer le retire de
+  leurs compétences, et avec lui les droits qu'elle donnait.
 
 ### Ressources humaines (`/ressources-humaines`)
 
 - Création et gestion des employés, de leurs compétences et du lien facultatif
   à un compte utilisateur ; les tuiles sont créées dans RH, puis liées
-  séparément aux comptes avec la permission de rôle applicatif dédiée,
-  configurée dans Administration. Attribution d'un
-  grade centralisé par la Direction.
+  séparément aux comptes. Attribution d'un grade centralisé par la Direction.
+- La page est réservée aux RH et à la Direction : elle s'ouvre avec le droit
+  Ressources humaines (formation générale qui le donne, ou grade de la
+  Direction) et ne se coche plus dans les rôles. Ce droit permet toutes les
+  actions de la page : gérer les employés et lier les comptes aux tuiles.
 
 ### Direction (`/direction`)
 
 - Création, modification et suppression des grades et de leur niveau
   hiérarchique numérique.
 - Configuration des permissions opérationnelles rattachées à chaque grade.
+- Un grade peut être marqué « Période d'essai » (en formation initiale) ou « En
+  formation » (en formation complémentaire), pas les deux : leurs employés sont
+  suivis dans les tableaux de la page Formation. Plusieurs grades peuvent avoir
+  chaque case.
 
 ### Administration (`/administration`)
 
@@ -162,8 +206,9 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Comptes en attente de validation : traitement par un administrateur. Un
   compte validé accède au Dispatch, à la Crise, à l'Hôpital, à l'Agenda et au Stock, même
   sans rôle ; un rôle ajoute les autres pages.
-- Un compte peut avoir plusieurs rôles (par exemple Légiste et Gestion de
-  l'hôpital) : il cumule les pages et les permissions de tous ses rôles.
+- Un compte peut avoir plusieurs rôles (par exemple Ressources humaines et
+  Gestion de l'hôpital) : il cumule les pages et les permissions de tous ses
+  rôles.
 - Désactiver un compte le suspend : il ne peut plus se connecter ni appeler
   l'API. Le réactiver lui rend ses accès sans nouvelle validation.
 
@@ -540,12 +585,12 @@ vérifient en plus la page cochée dans le rôle.
 | `GET` | `/api/direction/grades` | Liste les grades et leurs permissions |
 | `GET` | `/api/direction/permissions` | Liste les capacités opérationnelles configurables |
 | `POST` / `PATCH` / `DELETE` | `/api/direction/grades[/{id}]` | Gère les grades (Direction) |
-| `GET` | `/api/employees` | Liste les employés (Dispatch ou RH) |
-| `POST` | `/api/employees` | Crée une tuile sans compte lié (RH + `manage_employees`) |
-| `PATCH` | `/api/employees/{id}` | Modifie la fiche (RH + `manage_employees`) |
-| `PATCH` | `/api/employees/{id}/account` | Lie ou délie un compte (RH + `link_accounts`) |
-| `DELETE` | `/api/employees/{id}` | Supprime un employé (RH + `manage_employees`) |
-| `GET` | `/api/employee-accounts` | Liste les comptes actifs (RH + `link_accounts`) |
+| `GET` | `/api/employees` | Liste les employés (Dispatch ou RH) ; « RH » ci-dessous : droit Ressources humaines (`human_resources.manage`), donné par une formation ou par le grade Direction |
+| `POST` | `/api/employees` | Crée une tuile sans compte lié (RH) |
+| `PATCH` | `/api/employees/{id}` | Modifie la fiche (RH) |
+| `PATCH` | `/api/employees/{id}/account` | Lie ou délie un compte (RH) |
+| `DELETE` | `/api/employees/{id}` | Supprime un employé (RH) |
+| `GET` | `/api/employee-accounts` | Liste les comptes actifs (RH) |
 | `GET` | `/api/employee-grades` | Grades disponibles pour l’attribution RH |
 | `GET` | `/api/dashboard/summary` | Indicateurs agrégés du tableau de bord |
 
@@ -570,7 +615,8 @@ vérifient en plus la page cochée dans le rôle.
 ### Hôpital
 
 > « `hospital.manage` » ci-dessous : permission applicative « Gérer l’hôpital »,
-> ou grade Direction, qui l’a par défaut.
+> ou grade Direction, qui l’a par défaut. « `hospital.forensic` » : droit
+> « Médecin légiste », donné par une formation générale.
 
 | Méthode | Chemin | Description |
 |---|---|---|
@@ -590,7 +636,7 @@ vérifient en plus la page cochée dans le rôle.
 | `POST` | `/api/hospital/morgue` | Ajoute un défunt (compte connecté) |
 | `PATCH` | `/api/hospital/morgue/{id}` | Modifie la fiche d’un défunt et sa récupération (compte connecté) |
 | `PUT` | `/api/hospital/morgue/{id}/autopsy` | Déclare l’autopsie faite ou non ; le légiste qui la déclare devient le légiste du défunt (`hospital.forensic` ou grade Direction) |
-| `PUT` | `/api/hospital/morgue/{id}/examiner` | Change le légiste du défunt, parmi les employés au rôle de légiste (`hospital.forensic` ou grade Direction) |
+| `PUT` | `/api/hospital/morgue/{id}/examiner` | Change le légiste du défunt, parmi les employés liés à un compte qui ont le droit « Médecin légiste » (`hospital.forensic` ou grade Direction) |
 | `POST` | `/api/hospital/morgue/{id}/incinerate` | Incinère le corps, qui devient une urne (`hospital.forensic`) |
 | `DELETE` | `/api/hospital/morgue/{id}` | Retire un corps ou une urne de la morgue (compte connecté) |
 
@@ -607,6 +653,25 @@ Toutes les routes sont ouvertes à tout compte validé.
 | `PATCH` | `/api/crisis/victims/{id}` | Modifie un blessé ; `arrived: true` prend l'heure d'arrivée, `false` l'efface. Cocher l'arrivée ou les soins renseigne le médecin correspondant s'il est vide ; `channel_added` exige `care_done` (`409` sinon) |
 | `DELETE` | `/api/crisis/victims/{id}` | Retire un blessé de la liste |
 | `POST` | `/api/crisis/reset` | Tempête : vide la liste des blessés et l'équipe, libère leurs lits |
+
+### Formation
+
+`GET` est ouvert à tout compte validé. Ajouter, modifier et supprimer une
+formation demandent « Gérer l'hôpital » (rôle) ou un grade de la Direction.
+Valider (routes `/employees/…`) une formation de période d'essai ou de période
+de formation demande le droit « Formateur ». Dans une formation générale, la
+Direction et le Responsable de la formation gèrent l'équipe ; nommer, changer
+ou retirer un Responsable (`lead`) est réservé à la Direction (`403` sinon).
+Les super-admins ont tous les droits.
+
+| Méthode | Chemin | Description |
+|---|---|---|
+| `GET` | `/api/trainings` | Formations, employés actifs (compétences, grade, téléphone), rôles des formations générales, grades « Période d'essai » et « En formation », droits qu'une formation peut donner, `can_manage` et `can_validate` |
+| `POST` | `/api/trainings` | Crée une formation : `name`, `emoji` (unique), `kind` (`trial` \| `training` \| `general`), `permissions` (droits donnés, formation générale seulement : `training.validate`, `hospital.forensic`, `human_resources.manage`) |
+| `PATCH` | `/api/trainings/{id}` | Modifie une formation ; un nouvel emoji remplace l'ancien chez les employés |
+| `DELETE` | `/api/trainings/{id}` | Supprime la formation et retire son emoji des compétences |
+| `PUT` | `/api/trainings/{id}/employees/{employee_id}` | Valide la formation ; `status` facultatif (`validated` par défaut, `lead`, `second`, `in_progress` pour une formation générale) |
+| `DELETE` | `/api/trainings/{id}/employees/{employee_id}` | Retire l'employé de la formation et l'emoji de ses compétences |
 
 ---
 
@@ -671,7 +736,9 @@ d'employés.
 | `affiliation_groups` | Groupes d'appartenance proposés dans la Crise et la Morgue : `name`, `color` facultative (les fiches gardent leur appartenance en texte) |
 | `user_roles` | Rôles de chaque compte : `user_id` → `users`, `role_id` → `roles` (cascade des deux côtés) |
 | `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
-| `grades` | Hiérarchie de service et permissions opérationnelles par grade |
+| `grades` | Hiérarchie de service et permissions opérationnelles par grade ; `is_trial` (Période d'essai, formation initiale) et `is_training` (En formation, formation complémentaire), exclusifs sur un même grade |
+| `trainings` | Formations de la page Formation : `name`, `emoji` (unique, ajouté aux compétences de l'employé validé), `kind` (`trial` \| `training` \| `general`), `permissions` (JSON, droits donnés à ceux qui l'ont validée) |
+| `training_members` | Rôles dans une formation générale autres que « Validé » : `training_id` → `trainings`, `employee_id` → `employees`, `status` (`lead` \| `second` \| `in_progress`) |
 | `application_settings` | Paramètres généraux configurés dans Administration |
 | `dispatch_slots` | Créneaux : `kind`, `title`, `status`, `zip_code`, `location`, `type_label`, `order` |
 | `dispatch_employee_assignments` | Affectations : `slot_id` → `employee_id`, `order` (cascade `DELETE`) |
@@ -715,17 +782,19 @@ Le fichier de base est ignoré par git. Attention : la valeur par défaut de
 | `/hopital` | `app/pages/hopital.vue` | Hôpital : onglets Chambres et Morgue |
 | `/stock` | `app/pages/stock.vue` | Stock du BCES (à venir) |
 | `/agenda` | `app/pages/agenda.vue` | Agenda partagé |
+| `/formation` | `app/pages/formation.vue` | Formations : suivi des Internes et Résidents, équipes des formations générales |
 | `/ressources-humaines` | `app/pages/ressources-humaines.vue` | Employés, rôles et accès (selon les droits) |
 | `/complete-profile` | `app/pages/complete-profile.vue` | Formulaire prénom RP / nom RP / téléphone avec compte à rebours |
 
 Le middleware global vérifie `/api/me` avant l'accès aux pages privées. Les
 permissions sont aussi contrôlées par les dépendances FastAPI.
 
-Dispatch, Crise, Hôpital, Agenda et Stock n'ont pas de case dans les « Pages
+Dispatch, Crise, Hôpital, Agenda, Stock et Formation n'ont pas de case dans les « Pages
 accessibles » des rôles : ils sont ouverts à tout compte validé, même sans rôle
 (`OPEN_PAGES` dans `backend/deps.py`). Un compte en attente ou désactivé reçoit
 un `403` sur `/api/me` et repart vers la connexion. Les rôles ne cochent que
-Ressources humaines, Direction et Administration ; au démarrage, les pages qui
+Direction et Administration (Ressources humaines suit le droit RH, voir
+Formation) ; au démarrage, les pages qui
 ne sont plus à cocher sont retirées des rôles existants. Un compte à plusieurs
 rôles cumule leurs pages et leurs permissions. Les super-admins ont accès à
 tout.

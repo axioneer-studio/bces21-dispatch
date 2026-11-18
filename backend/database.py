@@ -78,6 +78,8 @@ _EMPLOYEE_ALTER_STATEMENTS = [
 _GRADE_ALTER_STATEMENTS = [
     "ALTER TABLE grades ADD COLUMN color VARCHAR(7) DEFAULT '#46996d' NOT NULL",
     "ALTER TABLE grades ADD COLUMN is_direction BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE grades ADD COLUMN is_trial BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE grades ADD COLUMN is_training BOOLEAN DEFAULT FALSE NOT NULL",
 ]
 
 _VEHICLE_ALTER_STATEMENTS = [
@@ -90,6 +92,10 @@ _MORGUE_ALTER_STATEMENTS = [
 
 _GROUP_ALTER_STATEMENTS = [
     "ALTER TABLE affiliation_groups ADD COLUMN color VARCHAR(7)",
+]
+
+_TRAINING_ALTER_STATEMENTS = [
+    "ALTER TABLE trainings ADD COLUMN permissions TEXT DEFAULT '[]' NOT NULL",
 ]
 
 
@@ -211,6 +217,15 @@ async def _run_morgue_migrations(conn) -> None:
 
 async def _run_group_migrations(conn) -> None:
     for stmt in _GROUP_ALTER_STATEMENTS:
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
+
+
+async def _run_training_migrations(conn) -> None:
+    for stmt in _TRAINING_ALTER_STATEMENTS:
         try:
             async with conn.begin_nested():
                 await conn.execute(text(stmt))
@@ -414,6 +429,7 @@ async def init_db() -> None:
         await _run_vehicle_migrations(conn)
         await _run_morgue_migrations(conn)
         await _run_group_migrations(conn)
+        await _run_training_migrations(conn)
         await _run_access_migrations(conn)
         await _run_dispatch_migrations(conn)
         await _seed_intervention_statuses(conn)

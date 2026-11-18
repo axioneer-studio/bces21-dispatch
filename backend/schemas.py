@@ -62,6 +62,8 @@ class UserResponse(BaseModel):
     page_access: list[str] = Field(default_factory=list)
     app_permissions: list[str] = Field(default_factory=list)
     grade_permissions: list[str] = Field(default_factory=list)
+    # Droits donnés par les formations (et droits RH de la Direction).
+    training_permissions: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -317,6 +319,8 @@ class GradeOut(BaseModel):
     color: str
     permissions: list[str]
     is_direction: bool
+    is_trial: bool
+    is_training: bool
     employees_count: int
 
 
@@ -333,6 +337,8 @@ class GradeCreateRequest(BaseModel):
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
     permissions: list[str] = Field(default_factory=list, max_length=32)
     is_direction: bool = False
+    is_trial: bool = False
+    is_training: bool = False
 
     @field_validator("name")
     @classmethod
@@ -349,6 +355,8 @@ class GradeUpdateRequest(BaseModel):
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
     permissions: Optional[list[str]] = Field(default=None, max_length=32)
     is_direction: Optional[bool] = None
+    is_trial: Optional[bool] = None
+    is_training: Optional[bool] = None
 
     @field_validator("name")
     @classmethod
@@ -1270,3 +1278,111 @@ class CrisisOut(BaseModel):
     employees: list[CrisisEmployeeOut]
     beds: list[CrisisBedOut]
     groups: list[AffiliationGroupOut]
+
+
+# --- Formations ---
+
+# « trial » : période d'essai (CDD, Interne) ; « training » : période de formation
+# (CDI, Résident) ; « general » : formation générale (ex. Pilote Medicopter).
+TrainingKind = Literal["trial", "training", "general"]
+
+
+class TrainingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    emoji: str
+    kind: TrainingKind
+    # Droits donnés à ceux qui l'ont validée (formation générale).
+    permissions: list[str]
+
+
+class TrainingPermissionOption(BaseModel):
+    key: str
+    label: str
+
+
+class TrainingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    emoji: str = Field(min_length=1, max_length=16)
+    kind: TrainingKind = "general"
+    # Clés de training_rights.TRAINING_PERMISSION_CATALOG, ignorées hors formation générale.
+    permissions: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("name")
+    @classmethod
+    def _training_name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom de la formation")
+
+    @field_validator("emoji")
+    @classmethod
+    def _training_emoji(cls, value: str) -> str:
+        value = _clean_required(value, "L’emoji de la formation")
+        if "," in value:
+            raise ValueError("L’emoji ne peut pas contenir de virgule.")
+        return value
+
+
+# Rôle dans une formation générale : Responsable, Second, Validé ou En cours.
+TrainingMemberStatus = Literal["lead", "second", "validated", "in_progress"]
+
+
+class TrainingMemberRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: TrainingMemberStatus = "validated"
+
+
+class TrainingMemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    training_id: int
+    employee_id: int
+    status: TrainingMemberStatus
+
+
+class TrainingEmployeeOut(BaseModel):
+    id: int
+    name: str
+    phone: Optional[str]
+    grade_id: Optional[int]
+    grade_name: Optional[str]
+    grade_level: Optional[int]
+    grade_color: Optional[str]
+    competencies: list[str]
+
+
+class TrainingGradeOut(BaseModel):
+    id: int
+    name: str
+    level: int
+
+
+class TrainingPageOut(BaseModel):
+    trainings: list[TrainingOut]
+    # Employés actifs, du plus haut grade au plus bas.
+    employees: list[TrainingEmployeeOut]
+    # Responsables, Seconds et En cours des formations générales (un « Validé »
+    # n'a pas de ligne : il a seulement l'emoji).
+    members: list[TrainingMemberOut]
+    # Grades « Période d'essai » et « En formation » cochés dans Direction.
+    # Tous les grades, du plus haut au plus bas, puis ceux cochés « Période
+    # d'essai » et « En formation » dans Direction.
+    grades: list[TrainingGradeOut]
+    trial_grades: list[TrainingGradeOut]
+    training_grades: list[TrainingGradeOut]
+    # Droits qu'une formation générale peut donner.
+    permission_options: list[TrainingPermissionOption]
+    # Le compte connecté peut ajouter, modifier et supprimer les formations (il
+    # gère l'hôpital), et valider celles de période d'essai et de période de
+    # formation (formateur).
+    can_manage: bool
+    can_validate: bool
+    # Direction : gère l'équipe de toute formation générale et nomme ou retire
+    # son Responsable.
+    can_assign_lead: bool
+    # Tuile liée au compte connecté : son Responsable gère l'équipe d'une formation.
+    employee_id: Optional[int]

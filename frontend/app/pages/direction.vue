@@ -14,6 +14,10 @@ interface Grade {
   color: string
   permissions: string[]
   is_direction: boolean
+  /** Période d'essai : en formation initiale (CDD, Interne). */
+  is_trial: boolean
+  /** En formation : en formation complémentaire (CDI, Résident). */
+  is_training: boolean
   employees_count: number
 }
 
@@ -86,7 +90,15 @@ const deletingGradeId = ref<number | null>(null)
 const error = ref('')
 const gradeDialog = ref<HTMLDialogElement | null>(null)
 const gradeSearch = ref('')
-const form = reactive({ name: '', level: 1, color: '#46996d', permissions: [] as string[], is_direction: false })
+const form = reactive({
+  name: '',
+  level: 1,
+  color: '#46996d',
+  permissions: [] as string[],
+  is_direction: false,
+  is_trial: false,
+  is_training: false
+})
 const visibleGrades = computed(() => {
   const query = gradeSearch.value.trim().toLocaleLowerCase('fr')
   if (!query) return grades.value
@@ -116,6 +128,8 @@ function resetForm() {
   form.color = '#46996d'
   form.permissions = []
   form.is_direction = false
+  form.is_trial = false
+  form.is_training = false
 }
 
 async function openGradeDialog(grade?: Grade) {
@@ -128,6 +142,8 @@ async function openGradeDialog(grade?: Grade) {
     form.color = grade.color
     form.permissions = [...grade.permissions]
     form.is_direction = grade.is_direction
+    form.is_trial = grade.is_trial
+    form.is_training = grade.is_training
   }
   await nextTick()
   if (!gradeDialog.value?.open) gradeDialog.value?.showModal()
@@ -153,7 +169,9 @@ async function saveGrade() {
       level: Math.floor(form.level),
       color: form.color,
       permissions: [...new Set(form.permissions)],
-      is_direction: form.is_direction
+      is_direction: form.is_direction,
+      is_trial: form.is_trial,
+      is_training: form.is_training
     }
     const saved = editingId.value
       ? await $fetch<Grade>(`/api/direction/grades/${editingId.value}`, {
@@ -438,6 +456,14 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
           <input v-model="form.is_direction" type="checkbox">
           <span>Fait partie de la Direction <small>(peut recevoir une radio Direction)</small></span>
         </label>
+        <label class="direction-check direction-grade-direction">
+          <input v-model="form.is_training" type="checkbox" @change="form.is_training && (form.is_trial = false)">
+          <span>En formation <small>(En formation complémentaire)</small></span>
+        </label>
+        <label class="direction-check direction-grade-direction">
+          <input v-model="form.is_trial" type="checkbox" @change="form.is_trial && (form.is_training = false)">
+          <span>Période d’essai <small>(En formation initiale)</small></span>
+        </label>
         <fieldset>
           <legend>Permissions opérationnelles</legend>
           <label v-for="permission in permissionOptions" :key="permission.key">
@@ -468,7 +494,7 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
       <article v-for="grade in visibleGrades" :key="grade.id" class="direction-grade">
         <div class="direction-grade__level" :style="{ '--grade-color': grade.color }"><span>Niveau</span><strong>{{ grade.level }}</strong></div>
         <div class="direction-grade__main">
-          <div class="direction-grade__title"><span class="direction-grade__swatch" :style="{ backgroundColor: grade.color }"></span><h3>{{ grade.name }}</h3><code>{{ grade.color.toUpperCase() }}</code><span v-if="grade.is_direction" class="direction-grade__badge"><Icon name="lucide:radio-tower" size="11" /> Direction</span><span>{{ grade.employees_count }} employé{{ grade.employees_count > 1 ? 's' : '' }}</span></div>
+          <div class="direction-grade__title"><span class="direction-grade__swatch" :style="{ backgroundColor: grade.color }"></span><h3>{{ grade.name }}</h3><code>{{ grade.color.toUpperCase() }}</code><span v-if="grade.is_direction" class="direction-grade__badge"><Icon name="lucide:radio-tower" size="11" /> Direction</span><span v-if="grade.is_training" class="direction-grade__badge"><Icon name="lucide:graduation-cap" size="11" /> En formation</span><span v-if="grade.is_trial" class="direction-grade__badge"><Icon name="lucide:graduation-cap" size="11" /> Période d’essai</span><span>{{ grade.employees_count }} employé{{ grade.employees_count > 1 ? 's' : '' }}</span></div>
           <div class="direction-permissions">
             <span v-for="key in grade.permissions" :key="key">
               {{ permissionOptions?.find((permission) => permission.key === key)?.label ?? key }}

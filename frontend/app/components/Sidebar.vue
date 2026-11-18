@@ -47,13 +47,14 @@ const items: NavItem[] = [
   { to: '/crise', label: 'Crise', icon: 'lucide:siren', page: 'crisis' },
   { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
   { to: '/stock', label: 'Stock', icon: 'lucide:boxes', page: 'stock' },
+  { to: '/formation', label: 'Formation', icon: 'lucide:graduation-cap', page: 'training' },
   { to: '/ressources-humaines', label: 'Ressources humaines', icon: 'lucide:users-round', page: 'human-resources' },
   { to: '/direction', label: 'Direction', icon: 'lucide:landmark', page: 'direction' },
   { to: '/administration', label: 'Administration', icon: 'lucide:settings', page: 'administration' }
 ]
 
 /** Pages ouvertes à tout compte validé, même sans rôle : elles n'ont pas de case à cocher dans les rôles. */
-const PUBLIC_PAGES = new Set(['dispatch', 'crisis', 'hospital', 'agenda', 'stock'])
+const PUBLIC_PAGES = new Set(['dispatch', 'crisis', 'hospital', 'agenda', 'stock', 'training'])
 
 const visibleItems = computed(() => items.filter((item) =>
   PUBLIC_PAGES.has(item.page)

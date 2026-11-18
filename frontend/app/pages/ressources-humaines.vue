@@ -20,8 +20,8 @@ interface GradeOption {
 
 interface CurrentUser {
   is_super_admin: boolean
-  app_permissions: string[]
-  grade_permissions: string[]
+  /** Droits donnés par les formations (et droits RH de la Direction). */
+  training_permissions: string[]
 }
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
@@ -31,14 +31,12 @@ const { data: currentUser } = await useAsyncData('hr-current-user', () =>
     headers: requestHeaders
   })
 )
-const canManageEmployees = computed(() =>
-  currentUser.value?.is_super_admin ||
-  currentUser.value?.grade_permissions.includes('human_resources.manage_employees')
+/** Le droit RH (formation ou Direction) permet toutes les actions de la page. */
+const isHr = computed(() =>
+  Boolean(currentUser.value?.is_super_admin || currentUser.value?.training_permissions.includes('human_resources.manage'))
 )
-const canLinkAccounts = computed(() =>
-  currentUser.value?.is_super_admin ||
-  currentUser.value?.app_permissions.includes('human_resources.link_accounts')
-)
+const canManageEmployees = isHr
+const canLinkAccounts = isHr
 const [{ data: initialEmployees }, { data: initialGrades }] = await Promise.all([
   useAsyncData('hr-employees', () =>
     $fetch<Agent[]>('/api/employees', {

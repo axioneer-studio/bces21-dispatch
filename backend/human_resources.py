@@ -6,14 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from dispatch import push_employees_changed
-from app_permissions import require_app_permission
-from deps import (
-    require_any_page_access,
-    require_page_access,
-    user_has_page_access,
-)
-from grade_permissions import parse_grade_permissions, require_grade_permission
+from deps import require_page_access
+from grade_permissions import parse_grade_permissions
 from models import DispatchAssignment, DispatchRadio, Employee, Grade, User
+# Tout le monde a accès à la liste des employés (Dispatch) ; le reste de la page
+# est réservé au droit RH (formation ou Direction), qui permet toutes ses actions.
+from training_rights import require_hr_access, user_has_hr_access
 from schemas import (
     EmployeeAccountLinkRequest,
     EmployeeCreateRequest,
@@ -82,17 +80,15 @@ async def _validate_account_link(
 )
 async def list_employees(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(
-        require_any_page_access("dispatch", "human-resources")
-    ),
+    current_user: User = Depends(require_page_access("dispatch")),
 ):
     employees_query = select(Employee).order_by(
         Employee.is_active.desc(), Employee.first_name.asc(), Employee.last_name.asc()
     )
-    if not user_has_page_access(current_user, "human-resources"):
+    include_hr_details = await user_has_hr_access(db, current_user)
+    if not include_hr_details:
         employees_query = employees_query.where(Employee.is_active.is_(True))
     employees = (await db.execute(employees_query)).scalars().all()
-    include_hr_details = user_has_page_access(current_user, "human-resources")
     return [
         _employee_out(employee, include_hr_details=include_hr_details)
         for employee in employees
@@ -102,8 +98,7 @@ async def list_employees(
 @router.get(
     "/employee-accounts",
     dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_app_permission("human_resources.link_accounts")),
+        Depends(require_hr_access),
     ],
 )
 async def list_employee_accounts(db: AsyncSession = Depends(get_db)):
@@ -128,7 +123,7 @@ async def list_employee_accounts(db: AsyncSession = Depends(get_db)):
 @router.get(
     "/employee-grades",
     response_model=list[GradeOption],
-    dependencies=[Depends(require_page_access("human-resources"))],
+    dependencies=[Depends(require_hr_access)],
 )
 async def list_employee_grade_options(db: AsyncSession = Depends(get_db)):
     grades = (
@@ -145,8 +140,7 @@ async def list_employee_grade_options(db: AsyncSession = Depends(get_db)):
     response_model=EmployeeOut,
     status_code=status.HTTP_201_CREATED,
     dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_grade_permission("human_resources.manage_employees")),
+        Depends(require_hr_access),
     ],
 )
 async def create_employee(
@@ -177,8 +171,7 @@ async def create_employee(
     "/employees/{employee_id}",
     response_model=EmployeeOut,
     dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_grade_permission("human_resources.manage_employees")),
+        Depends(require_hr_access),
     ],
 )
 async def update_employee(
@@ -238,8 +231,7 @@ async def update_employee(
     "/employees/{employee_id}/account",
     response_model=EmployeeOut,
     dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_app_permission("human_resources.link_accounts")),
+        Depends(require_hr_access),
     ],
 )
 async def link_employee_account(
@@ -264,8 +256,7 @@ async def link_employee_account(
     "/employees/{employee_id}",
     response_model=MessageResponse,
     dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_grade_permission("human_resources.manage_employees")),
+        Depends(require_hr_access),
     ],
 )
 async def delete_employee(employee_id: int, db: AsyncSession = Depends(get_db)):

@@ -26,6 +26,8 @@ from morgue import router as morgue_router
 from crisis import router as crisis_router
 from affiliation_groups import router as affiliation_groups_router
 from intervention_statuses import router as intervention_statuses_router
+from trainings import router as trainings_router
+from training_rights import user_has_hr_access, user_training_permissions
 from grade_permissions import parse_grade_permissions
 from models import Employee, Grade, User
 from schemas import HealthResponse, SuperAdminToggleRequest, UserResponse
@@ -127,15 +129,20 @@ async def _me_response(db: AsyncSession, user: User) -> UserResponse:
         .join(Employee, Employee.grade_id == Grade.id)
         .where(Employee.account_user_id == user.id)
     )
+    # Ressources humaines ne se coche pas dans un rôle : elle suit les droits RH.
+    page_access = [page for page in user_role_pages(user) if page != "human-resources"]
+    if await user_has_hr_access(db, user):
+        page_access.append("human-resources")
     return response.model_copy(
         update={
             "role_names": [role.name for role in user.roles],
             "is_super_admin": user.has_super_admin_rights,
             "super_admin_available": user.is_super_admin,
             "super_admin_enabled": user.super_admin_enabled,
-            "page_access": user_role_pages(user),
+            "page_access": page_access,
             "app_permissions": user_role_permissions(user),
             "grade_permissions": parse_grade_permissions(grade_permissions),
+            "training_permissions": await user_training_permissions(db, user),
         }
     )
 
@@ -154,3 +161,4 @@ app.include_router(morgue_router)
 app.include_router(crisis_router)
 app.include_router(affiliation_groups_router)
 app.include_router(intervention_statuses_router)
+app.include_router(trainings_router)

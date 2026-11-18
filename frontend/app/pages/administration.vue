@@ -110,7 +110,6 @@ interface AdminInterventionStatus {
 }
 
 const pageOptions = [
-  { key: 'human-resources', label: 'Ressources humaines' },
   { key: 'direction', label: 'Direction' },
   { key: 'administration', label: 'Administration' }
 ]
