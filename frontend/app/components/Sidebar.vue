@@ -43,8 +43,8 @@ interface NavItem {
 
 const items: NavItem[] = [
   { to: '/dispatch', label: 'Dispatch', icon: 'lucide:radio-tower', page: 'dispatch' },
-  { to: '/crise', label: 'Crise', icon: 'lucide:siren', page: 'crisis' },
   { to: '/hopital', label: 'Hôpital', icon: 'lucide:hospital', page: 'hospital' },
+  { to: '/crise', label: 'Crise', icon: 'lucide:siren', page: 'crisis' },
   { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
   { to: '/stock', label: 'Stock', icon: 'lucide:boxes', page: 'stock' },
   { to: '/ressources-humaines', label: 'Ressources humaines', icon: 'lucide:users-round', page: 'human-resources' },
