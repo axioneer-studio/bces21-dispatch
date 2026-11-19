@@ -24,5 +24,8 @@
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.146"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
   }
 }
