@@ -2,6 +2,8 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
+RUN apk upgrade --no-cache
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -17,6 +19,8 @@ ENV NODE_ENV=production \
     NITRO_PORT=3000
 
 WORKDIR /app
+RUN apk upgrade --no-cache
+
 COPY --from=build --chown=node:node /app/.output ./.output
 
 USER node
