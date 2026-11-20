@@ -47,13 +47,13 @@ export default defineEventHandler(async (event) => {
   const redirectUrl = data?.redirect || '/dispatch'
 
   // Pose le cookie de session et redirige dans une seule réponse HTTP.
-  // Pas de Domain explicite : le cookie est scopé à l'hôte courant, ce qui
-  // fonctionne sur localhost:3000 → localhost:8000 en dev, et sur le domaine
-  // courant en prod (le cookie est transmis par le proxy Nuxt au backend).
+  // Domain=localhost permet au cookie d'être envoyé aussi au backend
+  // (localhost:8000) depuis le frontend (localhost:3000), notamment pour
+  // le WebSocket qui se connecte directement au backend.
   if (data?.token) {
     event.node.res.writeHead(302, {
       'Location': redirectUrl,
-      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
+      'Set-Cookie': `bces_session=${data.token}; Domain=localhost; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
         14 * 24 * 60 * 60
       }`,
     })

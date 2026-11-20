@@ -17,7 +17,11 @@ export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void
   /**bloque toute reconnexion après un refus d'authentification. */
   let authBlocked = false
 
-  /** Le backend expose le WebSocket hors du préfixe REST `/api`. */
+  /** Le backend expose le WebSocket hors du préfixe REST `/api`.
+   *  Connexion directe au backend (apiBase) : le proxy Nitro ne remonte pas
+   *  l'upgrade WebSocket en mode dev. Le cookie de session est envoyé car
+   *  il est posé avec Domain=localhost (voir server/routes/auth/discord/callback.ts).
+   */
   function buildUrl(): string {
     if (typeof window === 'undefined') return ''
     const apiUrl = new URL(

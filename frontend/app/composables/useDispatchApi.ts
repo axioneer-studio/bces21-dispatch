@@ -4,8 +4,9 @@ import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState, Flee
 const config = () => useRuntimeConfig()
 
 function base(): string {
-  const apiBase = String(config().public.apiBase || '')
-  return apiBase.replace(/\/$/, '')
+  // Retourne une chaîne vide pour que les appels utilisent des URLs relatives
+  // passées par le proxy Nitro (/api/** → backend), qui transmet les cookies.
+  return ''
 }
 
 async function req<T>(

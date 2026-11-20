@@ -27,7 +27,7 @@ const deadlineParam = computed<string | null>(() => {
 const { data: meData } = await useAsyncData<Me | null>('me-profile', async () => {
   try {
     const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-    return await $fetch<Me>(`${config.public.apiBase}/api/me`, {
+    return await $fetch<Me>('/api/me', {
       credentials: 'include',
       headers
     })
@@ -207,7 +207,7 @@ function clearDraft() {
 
 async function logout() {
   try {
-    await $fetch(`${config.public.apiBase}/api/auth/logout`, {
+    await $fetch('/api/auth/logout', {
       method: 'POST',
       credentials: 'include'
     })
