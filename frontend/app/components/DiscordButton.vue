@@ -6,9 +6,7 @@ const props = defineProps<{
   label?: string
 }>()
 
-async function handleClick(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
+async function handleClick() {
   if (typeof window === 'undefined') {
     return
   }
@@ -25,10 +23,8 @@ async function handleClick(event: MouseEvent) {
 </script>
 
 <template>
-  <a
-    href="#"
+  <button
     class="bces-btn bces-btn--discord"
-    rel="noopener"
     @click="handleClick"
   >
     <img
@@ -39,7 +35,7 @@ async function handleClick(event: MouseEvent) {
       class="bces-btn__discord-icon"
     />
     <span>{{ props.label ?? 'Continuer avec Discord' }}</span>
-  </a>
+  </button>
 </template>
 
 <style scoped>
