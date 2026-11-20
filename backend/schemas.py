@@ -170,13 +170,14 @@ class EmployeeOut(BaseModel):
 class EmployeeCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    first_name: str = Field(min_length=1, max_length=64)
+    first_name: str = Field(max_length=64)
     last_name: str = Field(default="", max_length=64)
     phone: Optional[str] = Field(default=None, max_length=20)
     email: Optional[str] = Field(default=None, max_length=254)
     arrival_date: Optional[date] = None
     competencies: list[str] = Field(default_factory=list, max_length=20)
     grade_id: Optional[int] = None
+    account_user_id: Optional[int] = None
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -216,7 +217,7 @@ class EmployeeCreateRequest(BaseModel):
 class EmployeeUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    first_name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    first_name: Optional[str] = Field(default=None, max_length=64)
     last_name: Optional[str] = Field(default=None, max_length=64)
     phone: Optional[str] = Field(default=None, max_length=20)
     email: Optional[str] = Field(default=None, max_length=254)
@@ -224,6 +225,7 @@ class EmployeeUpdateRequest(BaseModel):
     competencies: Optional[list[str]] = Field(default=None, max_length=20)
     is_active: Optional[bool] = None
     grade_id: Optional[int] = None
+    account_user_id: Optional[int] = None
 
     @field_validator("first_name", "last_name")
     @classmethod
