@@ -14,6 +14,7 @@ from auth.discord import (
     build_authorize_url,
     exchange_code,
     fetch_me,
+    fetch_user_guilds,
 )
 from auth.session import (
     get_session_cookie_name,
@@ -86,6 +87,22 @@ async def _is_bootstrap_user(user: User, db: AsyncSession) -> bool:
     return founder_id is not None and user.id == founder_id
 
 
+async def _check_guild_membership(access_token: str) -> None:
+    """Vérifie que l'utilisateur est membre du serveur Discord requis.
+
+    Lève une HTTPException 403 s'il n'est pas membre.
+    """
+    settings = get_settings()
+    if not settings.required_discord_guild_id:
+        return
+    guilds = await fetch_user_guilds(access_token)
+    if not any(str(g.get("id")) == settings.required_discord_guild_id for g in guilds):
+        raise HTTPException(
+            status_code=403,
+            detail="Vous devez être membre du serveur Discord BCES pour vous connecter.",
+        )
+
+
 @router.get("/discord/start")
 async def discord_start() -> RedirectResponse:
     settings = get_settings()
@@ -110,6 +127,7 @@ async def discord_start() -> RedirectResponse:
         secure=settings.session_cookie_secure,
         samesite="lax",
         path="/",
+        domain=settings.session_cookie_domain,
     )
     return response
 
@@ -144,6 +162,7 @@ async def discord_authorize_url(response: Response) -> DiscordAuthorizeUrl:
         secure=settings.session_cookie_secure,
         samesite="lax",
         path="/",
+        domain=settings.session_cookie_domain,
     )
     return DiscordAuthorizeUrl(authorize_url=authorize_url)
 
@@ -192,6 +211,8 @@ async def discord_exchange(
             status_code=400,
             detail="Connexion Discord refusée.",
         )
+
+    await _check_guild_membership(token_payload["access_token"])
 
     discord_id = str(me.get("id") or "")
     if not discord_id:
@@ -255,6 +276,7 @@ async def discord_exchange(
     response.delete_cookie(
         key=state_cookie_name,
         path="/",
+        domain=settings.session_cookie_domain,
         secure=settings.session_cookie_secure,
         httponly=True,
         samesite="lax",
@@ -301,10 +323,17 @@ async def _handle_callback(
     try:
         token_payload = await exchange_code(code)
         me = await fetch_me(token_payload["access_token"])
+        await _check_guild_membership(token_payload["access_token"])
     except DiscordAPIError as exc:
         logger.warning("Discord OAuth error: %s", exc)
         return RedirectResponse(
             _frontend_redirect("/", error="discord_failed", error_description="Connexion Discord refusée."),
+            status_code=302,
+        )
+    except HTTPException as exc:
+        logger.warning("Discord guild check failed: %s", exc.detail)
+        return RedirectResponse(
+            _frontend_redirect("/", error="guild_required", error_description=str(exc.detail)),
             status_code=302,
         )
 
@@ -417,6 +446,7 @@ async def discord_callback(
         response.delete_cookie(
             key=state_cookie_name,
             path="/",
+            domain=settings.session_cookie_domain,
             secure=settings.session_cookie_secure,
             httponly=True,
             samesite="lax",

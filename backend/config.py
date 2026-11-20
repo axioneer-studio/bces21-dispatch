@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     discord_client_secret: str = ""
     discord_redirect_uri: str = "http://localhost:8000/api/auth/discord/callback"
     discord_scopes: str = "identify"
+    required_discord_guild_id: str = ""
 
     session_secret: str = "change-me-in-production"
     session_cookie_name: str = "bces_session"

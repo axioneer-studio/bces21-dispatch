@@ -23,7 +23,8 @@ services:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in the Coolify environment}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in the Coolify environment}
       DISCORD_REDIRECT_URI: ${SERVICE_URL_FRONTEND}/auth/discord/callback
-      DISCORD_SCOPES: "identify"
+      DISCORD_SCOPES: "identify,guilds"
+      REQUIRED_DISCORD_GUILD_ID: ${REQUIRED_DISCORD_GUILD_ID:?Set REQUIRED_DISCORD_GUILD_ID in the Coolify environment}
 
       # Sessions
       SERVICE_REALBASE64_64_SESSION: /
