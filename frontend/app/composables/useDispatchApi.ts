@@ -129,3 +129,9 @@ export async function updateState(
     body: patch
   })
 }
+
+/** Demande à l'API l'URL d'autorisation Discord (le navigateur reste sur :3000). */
+export async function fetchDiscordAuthorizeUrl(): Promise<string> {
+  const { authorize_url } = await req<{ authorize_url: string }>('/api/auth/discord/url')
+  return authorize_url
+}

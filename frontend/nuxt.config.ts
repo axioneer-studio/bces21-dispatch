@@ -65,7 +65,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       apiBase: publicApiBase,
-      discordAuthUrl: process.env.NUXT_PUBLIC_DISCORD_AUTH_URL || '/api/auth/discord/start',
+      discordAuthUrl: process.env.NUXT_PUBLIC_DISCORD_AUTH_URL || '/api/auth/discord/url',
       timezone: process.env.NUXT_PUBLIC_TIMEZONE || 'Europe/Paris'
     }
   }

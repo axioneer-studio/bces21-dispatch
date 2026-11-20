@@ -3,8 +3,9 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,9 +109,178 @@ async def discord_start() -> RedirectResponse:
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",
-        path="/api/auth/discord",
+        path="/",
     )
     return response
+
+
+class DiscordAuthorizeUrl(BaseModel):
+    authorize_url: str
+
+
+@router.get("/discord/url", response_model=DiscordAuthorizeUrl)
+async def discord_authorize_url(response: Response) -> DiscordAuthorizeUrl:
+    """Retourne l'URL d'autorisation Discord pour un appel depuis le frontend.
+
+    Le navigateur reste sur le frontend (localhost:3000) : il appelle cette
+    API, puis redirige l'utilisateur vers Discord. Le cookie d'état OAuth est
+    posé par cette réponse sur le domaine partagé `localhost` et relu par
+    `/api/auth/discord/callback` au retour de Discord.
+    """
+    settings = get_settings()
+    if not settings.discord_client_id:
+        raise HTTPException(
+            status_code=500,
+            detail="DISCORD_CLIENT_ID non configuré côté serveur.",
+        )
+
+    state = secrets.token_urlsafe(24)
+    authorize_url = build_authorize_url(state)
+    response.set_cookie(
+        key=_state_cookie_name(state),
+        value=state,
+        max_age=_PENDING_TTL_SECONDS,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return DiscordAuthorizeUrl(authorize_url=authorize_url)
+
+
+class DiscordExchangeRequest(BaseModel):
+    code: str
+    state: str
+
+
+class DiscordExchangeResponse(BaseModel):
+    message: str
+    redirect: str
+    token: str
+    expires: str
+
+
+@router.post("/discord/exchange", response_model=DiscordExchangeResponse)
+async def discord_exchange(
+    payload: DiscordExchangeRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> DiscordExchangeResponse:
+    """Échange le code OAuth Discord contre une session (appelé depuis le frontend).
+
+    Le frontend reçoit un JSON avec l'URL de redirection finale et le cookie
+    de session est posé dans la réponse HTTP.
+    """
+    settings = get_settings()
+    state_cookie_name = _state_cookie_name(payload.state)
+    state_cookie = request.cookies.get(state_cookie_name)
+
+    if not state_cookie or not secrets.compare_digest(payload.state, state_cookie):
+        logger.warning("Discord OAuth exchange rejected: state cookie is missing or invalid.")
+        raise HTTPException(
+            status_code=400,
+            detail="Session OAuth expirée ou invalide.",
+        )
+
+    try:
+        token_payload = await exchange_code(payload.code)
+        me = await fetch_me(token_payload["access_token"])
+    except DiscordAPIError as exc:
+        logger.warning("Discord OAuth error: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Connexion Discord refusée.",
+        )
+
+    discord_id = str(me.get("id") or "")
+    if not discord_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Profil Discord indisponible.",
+        )
+
+    existing = await db.execute(
+        select(User).where(User.discord_id == discord_id)
+    )
+    user = existing.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if user is None:
+        registration_setting = await db.get(ApplicationSetting, "registration_open")
+        if registration_setting is not None and registration_setting.value == "false":
+            raise HTTPException(
+                status_code=403,
+                detail="Inscriptions fermées.",
+            )
+    elif user.status in {"disabled", "rejected"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Compte désactivé ou accès refusé.",
+        )
+
+    if user is None:
+        deadline = now + timedelta(
+            seconds=get_settings().profile_deadline_seconds
+        )
+        total_users = (
+            await db.execute(select(func.count()).select_from(User))
+        ).scalar_one()
+        is_first_user = int(total_users or 0) == 0
+
+        user = User(
+            discord_id=discord_id,
+            discord_username=me.get("username") or "Discord",
+            discord_avatar=me.get("avatar"),
+            rp_name_deadline=deadline,
+            status="active",
+            is_super_admin=is_first_user,
+        )
+        db.add(user)
+        if is_first_user:
+            logger.info("Bootstrap: premier compte (%s) validé automatiquement.", discord_id)
+
+    user.discord_username = me.get("username") or user.discord_username
+    avatar = me.get("avatar")
+    if avatar:
+        user.discord_avatar = avatar
+    user.last_login_at = now
+
+    await db.commit()
+    await db.refresh(user)
+
+    token, expires = issue_token(user.id)
+    _set_session_cookie(response, token, expires)
+
+    response.delete_cookie(
+        key=state_cookie_name,
+        path="/",
+        secure=settings.session_cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+    return DiscordExchangeResponse(
+        message="Connecté.",
+        redirect=_status_redirect_target_path(user),
+        token=token,
+        expires=expires.isoformat(),
+    )
+
+
+def _status_redirect_target_path(user: User) -> str:
+    if user.status == "pending":
+        return "/?status=pending"
+    if user.prenom_rp and user.nom_rp:
+        return "/dispatch"
+    deadline_iso = (
+        user.rp_name_deadline.isoformat()
+        if user.rp_name_deadline
+        else None
+    )
+    if deadline_iso:
+        return f"/complete-profile?deadline={deadline_iso}"
+    return "/complete-profile"
 
 
 async def _handle_callback(
@@ -246,7 +416,7 @@ async def discord_callback(
     if state_cookie_name:
         response.delete_cookie(
             key=state_cookie_name,
-            path="/api/auth/discord",
+            path="/",
             secure=settings.session_cookie_secure,
             httponly=True,
             samesite="lax",

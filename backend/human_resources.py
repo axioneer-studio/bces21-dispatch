@@ -150,6 +150,9 @@ async def create_employee(
     grade = await db.get(Grade, payload.grade_id) if payload.grade_id is not None else None
     if payload.grade_id is not None and grade is None:
         raise HTTPException(status_code=404, detail="Grade introuvable.")
+    if payload.account_user_id is not None:
+        await _validate_account_link(db, payload.account_user_id)
+
     employee = Employee(
         first_name=payload.first_name.strip(),
         last_name=payload.last_name.strip(),
@@ -159,6 +162,7 @@ async def create_employee(
         competencies=json.dumps(payload.competencies, ensure_ascii=False),
         grade_id=payload.grade_id,
         grade=grade,
+        account_user_id=payload.account_user_id,
     )
     db.add(employee)
     await db.commit()
@@ -184,6 +188,8 @@ async def update_employee(
         raise HTTPException(status_code=404, detail="Employé introuvable.")
 
     data = payload.model_dump(exclude_unset=True)
+    if "account_user_id" in data and data["account_user_id"] is not None:
+        await _validate_account_link(db, data["account_user_id"], employee_id)
     if "grade_id" in data:
         target_grade = (
             await db.get(Grade, data["grade_id"])
