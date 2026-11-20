@@ -47,15 +47,22 @@ export default defineEventHandler(async (event) => {
   const redirectUrl = data?.redirect || '/dispatch'
 
   // Pose le cookie de session et redirige dans une seule réponse HTTP.
-  // Domain=localhost permet au cookie d'être envoyé aussi au backend
-  // (localhost:8000) depuis le frontend (localhost:3000), notamment pour
-  // le WebSocket qui se connecte directement au backend.
+  // Sur localhost (dev), Domain=localhost permet au cookie d'être envoyé
+  // aussi au backend (localhost:8000) depuis le frontend (localhost:3000),
+  // notamment pour le WebSocket qui se connecte directement au backend.
+  // En production, pas de Domain : le cookie est scopé au domaine courant.
+  const host = event.node.req.headers.host || ''
+  const isLocalhost =
+    host.startsWith('localhost') ||
+    host.startsWith('127.0.0.1') ||
+    host.startsWith('::1')
+  const domainAttr = isLocalhost ? '; Domain=localhost' : ''
   if (data?.token) {
     event.node.res.writeHead(302, {
       'Location': redirectUrl,
-      'Set-Cookie': `bces_session=${data.token}; Domain=localhost; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
+      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
         14 * 24 * 60 * 60
-      }`,
+      }${domainAttr}`,
     })
     event.node.res.end()
     return

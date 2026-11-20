@@ -49,6 +49,11 @@ export default defineNuxtConfig({
   ui: {
     colorMode: false,
   },
+  loading: {
+    color: '#38bdf8',
+    height: '4px',
+    duration: 5000,
+  },
   devServer: {
     host: "localhost",
   },
@@ -57,6 +62,9 @@ export default defineNuxtConfig({
     routeRules: {
       "/api/**": {
         proxy: apiProxyBase + "/api/**",
+      },
+      "/ws/**": {
+        proxy: apiProxyBase + "/ws/**",
       },
     },
   },

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
+
 type SidebarMode = 'collapsed' | 'expanded' | 'hover'
 
 const STORAGE_KEY = 'bces:sidebar-mode'
@@ -8,7 +10,7 @@ const settingsOpen = ref(false)
 const modeWrap = ref<HTMLElement | null>(null)
 let hoverTimer: ReturnType<typeof setTimeout> | null = null
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const { data: currentUser } = await useAsyncData('sidebar-current-user', async () => {
+const { data: currentUser } = await useAsyncDataWithLoading('sidebar-current-user', async () => {
   try {
     return await $fetch<{
       is_super_admin: boolean
