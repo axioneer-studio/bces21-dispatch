@@ -1,4 +1,4 @@
-import { getQuery, sendRedirect, setHeader } from 'h3'
+import { getQuery } from 'h3'
 import { $fetch } from 'ofetch'
 
 export default defineEventHandler(async (event) => {
@@ -8,11 +8,15 @@ export default defineEventHandler(async (event) => {
   const error = query.error as string | undefined
 
   if (error) {
-    return sendRedirect(event, `/?error=${error}`, 302)
+    event.node.res.writeHead(302, { 'Location': `/?error=${error}` })
+    event.node.res.end()
+    return
   }
 
   if (!code || !state) {
-    return sendRedirect(event, '/?error=missing_code', 302)
+    event.node.res.writeHead(302, { 'Location': '/?error=missing_code' })
+    event.node.res.end()
+    return
   }
 
   const config = useRuntimeConfig()
@@ -30,7 +34,9 @@ export default defineEventHandler(async (event) => {
       },
     })
   } catch (err) {
-    return sendRedirect(event, '/?error=discord_failed', 302)
+    event.node.res.writeHead(302, { 'Location': '/?error=discord_failed' })
+    event.node.res.end()
+    return
   }
 
   const data = (response.data ?? response._data) as {
@@ -40,17 +46,21 @@ export default defineEventHandler(async (event) => {
   } | undefined
   const redirectUrl = data?.redirect || '/dispatch'
 
-  // Pose le cookie de session depuis le token retourné par l'API
-  // Domain=localhost permet de partager le cookie entre :3000 et :8000
+  // Pose le cookie de session et redirige dans une seule réponse HTTP.
+  // Pas de Domain explicite : le cookie est scopé à l'hôte courant, ce qui
+  // fonctionne sur localhost:3000 → localhost:8000 en dev, et sur le domaine
+  // courant en prod (le cookie est transmis par le proxy Nuxt au backend).
   if (data?.token) {
-    setHeader(
-      event,
-      'set-cookie',
-      `bces_session=${data.token}; Domain=localhost; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
+    event.node.res.writeHead(302, {
+      'Location': redirectUrl,
+      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
         14 * 24 * 60 * 60
-      }`
-    )
+      }`,
+    })
+    event.node.res.end()
+    return
   }
 
-  return sendRedirect(event, redirectUrl, 302)
+  event.node.res.writeHead(302, { 'Location': redirectUrl })
+  event.node.res.end()
 })
