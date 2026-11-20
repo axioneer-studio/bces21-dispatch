@@ -8,6 +8,7 @@ from config import get_settings
 DISCORD_AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_ME_URL = "https://discord.com/api/users/@me"
+DISCORD_ME_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
 
 class DiscordAPIError(Exception):
@@ -69,6 +70,20 @@ async def fetch_me(access_token: str) -> dict:
     if response.status_code != 200:
         raise DiscordAPIError(
             f"Récupération du profil Discord échouée ({response.status_code}): {response.text}"
+        )
+
+    return response.json()
+
+
+async def fetch_user_guilds(access_token: str) -> list[dict]:
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(DISCORD_ME_GUILDS_URL, headers=headers)
+
+    if response.status_code != 200:
+        raise DiscordAPIError(
+            f"Récupération des serveurs Discord échouée ({response.status_code}): {response.text}"
         )
 
     return response.json()
