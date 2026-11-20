@@ -347,7 +347,7 @@ Discord (voir `.env.example`) :
   (`SERVICE_URL_FRONTEND` et `SERVICE_URL_BACKEND`) sans suffixe de port :
   `3000` et `8000` restent les ports internes des conteneurs et ne figurent pas
   dans les URLs du navigateur.
-- Ajoutez `https://<domaine-api>/api/auth/discord/callback` aux Redirect URI
+- Ajoutez `https://<domaine-frontend>/auth/discord/callback` aux Redirect URI
   de l'application Discord, en remplaçant le domaine par celui généré ou
   configuré dans Coolify.
 - `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET` : identifiants Discord.
@@ -431,7 +431,7 @@ racine du dossier `backend/`). Les variables non listées ici sont ignorées.
 | `CORS_ALLOW_ORIGINS` | `http://localhost:3000` | Origines autorisées, séparées par `,` |
 | `DISCORD_CLIENT_ID` | *(vide)* | Identifiant de l'application Discord |
 | `DISCORD_CLIENT_SECRET` | *(vide)* | Secret de l'application Discord |
-| `DISCORD_REDIRECT_URI` | `http://localhost:8000/api/auth/discord/callback` | URI de redirection OAuth |
+| `DISCORD_REDIRECT_URI` | `http://localhost:3000/auth/discord/callback` | URI de redirection OAuth |
 | `DISCORD_SCOPES` | `identify` | Scopes Discord, séparés par `,` |
 | `SESSION_SECRET` | `change-me-in-production` | Clé de signature des JWT (**à changer**) |
 | `SESSION_COOKIE_NAME` | `bces_session` | Nom du cookie de session |
@@ -473,7 +473,7 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 ## Authentification Discord
 
 1. <https://discord.com/developers/applications> → **New Application**
-2. **OAuth2 → Redirects** → ajouter `http://localhost:8000/api/auth/discord/callback`
+2. **OAuth2 → Redirects** → ajouter `http://localhost:3000/auth/discord/callback`
 3. Copier le **Client ID** et le **Client Secret** dans `backend/.env`
 4. Lancer le backend puis ouvrir <http://localhost:3000>
 
@@ -482,8 +482,9 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 1. `GET /api/auth/discord/url` → génération d'un `state` (TTL 10 min, en
    mémoire) et retour de l'URL d'autorisation Discord ; le frontend redirige
    ensuite le navigateur vers Discord (il ne transite plus par `localhost:8000`).
-2. `GET /api/auth/discord/callback` → échange du `code`, récupération du profil
-   Discord, création ou mise à jour de l'utilisateur, pose du cookie de session.
+2. `GET /auth/discord/callback` (frontend) → reçoit le code de Discord, appelle
+   `POST /api/auth/discord/exchange` (backend) pour échanger le code contre une
+   session, pose le cookie `bces_session` et redirige vers `/dispatch`.
 3. Redirection selon l'état du compte :
    - profil incomplet → `/complete-profile?deadline=<iso>`
    - compte en attente → `/?status=pending`
@@ -513,7 +514,8 @@ vérifient en plus la page cochée dans le rôle.
 | `GET` | `/health` | Santé (`status`, `version`, `timezone`) |
 | `GET` | `/api/me` | Utilisateur courant |
 | `GET` | `/api/auth/discord/url` | Initie le flux OAuth Discord (retourne l'URL d'autorisation) |
-| `GET` | `/api/auth/discord/callback` | Callback OAuth (échange du code, pose de la session) |
+| `POST` | `/api/auth/discord/exchange` | Échange le code Discord contre une session (appelé depuis le frontend) |
+| `GET` | `/auth/discord/callback` | Route frontend qui reçoit le callback Discord et pose le cookie de session |
 | `POST` | `/api/auth/profile` | Enregistre prénom RP / nom RP / téléphone |
 | `POST` | `/api/auth/logout` | Détruit la session |
 | `GET` | `/api/auth/pending` | Liste des comptes en attente de validation |
