@@ -6,16 +6,15 @@ const props = defineProps<{
   label?: string
 }>()
 
-const config = useRuntimeConfig()
-
 async function handleClick(event: MouseEvent) {
   event.preventDefault()
+  event.stopPropagation()
   if (typeof window === 'undefined') {
     return
   }
   try {
     // Une URL absolue est ouverte directement ; une URL relative est l'endpoint
-    // API qui renvoie l'URL d'autorisation Discord (le navigateur reste sur :3000).
+    // API qui renvoie l'URL d'autorisation Discord (le navigateur reste sur le frontend).
     const authorizeUrl =
       props.url.startsWith('http') ? props.url : await fetchDiscordAuthorizeUrl()
     window.location.href = authorizeUrl
@@ -27,7 +26,7 @@ async function handleClick(event: MouseEvent) {
 
 <template>
   <a
-    :href="props.url.startsWith('http') ? props.url : `${config.public.apiBase}${props.url}`"
+    href="#"
     class="bces-btn bces-btn--discord"
     rel="noopener"
     @click="handleClick"
