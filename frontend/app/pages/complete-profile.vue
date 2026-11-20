@@ -222,7 +222,7 @@ async function submit() {
   error.value = null
   loading.value = true
   try {
-    const result = await $fetch<{ status?: string }>(`${config.public.apiBase}/api/auth/profile`, {
+    const result = await $fetch<{ status?: string }>('/api/auth/profile', {
       method: 'POST',
       body: {
         prenomRP: prenom.value.trim(),
