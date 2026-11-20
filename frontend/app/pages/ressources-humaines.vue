@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import ShareDialog from '~/components/ShareDialog.vue'
+import { useAppToast } from '~/composables/useAppToast'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Ressources humaines • BCES' })
@@ -65,16 +68,14 @@ const { data: accounts } = await useAsyncData('hr-accounts', () =>
 const employees = ref<Agent[]>(initialEmployees.value ?? [])
 const accountOptions = accounts.value ?? []
 const grades = initialGrades.value ?? []
-const accountLinkSelections = reactive<Record<number, string>>({})
-for (const employee of employees.value) {
-  accountLinkSelections[employee.id] = employee.account_user_id ? String(employee.account_user_id) : ''
-}
 const actionError = ref('')
 const employeeDialogError = ref('')
 const savingEmployee = ref(false)
 const workingEmployeeIds = ref<number[]>([])
 const editingEmployeeId = ref<number | null>(null)
-const employeeDialog = ref<HTMLDialogElement | null>(null)
+const employeeDialogVisible = ref(false)
+const deleteConfirmVisible = ref(false)
+const employeeToDelete = ref<Agent | null>(null)
 const search = ref('')
 const showInactive = ref(false)
 const revealedEmails = ref<number[]>([])
@@ -84,8 +85,8 @@ const employeeForm = reactive({
   phone: '',
   email: '',
   arrival_date: '',
-  competencies: '',
-  grade_id: ''
+  grade_id: '',
+  account_id: ''
 })
 
 const visibleEmployees = computed(() => {
@@ -112,8 +113,21 @@ const inactiveEmployeeCount = computed(() => employees.value.length - activeEmpl
 function messageFromError(cause: unknown, fallback: string) {
   if (typeof cause === 'object' && cause !== null && 'data' in cause) {
     const data = cause.data
-    if (typeof data === 'object' && data !== null && 'detail' in data && typeof data.detail === 'string') {
-      return data.detail
+    if (typeof data === 'object' && data !== null && 'detail' in data) {
+      const detail = data.detail
+      if (typeof detail === 'string') {
+        return detail
+      }
+      if (Array.isArray(detail)) {
+        // Erreurs de validation FastAPI 422 (liste de détails)
+        const messages = detail
+          .filter((e: any) => e && typeof e.msg === 'string')
+          .map((e: any) => e.msg)
+          .filter(Boolean)
+        if (messages.length > 0) {
+          return messages.join(' · ')
+        }
+      }
     }
   }
   return fallback
@@ -126,8 +140,8 @@ function resetEmployeeForm() {
   employeeForm.phone = ''
   employeeForm.email = ''
   employeeForm.arrival_date = ''
-  employeeForm.competencies = ''
   employeeForm.grade_id = ''
+  employeeForm.account_id = ''
 }
 
 async function openEmployeeDialog(employee?: Agent) {
@@ -140,18 +154,23 @@ async function openEmployeeDialog(employee?: Agent) {
     employeeForm.phone = employee.phone ?? ''
     employeeForm.email = employee.email ?? ''
     employeeForm.arrival_date = employee.arrival_date ?? ''
-    employeeForm.competencies = employee.competencies.join(', ')
     employeeForm.grade_id = employee.grade_id ? String(employee.grade_id) : ''
+    employeeForm.account_id = employee.account_user_id ? String(employee.account_user_id) : ''
   }
   actionError.value = ''
+  employeeDialogVisible.value = true
   await nextTick()
-  if (!employeeDialog.value?.open) employeeDialog.value?.showModal()
-  employeeDialog.value?.querySelector<HTMLInputElement>('[autocomplete="given-name"]')?.focus()
 }
 
 function closeEmployeeDialog() {
   if (savingEmployee.value) return
-  employeeDialog.value?.close()
+  employeeDialogVisible.value = false
+}
+
+function onEmployeeDialogVisibleChange(visible: boolean) {
+  if (!visible) {
+    employeeDialogError.value = ''
+  }
 }
 
 function onEmployeeDialogClose() {
@@ -169,8 +188,8 @@ async function saveEmployee() {
     phone: employeeForm.phone.trim() || null,
     email: employeeForm.email.trim() || null,
     arrival_date: employeeForm.arrival_date || null,
-    competencies: [...new Set(employeeForm.competencies.split(',').map((item) => item.trim()).filter(Boolean))],
-    grade_id: employeeForm.grade_id ? Number(employeeForm.grade_id) : null
+    grade_id: employeeForm.grade_id ? Number(employeeForm.grade_id) : null,
+    account_user_id: employeeForm.account_id ? Number(employeeForm.account_id) : null
   }
   try {
     const saved = editingEmployeeId.value
@@ -187,8 +206,7 @@ async function saveEmployee() {
     const existingIndex = employees.value.findIndex((employee) => employee.id === saved.id)
     if (existingIndex < 0) employees.value.push(saved)
     else employees.value.splice(existingIndex, 1, saved)
-    accountLinkSelections[saved.id] = saved.account_user_id ? String(saved.account_user_id) : ''
-    employeeDialog.value?.close()
+    employeeDialogVisible.value = false
   } catch (cause) {
     employeeDialogError.value = messageFromError(cause, 'Enregistrement de l’employé impossible.')
   } finally {
@@ -196,31 +214,24 @@ async function saveEmployee() {
   }
 }
 
-async function saveEmployeeAccountLink(employee: Agent) {
-  if (workingEmployeeIds.value.includes(employee.id)) return
-  actionError.value = ''
-  workingEmployeeIds.value.push(employee.id)
+async function copyEmail(email: string) {
+  const toast = useAppToast()
   try {
-    const accountId = accountLinkSelections[employee.id]
-    const updated = await $fetch<Agent>(`/api/employees/${employee.id}/account`, {
-      method: 'PATCH',
-      body: { account_user_id: accountId ? Number(accountId) : null },
-      credentials: 'include'
-    })
-    employees.value.splice(employees.value.findIndex((item) => item.id === updated.id), 1, updated)
-    accountLinkSelections[updated.id] = updated.account_user_id ? String(updated.account_user_id) : ''
-  } catch (cause) {
-    actionError.value = messageFromError(cause, 'Liaison du compte impossible.')
-    accountLinkSelections[employee.id] = employee.account_user_id ? String(employee.account_user_id) : ''
-  } finally {
-    workingEmployeeIds.value = workingEmployeeIds.value.filter((id) => id !== employee.id)
+    await navigator.clipboard.writeText(email)
+    toast.success('E-mail copié dans le presse-papier.')
+  } catch {
+    // fallback pour les navigateurs qui ne supportent pas clipboard API
+    const textarea = document.createElement('textarea')
+    textarea.value = email
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'absolute'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    toast.success('E-mail copié dans le presse-papier.')
   }
-}
-
-function toggleEmail(employeeId: number) {
-  revealedEmails.value = revealedEmails.value.includes(employeeId)
-    ? revealedEmails.value.filter((id) => id !== employeeId)
-    : [...revealedEmails.value, employeeId]
 }
 
 function formatArrivalDate(value: string | null) {
@@ -247,8 +258,15 @@ async function setEmployeeActive(employee: Agent) {
   }
 }
 
-async function deleteEmployee(employee: Agent) {
-  if (!window.confirm(`Supprimer définitivement ${employee.first_name} ${employee.last_name} ?`)) return
+function deleteEmployee(employee: Agent) {
+  if (workingEmployeeIds.value.includes(employee.id)) return
+  employeeToDelete.value = employee
+  deleteConfirmVisible.value = true
+}
+
+async function confirmDeleteEmployee() {
+  const employee = employeeToDelete.value
+  if (!employee) return
   if (workingEmployeeIds.value.includes(employee.id)) return
   actionError.value = ''
   workingEmployeeIds.value.push(employee.id)
@@ -260,6 +278,8 @@ async function deleteEmployee(employee: Agent) {
     actionError.value = messageFromError(cause, 'Suppression de l’employé impossible.')
   } finally {
     workingEmployeeIds.value = workingEmployeeIds.value.filter((id) => id !== employee.id)
+    employeeToDelete.value = null
+    deleteConfirmVisible.value = false
   }
 }
 
@@ -310,32 +330,18 @@ async function deleteEmployee(employee: Agent) {
         </div>
       </div>
 
-      <dialog
+      <ShareDialog
         v-if="canManageEmployees"
-        ref="employeeDialog"
-        class="hr-dialog"
-        aria-labelledby="hr-dialog-title"
-        @click.self="closeEmployeeDialog"
-        @keydown.esc.prevent="closeEmployeeDialog"
-        @cancel.prevent="closeEmployeeDialog"
-        @close="onEmployeeDialogClose"
+        v-model:visible="employeeDialogVisible"
+        :title="editingEmployeeId ? 'Modifier un employé' : 'Ajouter un employé'"
+        :error="employeeDialogError"
+        confirm-label="Enregistrer"
+        cancel-label="Annuler"
+        @confirm="saveEmployee"
+        @update:visible="onEmployeeDialogVisibleChange"
       >
-        <form class="hr-dialog__content" @submit.prevent="saveEmployee">
-          <header class="hr-dialog__header">
-            <div class="hr-dialog__icon"><Icon :name="editingEmployeeId ? 'lucide:user-round-pen' : 'lucide:user-round-plus'" size="19" /></div>
-            <div>
-              <p class="hr-eyebrow">BCES · ÉQUIPE</p>
-              <h2 id="hr-dialog-title">{{ editingEmployeeId ? 'Modifier un employé' : 'Ajouter un employé' }}</h2>
-              <p>Renseignez les informations de l’agent. Vous pourrez les modifier à tout moment.</p>
-            </div>
-            <button type="button" class="hr-dialog__close" aria-label="Fermer la fenêtre" :disabled="savingEmployee" @click="closeEmployeeDialog">
-              <Icon name="lucide:x" size="18" />
-            </button>
-          </header>
-          <div v-if="employeeDialogError" class="hr-error" role="alert">
-            <Icon name="lucide:circle-alert" size="17" /><span>{{ employeeDialogError }}</span>
-          </div>
-          <div class="hr-fields">
+        <template #content>
+        <div class="hr-fields hr-fields--dialog">
             <label>
               <span>Prénom <i>*</i></span>
               <input v-model="employeeForm.first_name" required maxlength="64" autocomplete="given-name">
@@ -352,13 +358,9 @@ async function deleteEmployee(employee: Agent) {
               <span>E-mail</span>
               <input v-model="employeeForm.email" type="email" maxlength="254" autocomplete="email">
             </label>
-            <label>
+          <label>
               <span>Date d’arrivée</span>
               <input v-model="employeeForm.arrival_date" type="date">
-            </label>
-            <label>
-              <span>Compétences</span>
-              <input v-model="employeeForm.competencies" placeholder="Ex. 🚑, 🩺, 🚒">
             </label>
             <label class="hr-fields__wide">
               <span>Grade</span>
@@ -369,71 +371,62 @@ async function deleteEmployee(employee: Agent) {
                 </option>
               </select>
             </label>
+            <label v-if="canLinkAccounts && editingEmployeeId" class="hr-fields__wide" style="grid-column: 1 / -1;">
+              <span>Compte associé</span>
+              <select v-model="employeeForm.account_id">
+                <option value="">Aucun compte lié</option>
+                <option v-for="account in accountOptions" :key="account.id" :value="String(account.id)">
+                  {{ account.name }} · {{ account.discord_username }}
+                </option>
+              </select>
+            </label>
           </div>
-          <footer class="hr-dialog__footer">
-            <button class="hr-quiet" type="button" :disabled="savingEmployee" @click="closeEmployeeDialog">Annuler</button>
-            <button class="hr-primary" type="submit" :disabled="savingEmployee || !employeeForm.first_name.trim()">
-              <Icon :name="savingEmployee ? 'lucide:loader-circle' : 'lucide:check'" size="16" :class="{ 'hr-spin': savingEmployee }" />
-              {{ savingEmployee ? 'Enregistrement…' : editingEmployeeId ? 'Enregistrer les modifications' : 'Créer l’employé' }}
-            </button>
-          </footer>
-        </form>
-      </dialog>
+        </template>
+      </ShareDialog>
 
       <div class="hr-list__toolbar">
         <span>{{ visibleEmployees.length }} résultat{{ visibleEmployees.length > 1 ? 's' : '' }} sur {{ employees.length }}</span>
         <label><input v-model="showInactive" type="checkbox"> Afficher les inactifs</label>
       </div>
       <div v-if="visibleEmployees.length" class="hr-list">
-        <article v-for="employee in visibleEmployees" :key="employee.id" class="hr-employee" :class="{ 'is-inactive': !employee.is_active }">
+        <article v-for="employee in visibleEmployees" :key="employee.id" class="hr-employee" :class="{ 'is-inactive': !employee.is_active }" :style="employee.grade_color ? { '--hr-grade-color': employee.grade_color } : undefined">
           <div class="hr-employee__avatar"><Icon name="lucide:user-round" size="19" /></div>
           <div class="hr-employee__main">
             <div class="hr-employee__name">
               <h3>{{ employee.first_name }} {{ employee.last_name }}</h3>
               <span class="hr-status" :class="{ 'is-inactive': !employee.is_active }">{{ employee.is_active ? 'Actif' : 'Inactif' }}</span>
             </div>
-            <p class="hr-employee__meta">
-              <span>{{ employee.phone || 'Pas de téléphone' }}</span>
-              <span>{{ formatArrivalDate(employee.arrival_date) }}</span>
-              <span v-if="employee.email" class="hr-email">
-                {{ revealedEmails.includes(employee.id) ? employee.email : '••••••••••••' }}
-                <button
-                  type="button"
-                  :aria-label="revealedEmails.includes(employee.id) ? 'Masquer l’e-mail' : 'Afficher l’e-mail'"
-                  :title="revealedEmails.includes(employee.id) ? 'Masquer l’e-mail' : 'Afficher l’e-mail'"
-                  @click="toggleEmail(employee.id)"
-                >
-                  <Icon :name="revealedEmails.includes(employee.id) ? 'lucide:eye-off' : 'lucide:eye'" size="13" />
-                </button>
+            <div class="hr-employee__meta">
+              <span class="hr-meta-item">
+                <Icon name="lucide:phone" size="11" />
+                {{ employee.phone || 'Pas de téléphone' }}
               </span>
-              <span v-else>Aucun e-mail</span>
-              <span>{{ employee.account_username ? `Compte : ${employee.account_username}` : 'Sans compte lié' }}</span>
-              <span class="hr-grade" :style="employee.grade_color ? { '--hr-grade-color': employee.grade_color } : undefined">
-                <i v-if="employee.grade_color" aria-hidden="true"></i>
-                {{ employee.grade_name ? `${employee.grade_name} · niveau ${employee.grade_level}` : 'Aucun grade' }}
+              <span v-if="employee.email" class="hr-meta-item hr-meta-item--email">
+                <Icon name="lucide:mail" size="11" />
+                <span class="hr-email-blur" :class="{ 'hr-email-revealed': revealedEmails.includes(employee.id) }"
+                  @mouseenter="revealedEmails.value = (revealedEmails.value || []).includes(employee.id) ? (revealedEmails.value || []) : [...(revealedEmails.value || []), employee.id]"
+                  @mouseleave="revealedEmails.value = (revealedEmails.value || []).filter((id) => id !== employee.id)"
+                  @click="copyEmail(employee.email)"
+                  style="cursor: pointer;">
+                  {{ employee.email }}
+                </span>
               </span>
-            </p>
-            <div v-if="employee.competencies.length" class="hr-tags">
-              <span v-for="skill in employee.competencies" :key="skill">{{ skill }}</span>
-            </div>
-            <div v-if="canLinkAccounts" class="hr-account-link">
-              <label>
-                <span>Compte associé</span>
-                <select v-model="accountLinkSelections[employee.id]">
-                  <option value="">Aucun compte lié</option>
-                  <option v-for="account in accountOptions" :key="account.id" :value="String(account.id)">
-                    {{ account.name }} · {{ account.discord_username }}
-                  </option>
-                </select>
-              </label>
-              <button
-                type="button"
-                class="hr-quiet"
-                :disabled="workingEmployeeIds.includes(employee.id) || (accountLinkSelections[employee.id] ?? '') === (employee.account_user_id ? String(employee.account_user_id) : '')"
-                @click="saveEmployeeAccountLink(employee)"
-              >
-                {{ workingEmployeeIds.includes(employee.id) ? 'Enregistrement…' : employee.account_user_id ? 'Enregistrer' : 'Lier le compte' }}
-              </button>
+              <span v-else class="hr-meta-item">
+                <Icon name="lucide:mail" size="11" />
+                Aucun e-mail
+              </span>
+              <span v-if="employee.grade_name" class="hr-meta-item hr-meta-item--grade">
+                <Icon name="lucide:award" size="11" />
+                {{ employee.grade_name }}
+              </span>
+              <span class="hr-meta-item">
+                <Icon name="lucide:calendar" size="11" />
+                {{ formatArrivalDate(employee.arrival_date) }}
+              </span>
+              <span class="hr-meta-item">
+                <Icon name="lucide:user-check" size="11" />
+                {{ employee.account_username ? `Compte : ${employee.account_username}` : 'Sans compte lié' }}
+              </span>
             </div>
           </div>
           <div v-if="canManageEmployees" class="hr-employee__actions">
@@ -455,6 +448,16 @@ async function deleteEmployee(employee: Agent) {
         <button v-if="search" type="button" class="hr-quiet" @click="search = ''">Effacer la recherche</button>
       </div>
     </section>
+
+    <ConfirmDialog
+      v-model:visible="deleteConfirmVisible"
+      title="Supprimer l’employé"
+      :message="`Supprimer définitivement ${employeeToDelete?.first_name} ${employeeToDelete?.last_name} ?`"
+      confirm-label="Supprimer"
+      cancel-label="Annuler"
+      danger
+      @confirm="confirmDeleteEmployee"
+    />
 
   </main>
 </template>
@@ -483,13 +486,11 @@ async function deleteEmployee(employee: Agent) {
 .hr-form { margin-bottom: 16px; padding: 16px; border: 1px solid var(--dp-line); background: var(--dp-panel-2); }
 .hr-form__title { margin-bottom: 12px; }
 .hr-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 12px; }
-.hr-fields > label, .hr-role-create__name, .hr-role__top > label { display: grid; gap: 6px; color: var(--dp-text-2); font-size: 10px; font-weight: 650; }
+.hr-fields--dialog { grid-template-columns: 1fr 1fr; }
+.hr-fields > label, .hr-fields--dialog > label, .hr-role-create__name, .hr-role__top > label { display: grid; gap: 6px; color: var(--dp-text-2); font-size: 10px; font-weight: 650; }
 .hr-fields label i { color: var(--dp-danger); font-style: normal; }
 .hr-fields small { color: var(--dp-text-dim); font-weight: 400; }
-.hr-account-link { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 8px; }
-.hr-account-link label { display: grid; gap: 5px; width: min(390px, 100%); color: var(--dp-text-2); font-size: 10px; font-weight: 650; }
-.hr-account-link select { min-height: 36px; border: 1px solid var(--dp-line); border-radius: 9px; padding: 0 9px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
-.hr-account-link .hr-quiet:disabled { cursor: not-allowed; opacity: .5; }
+
 .hr-primary, .hr-quiet, .hr-danger { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
 .hr-primary { color: #0c1710; background: var(--dp-accent); }
 .hr-primary:disabled { cursor: not-allowed; opacity: .5; }
@@ -497,8 +498,8 @@ async function deleteEmployee(employee: Agent) {
 .hr-danger { color: var(--dp-danger); background: var(--dp-danger-soft); }
 .hr-list__toolbar { margin: 22px 0 12px; color: var(--dp-text-dim); font-size: 11px; }
 .hr-list__toolbar label, .hr-role-create fieldset label, .hr-role fieldset label, .hr-user__admin { display: inline-flex; align-items: center; gap: 6px; color: var(--dp-text-2); font-size: 10px; font-weight: 500; }
-.hr-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 13px; }
-.hr-employee { display: flex; align-items: flex-start; gap: 13px; min-width: 0; padding: 16px; border: 1px solid var(--dp-line); border-radius: 15px; background: var(--dp-panel-2); }
+.hr-list { display: flex; flex-direction: column; gap: 8px; }
+.hr-employee { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); border-left: 4px solid var(--hr-grade-color, transparent); }
 .hr-employee.is-inactive { opacity: .68; }
 .hr-employee__avatar { display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; border: 1px solid var(--dp-accent-line); border-radius: 13px; color: var(--dp-accent); background: var(--dp-accent-soft); }
 .hr-employee__main { flex: 1; min-width: 0; }
@@ -506,11 +507,15 @@ async function deleteEmployee(employee: Agent) {
 .hr-employee__name h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hr-status { padding: 3px 7px; border-radius: 10px; color: var(--dp-accent); background: var(--dp-accent-soft); font-size: 9px; }
 .hr-status.is-inactive { color: var(--dp-text-2); background: var(--dp-panel-3); }
-.hr-employee__meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 8px 0; color: var(--dp-text-2); font-size: 11px; line-height: 1.5; }
+.hr-employee__meta { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 8px 0 0; color: var(--dp-text-2); font-size: 11px; line-height: 1.4; }
+.hr-employee__meta > span { display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr-employee__meta > span:not(:last-child)::after { content: '•'; color: var(--dp-line); margin-left: 4px; font-size: 9px; }
+.hr-employee__grade-name { color: var(--dp-text); font-weight: 700; }
+.hr-email-blur { color: var(--dp-text-2); filter: blur(3px); transition: filter .15s ease; cursor: pointer; user-select: none; }
+.hr-email-blur:hover { filter: none; }
+.hr-email-blur.hr-email-revealed { filter: none; }
 .hr-email { display: inline-flex; align-items: center; gap: 4px; }.hr-email button { display: inline-grid; width: 20px; height: 20px; place-items: center; color: var(--dp-text-2); }.hr-email button:hover { color: var(--dp-accent); }
-.hr-grade { display: inline-flex; align-items: center; gap: 5px; }.hr-grade i { width: 7px; height: 7px; border-radius: 50%; background: var(--hr-grade-color); }
-.hr-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.hr-tags span { padding: 4px 9px; border: 1px solid var(--dp-line); border-radius: 999px; color: var(--dp-text-2); background: rgba(255,255,255,.025); font-size: 10px; }
+.hr-grade { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
 .hr-employee__actions { flex: 0 0 auto; justify-content: flex-end; gap: 5px; }
 .hr-employee__actions button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid transparent; border-radius: 9px; color: var(--dp-text-dim); }
 .hr-employee__actions button:hover { color: var(--dp-accent); background: var(--dp-accent-soft); }
@@ -547,7 +552,7 @@ async function deleteEmployee(employee: Agent) {
 .hr-section { border-color: var(--dp-line); background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 55%), var(--dp-panel); }
 .hr-form { border-color: var(--dp-accent-line); }
 .hr-employee { transition: border-color .16s ease, background .16s ease; }
-.hr-employee:hover { border-color: var(--dp-line-strong); background: #1b2228; }
+.hr-employee:hover { border-color: var(--dp-line-strong); background: #1b2228; border-left-color: var(--hr-grade-color, transparent); }
 .hr-fields input:focus-visible, .hr-fields select:focus-visible, .hr-account-link select:focus-visible, .hr-role input:focus-visible, .hr-user select:focus-visible, .hr-filter:focus-within { outline: 2px solid rgba(70, 153, 109, .24); outline-offset: 1px; }
 .hr-primary:hover:not(:disabled) { filter: brightness(1.08); }
 .hr-quiet:hover:not(:disabled) { color: var(--dp-text); border-color: var(--dp-line-strong); background: var(--dp-panel-3); }
