@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
-
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Agenda • BCES' })
 
@@ -15,7 +13,7 @@ type EventItem = {
 }
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const { data: currentUser } = await useAsyncDataWithLoading('agenda-current-user', async () => {
+const { data: currentUser } = await useAsyncData('agenda-current-user', async () => {
   try {
     return await $fetch<{
       is_super_admin: boolean

@@ -4,7 +4,6 @@ import type { Ref } from 'vue'
 import { STATUS_KINDS } from '~/utils/statuses'
 import type { InterventionStatusKind } from '~/utils/statuses'
 import type { AffiliationGroup } from '~/utils/groups'
-import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Administration • BCES' })
@@ -129,34 +128,34 @@ const [
   { data: initialStatuses }
 ] =
   await Promise.all([
-    useAsyncDataWithLoading('admin-users', () =>
+    useAsyncData('admin-users', () =>
       $fetch<AppUser[]>('/api/admin/users', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-roles', () =>
+    useAsyncData('admin-roles', () =>
       $fetch<AppRole[]>('/api/admin/roles', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-permissions', () =>
+    useAsyncData('admin-permissions', () =>
       $fetch<AppPermission[]>('/api/admin/permissions', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-registrations', () =>
+    useAsyncData('admin-registrations', () =>
       $fetch<{ users: Registration[]; count: number }>('/api/auth/pending', {
         credentials: 'include',
         headers: requestHeaders
       })
     ),
-    useAsyncDataWithLoading('admin-settings', () =>
+    useAsyncData('admin-settings', () =>
       $fetch<AppSettings>('/api/admin/settings', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-vehicles', () =>
+    useAsyncData('admin-vehicles', () =>
       $fetch<FleetVehicle[]>('/api/admin/vehicles', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-parking-spots', () =>
+    useAsyncData('admin-parking-spots', () =>
       $fetch<ParkingSpot[]>('/api/admin/parking-spots', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-groups', () =>
+    useAsyncData('admin-groups', () =>
       $fetch<AffiliationGroup[]>('/api/admin/groups', { credentials: 'include', headers: requestHeaders })
     ),
-    useAsyncDataWithLoading('admin-intervention-statuses', () =>
+    useAsyncData('admin-intervention-statuses', () =>
       $fetch<AdminInterventionStatus[]>('/api/admin/intervention-statuses', { credentials: 'include', headers: requestHeaders })
     )
   ])

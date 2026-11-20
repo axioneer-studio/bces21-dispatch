@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
-
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Direction • BCES' })
 
@@ -53,19 +51,19 @@ const FREQUENCY_FIELDS: { field: FrequencyField; label: string }[] = [
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 const [{ data: initialGrades }, { data: permissionOptions }, { data: initialRadios }, { data: initialFrequencies }] = await Promise.all([
-  useAsyncDataWithLoading('direction-grades', () =>
+  useAsyncData('direction-grades', () =>
     $fetch<Grade[]>('/api/direction/grades', { credentials: 'include', headers: requestHeaders })
   ),
-  useAsyncDataWithLoading('direction-grade-permissions', () =>
+  useAsyncData('direction-grade-permissions', () =>
     $fetch<GradePermission[]>('/api/direction/permissions', {
       credentials: 'include',
       headers: requestHeaders
     })
   ),
-  useAsyncDataWithLoading('direction-radios', () =>
+  useAsyncData('direction-radios', () =>
     $fetch<DirectionRadio[]>('/api/direction/radios', { credentials: 'include', headers: requestHeaders })
   ),
-  useAsyncDataWithLoading('direction-frequencies', () =>
+  useAsyncData('direction-frequencies', () =>
     $fetch<FrequencySetting[]>('/api/direction/frequencies', { credentials: 'include', headers: requestHeaders })
   )
 ])

@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
-
 useHead({ title: 'Activation de compte • BCES' })
 
 const config = useRuntimeConfig()
@@ -26,7 +24,7 @@ const deadlineParam = computed<string | null>(() => {
   return typeof value === 'string' ? value : null
 })
 
-const { data: meData } = await useAsyncDataWithLoading<Me | null>('me-profile', async () => {
+const { data: meData } = await useAsyncData<Me | null>('me-profile', async () => {
   try {
     const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
     return await $fetch<Me>('/api/me', {

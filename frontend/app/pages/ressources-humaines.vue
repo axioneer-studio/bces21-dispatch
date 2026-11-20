@@ -4,7 +4,6 @@ import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import ShareDialog from '~/components/ShareDialog.vue'
 import { useAppToast } from '~/composables/useAppToast'
-import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
 
 definePageMeta({ layout: 'dispatch' })
 useHead({ title: 'Ressources humaines • BCES' })
@@ -29,7 +28,7 @@ interface CurrentUser {
 }
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const { data: currentUser } = await useAsyncDataWithLoading('hr-current-user', () =>
+const { data: currentUser } = await useAsyncData('hr-current-user', () =>
   $fetch<CurrentUser>('/api/me', {
     credentials: 'include',
     headers: requestHeaders
@@ -44,20 +43,20 @@ const canLinkAccounts = computed(() =>
   currentUser.value?.app_permissions.includes('human_resources.link_accounts')
 )
 const [{ data: initialEmployees }, { data: initialGrades }] = await Promise.all([
-  useAsyncDataWithLoading('hr-employees', () =>
+  useAsyncData('hr-employees', () =>
     $fetch<Agent[]>('/api/employees', {
       credentials: 'include',
       headers: requestHeaders
     })
   ),
-  useAsyncDataWithLoading('hr-grades', () =>
+  useAsyncData('hr-grades', () =>
     $fetch<GradeOption[]>('/api/employee-grades', {
       credentials: 'include',
       headers: requestHeaders
     })
   )
 ])
-const { data: accounts } = await useAsyncDataWithLoading('hr-accounts', () =>
+const { data: accounts } = await useAsyncData('hr-accounts', () =>
   canLinkAccounts.value
     ? $fetch<AccountOption[]>('/api/employee-accounts', {
         credentials: 'include',

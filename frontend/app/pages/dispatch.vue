@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { assignUser, createFleetEntry, createSlot, fetchSnapshot, saveDispatchNote, unassignUser } from '~/composables/useDispatchApi'
-import { useAsyncDataWithLoading } from '~/composables/useAsyncDataWithLoading'
 import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 
@@ -12,7 +11,7 @@ interface DispatchUser {
   grade_permissions: string[]
 }
 
-const { data: meData } = await useAsyncDataWithLoading<DispatchUser | null>('me-dispatch', async () => {
+const { data: meData, pending: mePending } = await useAsyncData<DispatchUser | null>('me-dispatch', async () => {
   try {
     const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
     return await $fetch<DispatchUser>('/api/me', { credentials: 'include', headers })
@@ -21,11 +20,11 @@ const { data: meData } = await useAsyncDataWithLoading<DispatchUser | null>('me-
   }
 })
 
-if (!meData.value) {
+if (!mePending && !meData.value) {
   await navigateTo('/')
 }
 
-const { data: agentsData } = await useAsyncDataWithLoading<Agent[]>('dispatch-employees', async () => {
+const { data: agentsData, pending: agentsPending } = await useAsyncData<Agent[]>('dispatch-employees', async () => {
   try {
     const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
     return await $fetch<Agent[]>('/api/employees', {
@@ -70,7 +69,7 @@ const savingNote = ref(false)
 const editingNote = ref(false)
 const noteEditor = ref<HTMLTextAreaElement | null>(null)
 
-const { data: initialSnapshot } = await useAsyncDataWithLoading('dispatch-snapshot-initial', async () => {
+const { data: initialSnapshot, pending: snapshotPending } = await useAsyncData('dispatch-snapshot-initial', async () => {
   try {
     return await fetchSnapshot()
   } catch {

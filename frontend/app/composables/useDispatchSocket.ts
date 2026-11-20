@@ -17,17 +17,22 @@ export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void
   /**bloque toute reconnexion après un refus d'authentification. */
   let authBlocked = false
 
-  /** Le backend expose le WebSocket hors du préfixe REST `/api`.
-   *  Connexion directe au backend (apiBase) : le proxy Nitro ne remonte pas
-   *  l'upgrade WebSocket en mode dev. Le cookie de session est envoyé car
-   *  il est posé avec Domain=localhost sur localhost (voir callback.ts).
+  /** Le WebSocket se connecte directement au backend (apiBase) en dev car le
+   *  proxy Nitro ne remonte pas l'upgrade WebSocket. En prod, l'origine de la
+   *  page est utilisée (même hôte, le cookie est envoyé automatiquement).
+   *  Le cookie bces_session est posé avec Domain=localhost sur localhost, donc
+   *  il est envoyé aussi au backend (localhost:8000) depuis le frontend (localhost:3000).
    */
   function buildUrl(): string {
     if (typeof window === 'undefined') return ''
-    const apiUrl = new URL(
-      String(config.public.apiBase || window.location.origin),
-      window.location.origin
-    )
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '::1'
+    const target = isLocalhost
+      ? String(config.public.apiBase || 'http://localhost:8000')
+      : window.location.origin
+    const apiUrl = new URL(target)
     apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
     apiUrl.pathname = '/ws/dispatch'
     apiUrl.search = ''
