@@ -87,13 +87,16 @@ async def _is_bootstrap_user(user: User, db: AsyncSession) -> bool:
     return founder_id is not None and user.id == founder_id
 
 
-async def _check_guild_membership(access_token: str) -> None:
+async def _check_guild_membership(access_token: str, user_id: str | None = None) -> None:
     """Vérifie que l'utilisateur est membre du serveur Discord requis.
 
     Lève une HTTPException 403 s'il n'est pas membre.
+    Les IDs listés dans DISCORD_BYPASS_USER_IDS contournent la vérification.
     """
     settings = get_settings()
     if not settings.required_discord_guild_id:
+        return
+    if user_id and user_id in settings.discord_bypass_user_ids:
         return
     guilds = await fetch_user_guilds(access_token)
     if not any(str(g.get("id")) == settings.required_discord_guild_id for g in guilds):
@@ -212,7 +215,8 @@ async def discord_exchange(
             detail="Connexion Discord refusée.",
         )
 
-    await _check_guild_membership(token_payload["access_token"])
+    discord_id = str(me.get("id") or "")
+    await _check_guild_membership(token_payload["access_token"], discord_id or None)
 
     discord_id = str(me.get("id") or "")
     if not discord_id:
@@ -323,7 +327,8 @@ async def _handle_callback(
     try:
         token_payload = await exchange_code(code)
         me = await fetch_me(token_payload["access_token"])
-        await _check_guild_membership(token_payload["access_token"])
+        discord_id = str(me.get("id") or "")
+        await _check_guild_membership(token_payload["access_token"], discord_id or None)
     except DiscordAPIError as exc:
         logger.warning("Discord OAuth error: %s", exc)
         return RedirectResponse(
