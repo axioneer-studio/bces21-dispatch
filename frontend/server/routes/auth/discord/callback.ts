@@ -48,15 +48,18 @@ export default defineEventHandler(async (event) => {
 
   // Pose le cookie de session et redirige dans une seule réponse HTTP.
   // Sur localhost (dev), Domain=localhost permet au cookie d'être envoyé
-  // aussi au backend (localhost:8000) depuis le frontend (localhost:3000),
-  // notamment pour le WebSocket qui se connecte directement au backend.
-  // En production, pas de Domain : le cookie est scopé au domaine courant.
+  // aussi au backend (localhost:8000) depuis le frontend (localhost:3000).
+  // En production, Domain=.axioneer.com permet au cookie d'être envoyé
+  // aussi au backend API (api.bces.axioneer.com) depuis le frontend
+  // (bces.axioneer.com), notamment pour le WebSocket.
   const host = event.node.req.headers.host || ''
   const isLocalhost =
     host.startsWith('localhost') ||
     host.startsWith('127.0.0.1') ||
     host.startsWith('::1')
-  const domainAttr = isLocalhost ? '; Domain=localhost' : ''
+  const domainAttr = isLocalhost
+    ? '; Domain=localhost'
+    : '; Domain=.axioneer.com'
   if (data?.token) {
     event.node.res.writeHead(302, {
       'Location': redirectUrl,

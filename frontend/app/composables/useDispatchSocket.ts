@@ -17,22 +17,17 @@ export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void
   /**bloque toute reconnexion après un refus d'authentification. */
   let authBlocked = false
 
-  /** Le WebSocket se connecte directement au backend (apiBase) en dev car le
-   *  proxy Nitro ne remonte pas l'upgrade WebSocket. En prod, l'origine de la
-   *  page est utilisée (même hôte, le cookie est envoyé automatiquement).
-   *  Le cookie bces_session est posé avec Domain=localhost sur localhost, donc
-   *  il est envoyé aussi au backend (localhost:8000) depuis le frontend (localhost:3000).
+  /** Le WebSocket se connecte directement au backend (apiBase) :
+   *  - En dev : le proxy Nitro ne remonte pas l'upgrade WebSocket.
+   *  - En prod : le backend est sur un hôte différent (api.bces.axioneer.com),
+   *    le cookie est partagé via Domain=.axioneer.com (voir callback.ts).
    */
   function buildUrl(): string {
     if (typeof window === 'undefined') return ''
-    const isLocalhost =
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname === '::1'
-    const target = isLocalhost
-      ? String(config.public.apiBase || 'http://localhost:8000')
-      : window.location.origin
-    const apiUrl = new URL(target)
+    const apiUrl = new URL(
+      String(config.public.apiBase || window.location.origin),
+      window.location.origin
+    )
     apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
     apiUrl.pathname = '/ws/dispatch'
     apiUrl.search = ''
