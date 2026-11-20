@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     discord_redirect_uri: str = "http://localhost:8000/api/auth/discord/callback"
     discord_scopes: str = "identify"
     required_discord_guild_id: str = ""
+    discord_bypass_user_ids: str = ""
 
     session_secret: str = "change-me-in-production"
     session_cookie_name: str = "bces_session"
@@ -64,6 +65,10 @@ class Settings(BaseSettings):
     @property
     def discord_scope_list(self) -> list[str]:
         return [scope.strip() for scope in self.discord_scopes.split(",") if scope.strip()]
+
+    @property
+    def discord_bypass_user_ids(self) -> list[str]:
+        return [uid.strip() for uid in self.discord_bypass_user_ids.split(",") if uid.strip()]
 
 
 @lru_cache
