@@ -1,69 +1,72 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
-import tailwindcss from '@tailwindcss/vite'
+import tailwindcss from "@tailwindcss/vite";
 
-const publicApiBase = process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000'
+const publicApiBase =
+  process.env.NUXT_PUBLIC_API_BASE || "http://localhost:8000";
 const apiProxyBase = (
-  process.env.API_INTERNAL_BASE
-  || process.env.NUXT_PUBLIC_API_BASE
-  || 'http://localhost:8000'
-).replace(/\/$/, '')
+  process.env.API_INTERNAL_BASE ||
+  process.env.NUXT_PUBLIC_API_BASE ||
+  "http://localhost:8000"
+).replace(/\/$/, "");
 
 export default defineNuxtConfig({
-  compatibilityDate: '2025-07-15',
+  compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
 
-  modules: [
-    '@nuxt/ui',
-    '@nuxt/icon',
-    '@pinia/nuxt',
-    '@vueuse/nuxt'
-  ],
+  modules: ["@nuxt/ui", "@nuxt/icon", "@pinia/nuxt", "@vueuse/nuxt"],
 
   icon: {
-    localApiEndpoint: '/_nuxt_icon'
+    localApiEndpoint: "/_nuxt_icon",
   },
 
-  css: ['~/assets/css/main.css', '~/assets/css/dispatch.css'],
+  css: ["~/assets/css/main.css", "~/assets/css/dispatch.css"],
 
   vite: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
   },
 
   app: {
     head: {
-      title: 'BCES Dispatch',
-      htmlAttrs: { lang: 'fr', class: 'dark' },
-      bodyAttrs: { class: 'dark-body' },
+      title: "BCES Dispatch",
+      htmlAttrs: { lang: "fr", class: "dark" },
+      bodyAttrs: { class: "dark-body" },
       meta: [
-        { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'color-scheme', content: 'dark' },
-        { name: 'theme-color', content: '#21252b' }
+        { charset: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { name: "color-scheme", content: "dark" },
+        { name: "theme-color", content: "#21252b" },
       ],
       link: [
-        { rel: 'icon', type: 'image/png', href: 'https://s3.axioneer.com/bces21-dispatch/images/favicon.png' }
-      ]
-    }
+        {
+          rel: "icon",
+          type: "image/png",
+          href: "https://s3.axioneer.com/bces21-dispatch/images/favicon.png",
+        },
+      ],
+    },
   },
 
   ui: {
-    colorMode: false
+    colorMode: false,
   },
-
+  devServer: {
+    host: "localhost",
+  },
   nitro: {
     compressPublicAssets: true,
     routeRules: {
-      '/api/**': {
-        proxy: apiProxyBase + '/api/**'
-      }
-    }
+      "/api/**": {
+        proxy: apiProxyBase + "/api/**",
+      },
+    },
   },
 
   runtimeConfig: {
     public: {
       apiBase: publicApiBase,
-      discordAuthUrl: process.env.NUXT_PUBLIC_DISCORD_AUTH_URL || '/api/auth/discord/start',
-      timezone: process.env.NUXT_PUBLIC_TIMEZONE || 'Europe/Paris'
-    }
-  }
-})
+      discordAuthUrl:
+        process.env.NUXT_PUBLIC_DISCORD_AUTH_URL || "/api/auth/discord/url",
+      timezone: process.env.NUXT_PUBLIC_TIMEZONE || "Europe/Paris",
+    },
+  },
+});

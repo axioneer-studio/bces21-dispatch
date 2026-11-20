@@ -458,13 +458,13 @@ d'environnement.
 | Variable | Défaut | Description |
 |---|---|---|
 | `NUXT_PUBLIC_API_BASE` | `http://localhost:8000` | Base de l'API backend |
-| `NUXT_PUBLIC_DISCORD_AUTH_URL` | `/api/auth/discord/start` | Endpoint d'initiation OAuth |
+| `NUXT_PUBLIC_DISCORD_AUTH_URL` | `/api/auth/discord/url` | Endpoint d'initiation OAuth |
 | `NUXT_PUBLIC_TIMEZONE` | `Europe/Paris` | Fuseau de repli si le navigateur n'en expose pas |
 
 ```bash
 # frontend/.env
 NUXT_PUBLIC_API_BASE=http://localhost:8000
-NUXT_PUBLIC_DISCORD_AUTH_URL=/api/auth/discord/start
+NUXT_PUBLIC_DISCORD_AUTH_URL=/api/auth/discord/url
 NUXT_PUBLIC_TIMEZONE=Europe/Paris
 ```
 
@@ -479,8 +479,9 @@ NUXT_PUBLIC_TIMEZONE=Europe/Paris
 
 ### Déroulé
 
-1. `GET /api/auth/discord/start` → génération d'un `state` (TTL 10 min, en
-   mémoire) et redirection vers Discord.
+1. `GET /api/auth/discord/url` → génération d'un `state` (TTL 10 min, en
+   mémoire) et retour de l'URL d'autorisation Discord ; le frontend redirige
+   ensuite le navigateur vers Discord (il ne transite plus par `localhost:8000`).
 2. `GET /api/auth/discord/callback` → échange du `code`, récupération du profil
    Discord, création ou mise à jour de l'utilisateur, pose du cookie de session.
 3. Redirection selon l'état du compte :
@@ -511,7 +512,7 @@ vérifient en plus la page cochée dans le rôle.
 | `GET` | `/` | Nom et version de l'API |
 | `GET` | `/health` | Santé (`status`, `version`, `timezone`) |
 | `GET` | `/api/me` | Utilisateur courant |
-| `GET` | `/api/auth/discord/start` | Initie le flux OAuth Discord |
+| `GET` | `/api/auth/discord/url` | Initie le flux OAuth Discord (retourne l'URL d'autorisation) |
 | `GET` | `/api/auth/discord/callback` | Callback OAuth (échange du code, pose de la session) |
 | `POST` | `/api/auth/profile` | Enregistre prénom RP / nom RP / téléphone |
 | `POST` | `/api/auth/logout` | Détruit la session |
