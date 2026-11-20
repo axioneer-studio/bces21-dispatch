@@ -50,6 +50,9 @@ export default defineNuxtConfig({
     colorMode: false
   },
 
+  devServer: {
+    host: 'localhost'
+  },
   nitro: {
     compressPublicAssets: true,
     routeRules: {
