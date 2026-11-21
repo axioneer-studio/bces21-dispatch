@@ -5,7 +5,10 @@ const MAX_BACKOFF_MS = 30_000
 /** Codes 1008 (policy) et 4401 → refus d'auth : ne pas réessayer en boucle. */
 const AUTH_CLOSE_CODES = new Set([1008, 4401, 4403])
 
-export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void>) => {
+export const useDispatchSocket = (
+  onEmployeesChanged?: () => void | Promise<void>,
+  token?: string
+) => {
   const { applySnapshot, applyResetSnapshot, setConnected } = useDispatchStore()
   const config = useRuntimeConfig()
 
@@ -21,8 +24,10 @@ export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void
    *  - En dev : le proxy Nitro ne remonte pas l'upgrade WebSocket.
    *  - En prod : le backend est sur un hôte différent (api.bces.axioneer.com),
    *    le cookie est partagé via Domain=.axioneer.com (voir callback.ts).
+   *  Le token passé en paramètre est ajouté à l'URL pour l'authentification
+   *  WebSocket cross-origin (fallback si le cookie n'est pas envoyé).
    */
-  function buildUrl(): string {
+  function buildUrl(tokenParam?: string): string {
     if (typeof window === 'undefined') return ''
     const apiUrl = new URL(
       String(config.public.apiBase || window.location.origin),
@@ -30,7 +35,11 @@ export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void
     )
     apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
     apiUrl.pathname = '/ws/dispatch'
-    apiUrl.search = ''
+    const params = new URLSearchParams(apiUrl.search)
+    if (tokenParam) {
+      params.set('token', tokenParam)
+    }
+    apiUrl.search = params.toString()
     apiUrl.hash = ''
     return apiUrl.toString()
   }
@@ -64,7 +73,7 @@ export const useDispatchSocket = (onEmployeesChanged?: () => void | Promise<void
     }
 
     try {
-      socket = new WebSocket(buildUrl())
+      socket = new WebSocket(buildUrl(token))
     } catch {
       scheduleReconnect()
       return

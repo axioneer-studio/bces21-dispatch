@@ -1,6 +1,6 @@
 ﻿"""Routes Dispatch (couche transport mince)."""
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.session import decode_token, get_session_cookie_name
@@ -31,8 +31,18 @@ router = APIRouter(tags=["dispatch"])
 
 
 @router.websocket("/ws/dispatch")
-async def dispatch_ws(ws: WebSocket) -> None:
-    raw_cookie = ws.cookies.get(get_session_cookie_name())
+async def dispatch_ws(
+    ws: WebSocket,
+    token: str | None = Query(default=None),
+) -> None:
+    # 1. Essayer le token passé en paramètre de requête (cross-origin fiable)
+    raw_cookie = None
+    if token:
+        raw_cookie = token
+    else:
+        # 2. Fallback : cookie de session (même origine uniquement)
+        raw_cookie = ws.cookies.get(get_session_cookie_name())
+
     if not raw_cookie:
         await ws.close(code=1008, reason="Non authentifié")
         return

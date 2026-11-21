@@ -67,8 +67,13 @@ export default defineEventHandler(async (event) => {
     ? '; Domain=localhost'
     : '; Domain=.axioneer.com'
   if (data?.token) {
+    // Transmet aussi le token en paramètre d'URL pour que le frontend
+    // puisse l'utiliser pour l'authentification WebSocket (cross-origin).
+    const redirectWithToken = `${redirectUrl}${
+      redirectUrl.includes('?') ? '&' : '?'
+    }token=${encodeURIComponent(data.token)}`
     event.node.res.writeHead(302, {
-      'Location': redirectUrl,
+      'Location': redirectWithToken,
       'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=${sameSite}${secure}${domainAttr}; Max-Age=${
         14 * 24 * 60 * 60
       }`,
