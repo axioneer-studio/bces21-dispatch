@@ -52,20 +52,26 @@ export default defineEventHandler(async (event) => {
   // En production, Domain=.axioneer.com permet au cookie d'être envoyé
   // aussi au backend API (api.bces.axioneer.com) depuis le frontend
   // (bces.axioneer.com), notamment pour le WebSocket.
+  // SameSite=None + Secure est requis en HTTPS pour que le cookie soit
+  // envoyé sur les connexions cross-site (WebSocket vers api.bces.axioneer.com).
   const host = event.node.req.headers.host || ''
   const isLocalhost =
     host.startsWith('localhost') ||
     host.startsWith('127.0.0.1') ||
     host.startsWith('::1')
+  const isHttps =
+    event.node.req.headers['x-forwarded-proto'] === 'https'
+  const sameSite = isHttps ? 'None' : 'Lax'
+  const secure = isHttps ? '; Secure' : ''
   const domainAttr = isLocalhost
     ? '; Domain=localhost'
     : '; Domain=.axioneer.com'
   if (data?.token) {
     event.node.res.writeHead(302, {
       'Location': redirectUrl,
-      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
+      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=${sameSite}${secure}${domainAttr}; Max-Age=${
         14 * 24 * 60 * 60
-      }${domainAttr}`,
+      }`,
     })
     event.node.res.end()
     return
