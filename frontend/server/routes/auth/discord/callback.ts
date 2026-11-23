@@ -1,4 +1,4 @@
-import { getQuery, sendRedirect, setHeader } from 'h3'
+import { getQuery } from 'h3'
 import { $fetch } from 'ofetch'
 
 export default defineEventHandler(async (event) => {
@@ -8,11 +8,15 @@ export default defineEventHandler(async (event) => {
   const error = query.error as string | undefined
 
   if (error) {
-    return sendRedirect(event, `/?error=${error}`, 302)
+    event.node.res.writeHead(302, { 'Location': `/?error=${error}` })
+    event.node.res.end()
+    return
   }
 
   if (!code || !state) {
-    return sendRedirect(event, '/?error=missing_code', 302)
+    event.node.res.writeHead(302, { 'Location': '/?error=missing_code' })
+    event.node.res.end()
+    return
   }
 
   const config = useRuntimeConfig()
@@ -30,7 +34,9 @@ export default defineEventHandler(async (event) => {
       },
     })
   } catch (err) {
-    return sendRedirect(event, '/?error=discord_failed', 302)
+    event.node.res.writeHead(302, { 'Location': '/?error=discord_failed' })
+    event.node.res.end()
+    return
   }
 
   const data = (response.data ?? response._data) as {
@@ -40,17 +46,42 @@ export default defineEventHandler(async (event) => {
   } | undefined
   const redirectUrl = data?.redirect || '/dispatch'
 
-  // Pose le cookie de session depuis le token retourné par l'API
-  // Domain=localhost permet de partager le cookie entre :3000 et :8000
+  // Pose le cookie de session et redirige dans une seule réponse HTTP.
+  // Sur localhost (dev), Domain=localhost permet au cookie d'être envoyé
+  // aussi au backend (localhost:8000) depuis le frontend (localhost:3000).
+  // En production, Domain=.axioneer.com permet au cookie d'être envoyé
+  // aussi au backend API (api.bces.axioneer.com) depuis le frontend
+  // (bces.axioneer.com), notamment pour le WebSocket.
+  // SameSite=None + Secure est requis en HTTPS pour que le cookie soit
+  // envoyé sur les connexions cross-site (WebSocket vers api.bces.axioneer.com).
+  const host = event.node.req.headers.host || ''
+  const isLocalhost =
+    host.startsWith('localhost') ||
+    host.startsWith('127.0.0.1') ||
+    host.startsWith('::1')
+  const isHttps =
+    event.node.req.headers['x-forwarded-proto'] === 'https'
+  const sameSite = isHttps ? 'None' : 'Lax'
+  const secure = isHttps ? '; Secure' : ''
+  const domainAttr = isLocalhost
+    ? '; Domain=localhost'
+    : '; Domain=.axioneer.com'
   if (data?.token) {
-    setHeader(
-      event,
-      'set-cookie',
-      `bces_session=${data.token}; Domain=localhost; Path=/; HttpOnly; SameSite=Lax; Max-Age=${
+    // Transmet aussi le token en paramètre d'URL pour que le frontend
+    // puisse l'utiliser pour l'authentification WebSocket (cross-origin).
+    const redirectWithToken = `${redirectUrl}${
+      redirectUrl.includes('?') ? '&' : '?'
+    }token=${encodeURIComponent(data.token)}`
+    event.node.res.writeHead(302, {
+      'Location': redirectWithToken,
+      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=${sameSite}${secure}${domainAttr}; Max-Age=${
         14 * 24 * 60 * 60
-      }`
-    )
+      }`,
+    })
+    event.node.res.end()
+    return
   }
 
-  return sendRedirect(event, redirectUrl, 302)
+  event.node.res.writeHead(302, { 'Location': redirectUrl })
+  event.node.res.end()
 })

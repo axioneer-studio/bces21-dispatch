@@ -196,7 +196,7 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
     l'hôpital »).
   - **Au premier démarrage**, la base reçoit une seule fois les modules, les
     formations et le questionnaire de la feuille de suivi
-    (`backend/intern_defaults.py`).
+    (`backend/app/services/intern_defaults.py`).
 - Une formation générale peut donner des droits à ceux qui l'ont validée (qui
   ont son emoji) : **Formateur**, **Médecin légiste**, **Ressources humaines**
   et **Stock** (gestion des stocks, pour la future page Stock). Le compte lié à
@@ -875,7 +875,7 @@ permissions sont aussi contrôlées par les dépendances FastAPI.
 
 Dispatch, Crise, Hôpital, Agenda, Stock et Pôles & Spé n'ont pas de case dans les « Pages
 accessibles » des rôles : ils sont ouverts à tout compte validé, même sans rôle
-(`OPEN_PAGES` dans `backend/deps.py`). Formation n'a pas de case non plus : elle
+(`OPEN_PAGES` dans `backend/app/deps.py`). Formation n'a pas de case non plus : elle
 s'ouvre avec le droit « Formateur ». Un compte en attente ou désactivé reçoit
 un `403` sur `/api/me` et repart vers la connexion. Les rôles ne cochent que
 Direction et Administration (Ressources humaines suit le droit RH, voir

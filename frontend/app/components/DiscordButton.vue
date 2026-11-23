@@ -6,18 +6,14 @@ const props = defineProps<{
   label?: string
 }>()
 
-const config = useRuntimeConfig()
-
-async function handleClick(event: MouseEvent) {
-  event.preventDefault()
+async function handleClick() {
   if (typeof window === 'undefined') {
     return
   }
   try {
-    // Une URL absolue est ouverte directement ; une URL relative est l'endpoint
-    // API qui renvoie l'URL d'autorisation Discord (le navigateur reste sur :3000).
-    const authorizeUrl =
-      props.url.startsWith('http') ? props.url : await fetchDiscordAuthorizeUrl()
+    // Appelle l'API pour obtenir l'URL d'autorisation Discord, puis redirige le
+    // navigateur vers Discord. Le navigateur ne transite jamais par l'API backend.
+    const authorizeUrl = await fetchDiscordAuthorizeUrl()
     window.location.href = authorizeUrl
   } catch (error) {
     console.error('Impossible d\'initialiser la connexion Discord.', error)
@@ -26,10 +22,8 @@ async function handleClick(event: MouseEvent) {
 </script>
 
 <template>
-  <a
-    :href="props.url.startsWith('http') ? props.url : `${config.public.apiBase}${props.url}`"
+  <button
     class="bces-btn bces-btn--discord"
-    rel="noopener"
     @click="handleClick"
   >
     <img
@@ -40,7 +34,7 @@ async function handleClick(event: MouseEvent) {
       class="bces-btn__discord-icon"
     />
     <span>{{ props.label ?? 'Continuer avec Discord' }}</span>
-  </a>
+  </button>
 </template>
 
 <style scoped>

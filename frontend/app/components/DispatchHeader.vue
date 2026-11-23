@@ -326,6 +326,26 @@ const safdClass = computed(() => {
   font-weight: 700;
 }
 
+.dh__chip--ouvert {
+  background: rgba(70, 153, 109, 0.12);
+  border-color: rgba(70, 153, 109, 0.45);
+  color: #46996d;
+}
+
+.dh__chip--ouvert strong {
+  color: #46996d;
+}
+
+.dh__chip--on {
+  background: rgba(70, 153, 109, 0.12);
+  border-color: rgba(70, 153, 109, 0.45);
+  color: #46996d;
+}
+
+.dh__chip--on strong {
+  color: #46996d;
+}
+
 .dh__chip--off {
   background: rgba(210, 85, 79, 0.12);
   border-color: rgba(210, 85, 79, 0.45);
