@@ -16,7 +16,7 @@ from frequency_settings import (
     set_current_frequency,
     write_bounds,
 )
-from grade_permissions import GRADE_PERMISSION_CATALOG
+from grade_permissions import GRADE_PERMISSION_CATALOG, parse_grade_permissions
 from models import DispatchRadio, DispatchState, Employee, Grade, User
 from schemas import (
     DirectionRadioCreateRequest,
@@ -47,10 +47,6 @@ def _validated_permissions(permissions: list[str] | None) -> list[str]:
 
 
 async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
-    try:
-        permissions = json.loads(grade.permissions or "[]")
-    except (TypeError, ValueError):
-        permissions = []
     count = await db.scalar(
         select(func.count(Employee.id)).where(Employee.grade_id == grade.id)
     )
@@ -59,7 +55,7 @@ async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
         name=grade.name,
         level=grade.level,
         color=grade.color,
-        permissions=_validated_permissions(permissions if isinstance(permissions, list) else []),
+        permissions=parse_grade_permissions(grade.permissions),
         is_direction=grade.is_direction,
         is_trial=grade.is_trial,
         is_training=grade.is_training,

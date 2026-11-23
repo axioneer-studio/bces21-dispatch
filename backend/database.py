@@ -96,6 +96,7 @@ _GROUP_ALTER_STATEMENTS = [
 
 _TRAINING_ALTER_STATEMENTS = [
     "ALTER TABLE trainings ADD COLUMN permissions TEXT DEFAULT '[]' NOT NULL",
+    "ALTER TABLE trainings ADD COLUMN category VARCHAR(16) DEFAULT 'pole' NOT NULL",
 ]
 
 
@@ -352,6 +353,47 @@ async def _seed_intervention_statuses(conn) -> None:
     )
 
 
+async def _seed_once(conn, key: str, statement: str, rows: list[dict]) -> None:
+    """Injecte des valeurs par défaut une seule fois : la clé dans
+    application_settings empêche de les recréer après les avoir supprimées."""
+    if await conn.scalar(text("SELECT COUNT(*) FROM application_settings WHERE key = :key"), {"key": key}):
+        return
+    if rows:
+        await conn.execute(text(statement), rows)
+    await conn.execute(
+        text("INSERT INTO application_settings (key, value, updated_at) VALUES (:key, 'true', :now)"),
+        {"key": key, "now": datetime.now(timezone.utc)},
+    )
+
+
+async def _seed_intern_defaults(conn) -> None:
+    """Modules et questionnaire de la page Formation (feuille de suivi du BCES)."""
+    from intern_defaults import DEFAULT_INTERN_MODULES, DEFAULT_INTERN_QUESTIONS, DEFAULT_RESIDENT_MODULES
+
+    now = datetime.now(timezone.utc)
+    module_statement = (
+        "INSERT INTO intern_modules (category, name, emoji, created_at) VALUES (:category, :name, NULL, :now)"
+    )
+    await _seed_once(
+        conn,
+        "intern_defaults_seeded",
+        module_statement,
+        [{"category": category, "name": name, "now": now} for category, name in DEFAULT_INTERN_MODULES],
+    )
+    await _seed_once(
+        conn,
+        "intern_questions_seeded",
+        "INSERT INTO intern_questions (question, answer, created_at) VALUES (:question, :answer, :now)",
+        [{"question": question, "answer": answer, "now": now} for question, answer in DEFAULT_INTERN_QUESTIONS],
+    )
+    await _seed_once(
+        conn,
+        "resident_defaults_seeded",
+        module_statement,
+        [{"category": category, "name": name, "now": now} for category, name in DEFAULT_RESIDENT_MODULES],
+    )
+
+
 async def _backfill_employees() -> None:
     from models import DispatchAssignment, DispatchRadio, Employee
 
@@ -433,6 +475,7 @@ async def init_db() -> None:
         await _run_access_migrations(conn)
         await _run_dispatch_migrations(conn)
         await _seed_intervention_statuses(conn)
+        await _seed_intern_defaults(conn)
 
     await _backfill_employees()
 

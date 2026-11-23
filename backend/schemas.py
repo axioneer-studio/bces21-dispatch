@@ -1284,9 +1284,12 @@ class CrisisOut(BaseModel):
 
 # --- Formations ---
 
-# « trial » : période d'essai (CDD, Interne) ; « training » : période de formation
-# (CDI, Résident) ; « general » : formation générale (ex. Pilote Medicopter).
-TrainingKind = Literal["trial", "training", "general"]
+# « general » : formation de Pôles & Spé (ex. Pilote Medicopter). Les périodes
+# d'essai et de formation ont leurs modules (InternModule).
+TrainingKind = Literal["general"]
+# Formation générale de Pôles & Spé : pôle (ex. Pilote Medicopter, Stock,
+# Formateur) ou spécialité (ex. Médecin légiste).
+TrainingCategory = Literal["pole", "specialty"]
 
 
 class TrainingOut(BaseModel):
@@ -1296,6 +1299,7 @@ class TrainingOut(BaseModel):
     name: str
     emoji: str
     kind: TrainingKind
+    category: TrainingCategory
     # Droits donnés à ceux qui l'ont validée (formation générale).
     permissions: list[str]
 
@@ -1305,14 +1309,11 @@ class TrainingPermissionOption(BaseModel):
     label: str
 
 
-class TrainingRequest(BaseModel):
+class _TrainingFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
     emoji: str = Field(min_length=1, max_length=16)
-    kind: TrainingKind = "general"
-    # Clés de training_rights.TRAINING_PERMISSION_CATALOG, ignorées hors formation générale.
-    permissions: list[str] = Field(default_factory=list, max_length=8)
 
     @field_validator("name")
     @classmethod
@@ -1326,6 +1327,14 @@ class TrainingRequest(BaseModel):
         if "," in value:
             raise ValueError("L’emoji ne peut pas contenir de virgule.")
         return value
+
+
+class TrainingRequest(_TrainingFields):
+    """Formation générale (Pôles & Spé)."""
+
+    category: TrainingCategory = "pole"
+    # Clés de training_rights.TRAINING_PERMISSION_CATALOG.
+    permissions: list[str] = Field(default_factory=list, max_length=8)
 
 
 # Rôle dans une formation générale : Responsable, Second, Validé ou En cours.
@@ -1354,6 +1363,8 @@ class TrainingEmployeeOut(BaseModel):
     grade_name: Optional[str]
     grade_level: Optional[int]
     grade_color: Optional[str]
+    # Grade « Période d'essai » ou « En formation » : ne rejoint ni pôle ni spécialité.
+    in_formation: bool = False
     competencies: list[str]
 
 
@@ -1363,26 +1374,213 @@ class TrainingGradeOut(BaseModel):
     level: int
 
 
+# --- Fiches de formation (page Formation) ---
+
+# Période d'essai : Validations basiques, Gestion des outils, Type
+# d'intervention, Blessures. En formation : formations obligatoires et
+# facultatives.
+InternModuleCategory = Literal["basics", "tools", "interventions", "injuries", "mandatory", "optional"]
+# « trial » : grade « Période d'essai » ; « training » : grade « En formation ».
+InternStage = Literal["trial", "training"]
+
+
+class InternModuleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    category: InternModuleCategory
+    name: str
+    emoji: Optional[str]
+
+
+class InternModuleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: InternModuleCategory
+    name: str = Field(min_length=1, max_length=64)
+    # Facultatif : rejoint les compétences de l'employé au niveau le plus haut.
+    emoji: Optional[str] = Field(default=None, max_length=16)
+
+    @field_validator("name")
+    @classmethod
+    def _module_name(cls, value: str) -> str:
+        return _clean_required(value, "Le nom du module")
+
+    @field_validator("emoji")
+    @classmethod
+    def _module_emoji(cls, value: Optional[str]) -> Optional[str]:
+        value = (value or "").strip()
+        if "," in value:
+            raise ValueError("L’emoji ne peut pas contenir de virgule.")
+        return value or None
+
+
+class InternQuestionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    question: str
+    answer: str
+
+
+class InternQuestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(default="", max_length=1000)
+
+    @field_validator("question")
+    @classmethod
+    def _question_text(cls, value: str) -> str:
+        return _clean_required(value, "La question")
+
+    @field_validator("answer")
+    @classmethod
+    def _answer_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class InternPersonOut(BaseModel):
+    id: int
+    name: str
+
+
+class SimulationCriterionOut(BaseModel):
+    key: str
+    label: str
+
+
+class InternProgressOut(BaseModel):
+    """Progression de 0 à 1 : points obtenus sur les points possibles (3 par
+    module de période d'essai, 2 par module de période de formation)."""
+
+    basics: float
+    tools: float
+    interventions: float
+    injuries: float
+    # Période d'essai : tous ses modules.
+    overall: float
+    mandatory: float
+    optional: float
+
+
+class InternStatusOut(BaseModel):
+    label: str
+    # done : formation terminée ; ready : à valider ; normal ; warning ; urgent.
+    tone: Literal["done", "ready", "normal", "warning", "urgent"]
+
+
+class InternRecordOut(BaseModel):
+    employee_id: int
+    name: str
+    stage: InternStage
+    grade_name: Optional[str]
+    grade_color: Optional[str]
+    arrival_date: Optional[date]
+    # Jours depuis l'arrivée au BCES.
+    days: Optional[int]
+    mentors: list[InternPersonOut]
+    # Niveau par module (identifiant du module → 1 à 3) ; absent : Non observé.
+    levels: dict[int, int]
+    # Questions du questionnaire de passage bien répondues.
+    answers: list[int]
+    # Note de 1 à 5 par critère des simulations validantes.
+    simulation: dict[str, int]
+    resident_simulation: dict[str, int]
+    notes: str
+    progress: InternProgressOut
+    # Notes sur 20 : questionnaire (bonnes réponses ramenées sur 20),
+    # simulations (critères de 0 à 4 points, ramenés sur 20) et moyenne des
+    # deux notes de la période d'essai.
+    questionnaire_score: Optional[float]
+    simulation_score: Optional[float]
+    average: Optional[float]
+    resident_simulation_score: Optional[float]
+    # Statut de progression de la période d'essai.
+    status: Optional[InternStatusOut]
+    # Passage au grade « En formation » : tous les modules de période d'essai
+    # au plus haut et une moyenne d'au moins 14.
+    can_pass_resident: bool
+    resident_at: Optional[datetime]
+    # Fin de formation : toutes les formations obligatoires validées et la
+    # simulation de la période de formation notée au moins 14.
+    can_complete: bool
+    # Grade donné en fin de formation (celui juste au-dessus).
+    next_grade_name: Optional[str]
+    completed_at: Optional[datetime]
+
+
+class InternsPageOut(BaseModel):
+    modules: list[InternModuleOut]
+    questions: list[InternQuestionOut]
+    criteria: list[SimulationCriterionOut]
+    resident_criteria: list[SimulationCriterionOut]
+    # Employés actifs des grades « Période d'essai ».
+    interns: list[InternRecordOut]
+    # Employés actifs des grades « En formation ».
+    residents: list[InternRecordOut]
+    # Formation terminée depuis la fiche (la fin de formation s'annule).
+    completed: list[InternRecordOut]
+    # Formateurs : les seuls mentors possibles.
+    trainers: list[InternPersonOut]
+    # Grades cochés « Période d'essai » et « En formation » dans Direction :
+    # leurs noms remplacent « Interne » et « Résident » dans la page.
+    trial_grades: list[TrainingGradeOut]
+    training_grades: list[TrainingGradeOut]
+    # Modules et questionnaire : Direction, « Gérer l'hôpital » et Responsable
+    # du pôle qui donne le droit Formateur.
+    can_manage: bool
+    # Forcer un passage de grade : Direction et Responsable du pôle qui donne
+    # le droit Formateur.
+    can_force: bool
+
+
+class InternRecordUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    arrival_date: Optional[date] = None
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    mentor_ids: Optional[list[int]] = Field(default=None, max_length=10)
+    simulation: Optional[dict[str, int]] = None
+    resident_simulation: Optional[dict[str, int]] = None
+
+
+class InternLevelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: int = Field(ge=0, le=3)
+
+
+class InternAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    correct: bool
+
+
+class InternPassageRequest(BaseModel):
+    """Passage de grade. `force` passe outre les autres conditions, sauf les
+    validations basiques (période d'essai) ou les formations obligatoires
+    (période de formation), qui restent exigées."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    force: bool = False
+
+
 class TrainingPageOut(BaseModel):
+    """Page Pôles & Spé : formations générales."""
+
     trainings: list[TrainingOut]
     # Employés actifs, du plus haut grade au plus bas.
     employees: list[TrainingEmployeeOut]
     # Responsables, Seconds et En cours des formations générales (un « Validé »
     # n'a pas de ligne : il a seulement l'emoji).
     members: list[TrainingMemberOut]
-    # Grades « Période d'essai » et « En formation » cochés dans Direction.
-    # Tous les grades, du plus haut au plus bas, puis ceux cochés « Période
-    # d'essai » et « En formation » dans Direction.
-    grades: list[TrainingGradeOut]
-    trial_grades: list[TrainingGradeOut]
-    training_grades: list[TrainingGradeOut]
     # Droits qu'une formation générale peut donner.
     permission_options: list[TrainingPermissionOption]
     # Le compte connecté peut ajouter, modifier et supprimer les formations (il
-    # gère l'hôpital), et valider celles de période d'essai et de période de
-    # formation (formateur).
+    # gère l'hôpital).
     can_manage: bool
-    can_validate: bool
     # Direction : gère l'équipe de toute formation générale et nomme ou retire
     # son Responsable.
     can_assign_lead: bool

@@ -27,6 +27,7 @@ from crisis import router as crisis_router
 from affiliation_groups import router as affiliation_groups_router
 from intervention_statuses import router as intervention_statuses_router
 from trainings import router as trainings_router
+from formation import router as formation_router
 from training_rights import user_has_hr_access, user_training_permissions
 from grade_permissions import parse_grade_permissions
 from models import Employee, Grade, User
@@ -162,3 +163,4 @@ app.include_router(crisis_router)
 app.include_router(affiliation_groups_router)
 app.include_router(intervention_statuses_router)
 app.include_router(trainings_router)
+app.include_router(formation_router)

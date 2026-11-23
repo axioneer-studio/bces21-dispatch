@@ -15,6 +15,7 @@ const { data: currentUser } = await useAsyncData('sidebar-current-user', async (
       super_admin_available: boolean
       super_admin_enabled: boolean
       page_access: string[]
+      training_permissions: string[]
     }>('/api/me', { credentials: 'include', headers: requestHeaders })
   } catch {
     return null
@@ -47,7 +48,8 @@ const items: NavItem[] = [
   { to: '/crise', label: 'Crise', icon: 'lucide:siren', page: 'crisis' },
   { to: '/agenda', label: 'Agenda', icon: 'lucide:calendar-days', page: 'agenda' },
   { to: '/stock', label: 'Stock', icon: 'lucide:boxes', page: 'stock' },
-  { to: '/formation', label: 'Formation', icon: 'lucide:graduation-cap', page: 'training' },
+  { to: '/poles-specialites', label: 'Pôles & Spé', icon: 'lucide:badge-check', page: 'training' },
+  { to: '/formation', label: 'Formation', icon: 'lucide:graduation-cap', page: 'trainer' },
   { to: '/ressources-humaines', label: 'Ressources humaines', icon: 'lucide:users-round', page: 'human-resources' },
   { to: '/direction', label: 'Direction', icon: 'lucide:landmark', page: 'direction' },
   { to: '/administration', label: 'Administration', icon: 'lucide:settings', page: 'administration' }
@@ -56,11 +58,16 @@ const items: NavItem[] = [
 /** Pages ouvertes à tout compte validé, même sans rôle : elles n'ont pas de case à cocher dans les rôles. */
 const PUBLIC_PAGES = new Set(['dispatch', 'crisis', 'hospital', 'agenda', 'stock', 'training'])
 
-const visibleItems = computed(() => items.filter((item) =>
-  PUBLIC_PAGES.has(item.page)
-    ? Boolean(currentUser.value)
-    : currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
-))
+/** Formation : réservée aux formateurs (droit donné par une formation de Pôles & Spé). */
+const TRAINER_PERMISSION = 'training.validate'
+
+const visibleItems = computed(() => items.filter((item) => {
+  if (PUBLIC_PAGES.has(item.page)) return Boolean(currentUser.value)
+  if (item.page === 'trainer') {
+    return currentUser.value?.is_super_admin || currentUser.value?.training_permissions.includes(TRAINER_PERMISSION)
+  }
+  return currentUser.value?.is_super_admin || currentUser.value?.page_access.includes(item.page)
+}))
 
 function setMode(next: SidebarMode) {
   mode.value = next
