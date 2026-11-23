@@ -1,15 +1,18 @@
 <script setup lang="ts">
 /**
  * Choix d'un emoji : un clic sur l'emoji ouvre le menu (catégories, recherche en
- * français), et « Autre » permet de coller n'importe quel emoji.
+ * français), et « Autre » permet de coller n'importe quel emoji. Avec
+ * `clearable` (emoji facultatif), un clic sur l'emoji déjà choisi le retire.
  */
 const props = withDefaults(defineProps<{
   modelValue: string
   label?: string
   maxlength?: number
+  clearable?: boolean
 }>(), {
   label: 'Emoji',
-  maxlength: 16
+  maxlength: 16,
+  clearable: false
 })
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
@@ -171,6 +174,11 @@ function choose(emoji: string) {
   open.value = false
 }
 
+/** Emoji facultatif : un clic sur l'emoji déjà choisi le retire. */
+function pick(emoji: string) {
+  choose(props.clearable && emoji === props.modelValue ? '' : emoji)
+}
+
 function chooseOther() {
   const value = other.value.trim()
   if (value) choose(value.slice(0, props.maxlength))
@@ -212,8 +220,8 @@ function chooseOther() {
           :key="item.emoji"
           type="button"
           :class="{ 'is-selected': item.emoji === modelValue }"
-          :title="item.keywords"
-          @click="choose(item.emoji)"
+          :title="clearable && item.emoji === modelValue ? 'Retirer l’emoji' : item.keywords"
+          @click="pick(item.emoji)"
         >{{ item.emoji }}</button>
         <p v-if="!results.length" class="emoji-menu__empty">Aucun emoji trouvé : collez-le dans « Autre ».</p>
       </div>
@@ -244,5 +252,4 @@ function chooseOther() {
 .emoji-menu__empty { grid-column: 1 / -1; margin: 6px 0; color: var(--dp-text-dim); font-size: 11px; }
 .emoji-menu__other { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .emoji-menu__other button { min-height: 32px; padding: 0 12px; border: 1px solid var(--dp-accent-line); border-radius: 8px; color: var(--dp-accent); background: var(--dp-accent-soft); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
-.emoji-menu__other button:disabled { opacity: .5; cursor: not-allowed; }
-</style>
+.emoji-menu__other button:disabled { opacity: .5; cursor: not-allowed; }</style>

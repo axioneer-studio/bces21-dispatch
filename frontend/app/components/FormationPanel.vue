@@ -104,18 +104,26 @@ const CATEGORIES: Record<Stage, { key: Category; label: string }[]> = {
 }
 
 /** Niveaux et leur couleur : 0 rouge, puis jusqu'au vert au plus haut. */
-const LEVELS: Record<Stage, { value: number; icon: string; label: string; tone: string }[]> = {
+/**
+ * Libellé complet (légende, info-bulle) et court (liste du niveau, pour laisser
+ * la place au nom du module).
+ */
+const LEVELS: Record<Stage, { value: number; icon: string; label: string; short: string; tone: string }[]> = {
   trial: [
-    { value: 0, icon: '❌', label: 'Non observé', tone: 'none' },
-    { value: 1, icon: '👁️', label: 'Observé', tone: 'seen' },
-    { value: 2, icon: '🧾', label: 'Pratiqué avec aide', tone: 'practiced' },
-    { value: 3, icon: '✅', label: 'Pratiqué en autonomie', tone: 'done' }
+    { value: 0, icon: '❌', label: 'Non observé', short: 'Non observé', tone: 'none' },
+    { value: 1, icon: '👁️', label: 'Observé', short: 'Observé', tone: 'seen' },
+    { value: 2, icon: '🧾', label: 'Pratiqué avec aide', short: 'Avec aide', tone: 'practiced' },
+    { value: 3, icon: '✅', label: 'Pratiqué en autonomie', short: 'Autonomie', tone: 'done' }
   ],
   training: [
-    { value: 0, icon: '❌', label: 'Non observé', tone: 'none' },
-    { value: 1, icon: '🧾', label: 'Pratiqué', tone: 'practiced' },
-    { value: 2, icon: '✅', label: 'Validé', tone: 'done' }
+    { value: 0, icon: '❌', label: 'Non observé', short: 'Non observé', tone: 'none' },
+    { value: 1, icon: '🧾', label: 'Pratiqué', short: 'Pratiqué', tone: 'practiced' },
+    { value: 2, icon: '✅', label: 'Validé', short: 'Validé', tone: 'done' }
   ]
+}
+
+function levelLabel(level: number) {
+  return LEVELS[viewStage.value].find((item) => item.value === level)?.label ?? ''
 }
 
 const toast = useAppToast()
@@ -493,6 +501,12 @@ function saveModule() {
   })
 }
 
+/** Retire l'emoji et enregistre aussitôt un module existant (un nouveau module s'enregistre avec « Ajouter »). */
+function removeModuleEmoji() {
+  moduleForm.emoji = ''
+  if (moduleForm.id) saveModule()
+}
+
 function saveQuestion() {
   if (!questionForm.question.trim()) return
   void save(questionDialog.value, 'questions', questionForm.id, { question: questionForm.question, answer: questionForm.answer })
@@ -750,7 +764,7 @@ onBeforeUnmount(() => {
               <li v-for="module in modulesOf(category.key)" :key="module.id">
                 <span class="fiche-rows__name">
                   <span v-if="module.emoji" class="fiche-rows__emoji" title="Emoji ajouté aux compétences au niveau le plus haut">{{ module.emoji }}</span>
-                  {{ module.name }}
+                  <span class="fiche-rows__label" :title="module.name">{{ module.name }}</span>
                   <span v-if="page.can_manage && !archived" class="fiche-actions">
                     <button type="button" :aria-label="`Modifier ${module.name}`" title="Modifier" @click="openModule(category.key, module)"><Icon name="lucide:pencil" size="11" /></button>
                     <button type="button" class="is-danger" :aria-label="`Supprimer ${module.name}`" title="Supprimer" @click="askDeleteModule(module)"><Icon name="lucide:trash-2" size="11" /></button>
@@ -761,10 +775,11 @@ onBeforeUnmount(() => {
                   :class="`is-${toneOf(levelOf(current, module))}`"
                   :value="levelOf(current, module)"
                   :disabled="busy || archived"
+                  :title="levelLabel(levelOf(current, module))"
                   :aria-label="`Niveau de ${current.name} sur ${module.name}`"
                   @change="setLevel(module, $event)"
                 >
-                  <option v-for="level in LEVELS[viewStage]" :key="level.value" :value="level.value">{{ level.icon }} {{ level.label }}</option>
+                  <option v-for="level in LEVELS[viewStage]" :key="level.value" :value="level.value" :title="level.label">{{ level.icon }} {{ level.short }}</option>
                 </select>
               </li>
             </ul>
@@ -775,7 +790,7 @@ onBeforeUnmount(() => {
             <p class="formation-muted">De 1 (pas réalisé) à 5 (très bien).</p>
             <ul class="fiche-rows">
               <li v-for="criterion in simulationCriteria" :key="criterion.key">
-                <span class="fiche-rows__name">{{ criterion.label }}</span>
+                <span class="fiche-rows__name"><span class="fiche-rows__label" :title="criterion.label">{{ criterion.label }}</span></span>
                 <select class="fiche-score" :value="current[simulationField][criterion.key] ?? 0" :disabled="busy || archived" :aria-label="criterion.label" @change="setSimulation(criterion.key, $event)">
                   <option :value="0">—</option>
                   <option v-for="value in 5" :key="value" :value="value">{{ value }}</option>
@@ -834,18 +849,20 @@ onBeforeUnmount(() => {
           <button type="button" class="formation-dialog__close" aria-label="Fermer" :disabled="saving" @click="moduleDialog?.close()"><Icon name="lucide:x" size="16" /></button>
         </header>
         <div class="formation-form">
-          <EmojiField v-model="moduleForm.emoji" label="Emoji (facultatif)" :maxlength="16" />
+          <EmojiField v-model="moduleForm.emoji" label="Emoji (facultatif)" :maxlength="16" clearable />
           <label>
             <span>Nom</span>
             <input v-model="moduleForm.name" name="name" required maxlength="64" placeholder="Ex. DDS">
           </label>
           <p class="formation-muted">
             Avec un emoji, il rejoint les compétences de l’employé au niveau le plus haut.
-            <button v-if="moduleForm.emoji" type="button" class="formation-link" @click="moduleForm.emoji = ''">Retirer l’emoji</button>
           </p>
         </div>
         <footer class="formation-dialog__foot">
           <button type="button" class="formation-button" :disabled="saving" @click="moduleDialog?.close()">Annuler</button>
+          <button v-if="moduleForm.emoji" type="button" class="formation-button formation-button--danger" :disabled="saving || !moduleForm.name.trim()" @click="removeModuleEmoji">
+            <Icon name="lucide:x" size="13" /> Retirer l’emoji {{ moduleForm.emoji }}
+          </button>
           <button type="submit" class="formation-button formation-button--primary" :disabled="saving || !moduleForm.name.trim()">
             {{ saving ? 'Enregistrement…' : moduleForm.id ? 'Enregistrer' : 'Ajouter' }}
           </button>
@@ -986,12 +1003,25 @@ onBeforeUnmount(() => {
 .fiche-progress { display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: center; gap: 8px; text-align: right; }
 .fiche-notes textarea { min-height: 160px; height: 100%; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
 .fiche-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0; padding: 8px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-2); font-size: 11px; }
-.fiche-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); align-items: start; gap: 12px; }
+/* Une seule rangée : les blocs de l'étape et la simulation côte à côte (sur écran étroit, ils passent à la ligne). */
+.fiche-modules { display: grid; grid-template-columns: repeat(var(--fiche-columns, 3), minmax(0, 1fr)); align-items: start; gap: 12px; }
+.fiche-modules.is-trial { --fiche-columns: 5; }
+.fiche-modules.is-training { --fiche-columns: 3; }
 .fiche-rows { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .fiche-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 30px; font-size: 11px; }
-.fiche-rows__name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; color: var(--dp-text); font-weight: 600; }
-.fiche-rows__emoji { font-size: 13px; }
-.fiche-level { width: 168px; font-weight: 600; }
+/*
+ * Nom sur deux lignes au plus ; au-delà, il finit par « … » et s'affiche en
+ * entier au survol. Un mot trop long se coupe au lieu de passer sous la liste.
+ */
+.fiche-rows__name { position: relative; display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dp-text); font-weight: 600; }
+.fiche-rows__label { display: -webkit-box; min-width: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; hyphens: auto; line-height: 1.3; }
+/*
+ * Modifier / supprimer un module : par-dessus la fin du nom, au survol. Hors du
+ * flux, sinon ils passent à la ligne sous le nom et décalent la liste du niveau.
+ */
+.fiche-rows__name .fiche-actions { position: absolute; top: 50%; right: 0; padding: 1px; border-radius: 6px; background: var(--dp-panel-2); transform: translateY(-50%); }
+.fiche-rows__emoji { flex-shrink: 0; font-size: 13px; }
+.fiche-level { width: 132px; font-weight: 600; }
 .fiche-level.is-none { border-color: var(--dp-danger-line); background: var(--dp-danger-soft); }
 .fiche-level.is-seen { border-color: color-mix(in srgb, var(--dp-info) 45%, transparent); background: var(--dp-info-soft); }
 .fiche-level.is-practiced { border-color: color-mix(in srgb, var(--dp-warn) 55%, transparent); background: var(--dp-warn-soft); }
@@ -1028,6 +1058,11 @@ onBeforeUnmount(() => {
 .formation-form textarea { resize: vertical; }
 .formation-form > .formation-muted { grid-column: 1 / -1; }
 .formation-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--dp-line); }
+
+/* Écran étroit : les blocs passent à la ligne plutôt que d'écraser les noms. */
+@media (max-width: 1200px) {
+  .fiche-modules { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
+}
 
 @media (max-width: 900px) {
   .formation-body, .fiche-top { grid-template-columns: minmax(0, 1fr); }
