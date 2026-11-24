@@ -16,23 +16,27 @@ module peut avoir un emoji : il rejoint les compétences de l'employé au niveau
 le plus haut, tant que l'employé est à l'étape du module.
 
 Passages, avec leur annulation :
-- passage au grade « En formation » juste au-dessus : tous les modules de
-  période d'essai au plus haut et une moyenne questionnaire + simulation d'au
-  moins 14. Les emojis des modules de période d'essai quittent les compétences ;
-- fin de formation, passage au grade juste au-dessus : toutes les formations
-  obligatoires validées et la simulation notée au moins 14. Les emojis des
-  modules de période de formation quittent les compétences.
+- passage au grade « En formation » juste au-dessus, depuis la période
+  d'essai. Les emojis des modules de période d'essai quittent les compétences ;
+- fin de formation, passage au grade juste au-dessus, depuis la période de
+  formation. Les emojis des modules de période de formation quittent les
+  compétences.
 
-Un passage se force (Direction et Responsable du pôle qui donne le droit
-Formateur) : il ne reste alors exigé que les validations basiques (période
-d'essai) ou les formations obligatoires (période de formation).
+Un passage demande les modules obligatoires de l'étape au plus haut, chaque
+barre de progression de l'étape à son seuil et la note de l'étape (moyenne
+questionnaire + simulation, puis simulation de la période de formation) donnée
+et à son seuil (services/formation_thresholds.py). Il se force (Direction et
+Responsable du pôle qui donne le droit Formateur) : seuls les modules
+obligatoires restent alors exigés.
 
 Droits (vérifiés par les routes, routes/formation.py) : toutes les routes
-demandent le droit « Formateur ». Les modules et le questionnaire se gèrent par
-la Direction, « Gérer l'hôpital » et le Responsable du pôle qui donne le droit
-Formateur (`user_manages_formation`). Le forçage d'un passage se vérifie ici
-(`user_can_force_passage`).
+demandent le droit « Formateur ». Les modules, le questionnaire et les seuils
+se gèrent par la Direction, « Gérer l'hôpital » et le Responsable du pôle qui
+donne le droit Formateur (`user_manages_formation`). Le forçage d'un passage se
+vérifie ici (`user_can_force_passage`).
 """
+
+import math
 
 import json
 from datetime import date, datetime, timezone
@@ -78,10 +82,13 @@ from app.schemas import (
     InternRecordUpdate,
     InternsPageOut,
     InternStatusOut,
+    InternThresholdsOut,
+    InternThresholdsUpdate,
     MessageResponse,
     SimulationCriterionOut,
     TrainingGradeOut,
 )
+from app.services.formation_thresholds import read_thresholds, write_thresholds
 from app.services.hospital_access import is_direction, linked_employee, user_can_manage_hospital
 from app.services.training_rights import (
     TRAINER_PERMISSION,
@@ -95,7 +102,20 @@ TRIAL_CATEGORIES = ("basics", "tools", "interventions", "injuries")
 TRAINING_CATEGORIES = ("mandatory", "optional")
 # Niveau le plus haut : Pratiqué en autonomie (période d'essai), Validé (période de formation).
 MAX_LEVELS = {TRIAL: 3, TRAINING: 2}
-PASS_AVERAGE = 14
+# Barres de progression de chaque étape, qui ont un seuil de passage.
+PROGRESS_BARS = {
+    TRIAL: (
+        ("basics", "Validations basiques"),
+        ("tools", "Gestion des outils"),
+        ("interventions", "Type d’intervention"),
+        ("injuries", "Blessures"),
+        ("overall", "Progression totale"),
+    ),
+    TRAINING: (
+        ("mandatory", "Formations obligatoires"),
+        ("optional", "Formations facultatives"),
+    ),
+}
 CRITERIA = {
     TRIAL: [
         ("on_site", "Prise en charge sur place"),
@@ -256,6 +276,57 @@ def _status(days: int | None, progress: InternProgressOut, grade_name: str | Non
     return InternStatusOut(label="👍 Progression normale", tone="normal")
 
 
+def _percent(value: float) -> int:
+    """Pourcentage entier, arrondi vers le bas comme sur la fiche : 99,6 % reste
+    sous un seuil de 100 %."""
+    return math.floor(value * 100 + 1e-9)
+
+
+def _note(value: float) -> str:
+    return f"{value:g} / 20"
+
+
+def _missing_required(levels: dict[int, int], modules: list[InternModule], stage: str) -> list[str]:
+    """Modules obligatoires de l'étape pas encore au plus haut."""
+    return [
+        module.name
+        for module in modules
+        if module.is_required and module_stage(module) == stage and levels.get(module.id, 0) < max_level(module)
+    ]
+
+
+def _blockers(
+    stage: str,
+    progress: InternProgressOut,
+    note: float | None,
+    thresholds: InternThresholdsOut,
+    missing_required: list[str],
+    next_grade: Grade | None,
+) -> list[str]:
+    """Ce qui manque pour passer sans forcer, dans l'ordre de la fiche. `note` :
+    moyenne (période d'essai) ou simulation (période de formation). Un seuil à
+    0 n'exige rien, pas même une note donnée."""
+    blockers: list[str] = []
+    if missing_required:
+        blockers.append(f"Modules obligatoires à valider : {', '.join(missing_required)}")
+    for key, label in PROGRESS_BARS[stage]:
+        required = getattr(thresholds, key)
+        value = _percent(getattr(progress, key))
+        if value < required:
+            blockers.append(f"{label} : {value} % ({required} % requis)")
+    if stage == TRIAL:
+        required_note, label, unscored = thresholds.average, "Moyenne", "Questionnaire et simulation à noter"
+    else:
+        required_note, label, unscored = thresholds.resident_simulation, "Simulation", "Simulation à noter"
+    if required_note > 0 and note is None:
+        blockers.append(unscored)
+    elif required_note > 0 and note < required_note:
+        blockers.append(f"{label} {_note(note)} ({_note(required_note)} requis)")
+    if next_grade is None:
+        blockers.append("Aucun grade au-dessus dans Direction")
+    return blockers
+
+
 def _person(employee: Employee) -> InternPersonOut:
     return InternPersonOut(id=employee.id, name=" ".join(filter(None, [employee.first_name, employee.last_name])))
 
@@ -263,7 +334,7 @@ def _person(employee: Employee) -> InternPersonOut:
 class _PageData:
     """Tout ce qu'il faut pour calculer les fiches, chargé en une fois."""
 
-    def __init__(self, modules, questions, records, mentors, levels, answers, people):
+    def __init__(self, modules, questions, records, mentors, levels, answers, people, thresholds):
         self.modules: list[InternModule] = modules
         self.questions: list[InternQuestion] = questions
         self.records: dict[int, InternRecord] = records
@@ -271,6 +342,7 @@ class _PageData:
         self.levels: dict[int, dict[int, int]] = levels
         self.answers: dict[int, set[int]] = answers
         self.people: dict[int, Employee] = people
+        self.thresholds: InternThresholdsOut = thresholds
 
 
 async def _load(db: AsyncSession, employee_ids: list[int]) -> _PageData:
@@ -298,7 +370,7 @@ async def _load(db: AsyncSession, employee_ids: list[int]) -> _PageData:
         employee.id: employee
         for employee in (await db.execute(select(Employee).where(Employee.id.in_(mentor_ids)))).scalars().all()
     }
-    return _PageData(modules, questions, records, mentors, levels, answers, people)
+    return _PageData(modules, questions, records, mentors, levels, answers, people, await read_thresholds(db))
 
 
 def _record_out(employee: Employee, data: _PageData, stage: str, next_grade: Grade | None) -> InternRecordOut:
@@ -323,6 +395,19 @@ def _record_out(employee: Employee, data: _PageData, stage: str, next_grade: Gra
         else None
     )
     in_grade_stage = employee_stage(employee) == stage
+    missing_required = _missing_required(levels, data.modules, stage) if in_grade_stage else []
+    blockers = (
+        _blockers(
+            stage,
+            progress,
+            average if stage == TRIAL else resident_simulation_score,
+            data.thresholds,
+            missing_required,
+            next_grade,
+        )
+        if in_grade_stage
+        else []
+    )
     return InternRecordOut(
         employee_id=employee.id,
         name=_person(employee).name,
@@ -343,23 +428,11 @@ def _record_out(employee: Employee, data: _PageData, stage: str, next_grade: Gra
         average=average,
         resident_simulation_score=resident_simulation_score,
         status=_status(days, progress, employee.grade.name if employee.grade else None) if stage == TRIAL else None,
-        can_pass_resident=(
-            in_grade_stage
-            and stage == TRIAL
-            and next_grade is not None
-            and progress.overall >= 1
-            and average is not None
-            and average >= PASS_AVERAGE
-        ),
+        blockers=blockers,
+        missing_required=missing_required,
+        can_pass_resident=in_grade_stage and stage == TRIAL and not blockers,
         resident_at=record.resident_at if record else None,
-        can_complete=(
-            in_grade_stage
-            and stage == TRAINING
-            and next_grade is not None
-            and progress.mandatory >= 1
-            and resident_simulation_score is not None
-            and resident_simulation_score >= PASS_AVERAGE
-        ),
+        can_complete=in_grade_stage and stage == TRAINING and not blockers,
         next_grade_name=next_grade.name if next_grade and in_grade_stage else None,
         completed_at=record.completed_at if record else None,
     )
@@ -462,6 +535,7 @@ async def formation_page(user: User, db: AsyncSession) -> InternsPageOut:
         trainers=[_person(employee) for employee in await employees_with_training_permission(db, TRAINER_PERMISSION)],
         trial_grades=[_grade_out(grade) for grade in grades if grade.is_trial],
         training_grades=[_grade_out(grade) for grade in grades if grade.is_training],
+        thresholds=data.thresholds,
         can_manage=await user_manages_formation(db, user),
         can_force=await user_can_force_passage(db, user),
     )
@@ -473,7 +547,9 @@ async def formation_page(user: User, db: AsyncSession) -> InternsPageOut:
 async def create_module(payload: InternModuleRequest, db: AsyncSession) -> InternModuleOut:
     if payload.emoji:
         await ensure_emoji_available(db, payload.emoji)
-    module = InternModule(category=payload.category, name=payload.name, emoji=payload.emoji)
+    module = InternModule(
+        category=payload.category, name=payload.name, emoji=payload.emoji, is_required=payload.is_required
+    )
     db.add(module)
     await db.commit()
     await db.refresh(module)
@@ -502,6 +578,7 @@ async def update_module(module_id: int, payload: InternModuleRequest, db: AsyncS
     module.category = payload.category
     module.name = payload.name
     module.emoji = payload.emoji
+    module.is_required = payload.is_required
     await db.commit()
     await db.refresh(module)
     if changed:
@@ -550,6 +627,13 @@ async def delete_question(question_id: int, db: AsyncSession) -> MessageResponse
     await db.delete(question)
     await db.commit()
     return MessageResponse(message="Question supprimée.")
+
+
+async def update_thresholds(payload: InternThresholdsUpdate, db: AsyncSession) -> InternThresholdsOut:
+    """Seuils du passage sans forçage, communs à toutes les fiches."""
+    await write_thresholds(db, payload)
+    await db.commit()
+    return await read_thresholds(db)
 
 
 # --- Fiche ---
@@ -664,29 +748,27 @@ async def _change_grade(db: AsyncSession, employee: Employee, grade: Grade, leav
 
 
 async def _ensure_can_pass(
-    db: AsyncSession,
-    user: User,
-    fiche: InternRecordOut,
-    payload: InternPassageRequest | None,
-    *,
-    allowed: bool,
-    required_done: bool,
-    required_label: str,
-    conditions: str,
+    db: AsyncSession, user: User, fiche: InternRecordOut, payload: InternPassageRequest | None
 ) -> None:
-    """Passage normal si `allowed` ; sinon forcé, par la Direction ou le
-    Responsable du pôle Formation, et seulement si `required_done`."""
-    if allowed:
+    """Passage normal si rien ne manque ; sinon forcé, par la Direction ou le
+    Responsable du pôle Formation, et seulement avec les modules obligatoires
+    validés."""
+    if not fiche.blockers:
         return
     if not (payload and payload.force):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Il faut {conditions}.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"Passage impossible : {' ; '.join(fiche.blockers)}."
+        )
     if not await user_can_force_passage(db, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Seuls la Direction et le Responsable du pôle Formation forcent un passage.",
         )
-    if not required_done:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Même forcé, il faut {required_label}.")
+    if fiche.missing_required:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Même forcé, il faut valider les modules obligatoires : {', '.join(fiche.missing_required)}.",
+        )
     if fiche.next_grade_name is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Aucun grade au-dessus : vérifiez Direction.")
 
@@ -694,23 +776,12 @@ async def _ensure_can_pass(
 async def pass_training_grade(
     employee_id: int, payload: InternPassageRequest | None, user: User, db: AsyncSession
 ) -> InternRecordOut:
-    """Fin de période d'essai : tous ses modules au plus haut et une moyenne
-    d'au moins 14. Forcé : seules les validations basiques sont exigées.
-    L'employé prend le grade « En formation » juste au-dessus."""
+    """Fin de période d'essai (conditions : `_ensure_can_pass`). L'employé
+    prend le grade « En formation » juste au-dessus."""
     employee, stage = await _in_formation(db, employee_id)
     if stage != TRIAL:
         raise HTTPException(status_code=409, detail="Cet employé n’est pas en période d’essai.")
-    fiche = await _fiche(db, employee)
-    await _ensure_can_pass(
-        db,
-        user,
-        fiche,
-        payload,
-        allowed=fiche.can_pass_resident,
-        required_done=fiche.progress.basics >= 1,
-        required_label="toutes les validations basiques",
-        conditions=f"tous les modules en autonomie et une moyenne d’au moins {PASS_AVERAGE}/20",
-    )
+    await _ensure_can_pass(db, user, await _fiche(db, employee), payload)
     target = await _next_grade(db, employee)
     record = await _record(db, employee.id)
     record.previous_grade_id = employee.grade_id
@@ -745,23 +816,12 @@ async def cancel_training_grade(employee_id: int, db: AsyncSession) -> InternRec
 async def complete_formation(
     employee_id: int, payload: InternPassageRequest | None, user: User, db: AsyncSession
 ) -> InternRecordOut:
-    """Fin de formation : toutes les formations obligatoires validées et la
-    simulation notée au moins 14. Forcée : seules les formations obligatoires
-    sont exigées. L'employé prend le grade juste au-dessus."""
+    """Fin de formation (conditions : `_ensure_can_pass`). L'employé prend le
+    grade juste au-dessus."""
     employee, stage = await _in_formation(db, employee_id)
     if stage != TRAINING:
         raise HTTPException(status_code=409, detail="Cet employé n’est pas en formation.")
-    fiche = await _fiche(db, employee)
-    await _ensure_can_pass(
-        db,
-        user,
-        fiche,
-        payload,
-        allowed=fiche.can_complete,
-        required_done=fiche.progress.mandatory >= 1,
-        required_label="toutes les formations obligatoires validées",
-        conditions=f"toutes les formations obligatoires validées et une simulation d’au moins {PASS_AVERAGE}/20",
-    )
+    await _ensure_can_pass(db, user, await _fiche(db, employee), payload)
     target = await _next_grade(db, employee)
     record = await _record(db, employee.id)
     record.completed_from_grade_id = employee.grade_id

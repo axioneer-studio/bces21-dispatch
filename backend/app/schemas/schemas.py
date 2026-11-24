@@ -1391,6 +1391,7 @@ class InternModuleOut(BaseModel):
     category: InternModuleCategory
     name: str
     emoji: Optional[str]
+    is_required: bool
 
 
 class InternModuleRequest(BaseModel):
@@ -1400,6 +1401,8 @@ class InternModuleRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     # Facultatif : rejoint les compétences de l'employé au niveau le plus haut.
     emoji: Optional[str] = Field(default=None, max_length=16)
+    # Obligatoire : à valider au plus haut pour le passage, même forcé.
+    is_required: bool = False
 
     @field_validator("name")
     @classmethod
@@ -1464,6 +1467,39 @@ class InternProgressOut(BaseModel):
     optional: float
 
 
+class InternThresholdsOut(BaseModel):
+    """Seuils du passage sans forçage, communs à toutes les fiches : barres de
+    progression en % et note de l'étape sur 20 (moyenne en période d'essai,
+    simulation en période de formation), qui doit alors être donnée. 0 : pas de
+    seuil (ni note exigée)."""
+
+    basics: int
+    tools: int
+    interventions: int
+    injuries: int
+    overall: int
+    average: float
+    mandatory: int
+    optional: int
+    resident_simulation: float
+
+
+class InternThresholdsUpdate(BaseModel):
+    """Seuils à changer ; un seuil absent ne change pas."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    basics: Optional[int] = Field(default=None, ge=0, le=100)
+    tools: Optional[int] = Field(default=None, ge=0, le=100)
+    interventions: Optional[int] = Field(default=None, ge=0, le=100)
+    injuries: Optional[int] = Field(default=None, ge=0, le=100)
+    overall: Optional[int] = Field(default=None, ge=0, le=100)
+    average: Optional[float] = Field(default=None, ge=0, le=20)
+    mandatory: Optional[int] = Field(default=None, ge=0, le=100)
+    optional: Optional[int] = Field(default=None, ge=0, le=100)
+    resident_simulation: Optional[float] = Field(default=None, ge=0, le=20)
+
+
 class InternStatusOut(BaseModel):
     label: str
     # done : formation terminée ; ready : à valider ; normal ; warning ; urgent.
@@ -1498,12 +1534,17 @@ class InternRecordOut(BaseModel):
     resident_simulation_score: Optional[float]
     # Statut de progression de la période d'essai.
     status: Optional[InternStatusOut]
-    # Passage au grade « En formation » : tous les modules de période d'essai
-    # au plus haut et une moyenne d'au moins 14.
+    # Ce qui manque pour le passage de l'étape sans le forcer : modules
+    # obligatoires, seuils des barres et de la note (InternThresholdsOut),
+    # grade au-dessus. Vide : le passage est possible.
+    blockers: list[str]
+    # Modules obligatoires de l'étape pas encore au plus haut : exigés même
+    # pour un passage forcé.
+    missing_required: list[str]
+    # Passage au grade « En formation » (période d'essai), puis fin de
+    # formation (période de formation) : rien ne manque.
     can_pass_resident: bool
     resident_at: Optional[datetime]
-    # Fin de formation : toutes les formations obligatoires validées et la
-    # simulation de la période de formation notée au moins 14.
     can_complete: bool
     # Grade donné en fin de formation (celui juste au-dessus).
     next_grade_name: Optional[str]
@@ -1527,8 +1568,9 @@ class InternsPageOut(BaseModel):
     # leurs noms remplacent « Interne » et « Résident » dans la page.
     trial_grades: list[TrainingGradeOut]
     training_grades: list[TrainingGradeOut]
-    # Modules et questionnaire : Direction, « Gérer l'hôpital » et Responsable
-    # du pôle qui donne le droit Formateur.
+    thresholds: InternThresholdsOut
+    # Modules, questionnaire et seuils : Direction, « Gérer l'hôpital » et
+    # Responsable du pôle qui donne le droit Formateur.
     can_manage: bool
     # Forcer un passage de grade : Direction et Responsable du pôle qui donne
     # le droit Formateur.
@@ -1558,9 +1600,8 @@ class InternAnswerRequest(BaseModel):
 
 
 class InternPassageRequest(BaseModel):
-    """Passage de grade. `force` passe outre les autres conditions, sauf les
-    validations basiques (période d'essai) ou les formations obligatoires
-    (période de formation), qui restent exigées."""
+    """Passage de grade. `force` passe outre les seuils des barres et de la
+    note ; les modules obligatoires de l'étape restent exigés."""
 
     model_config = ConfigDict(extra="forbid")
 

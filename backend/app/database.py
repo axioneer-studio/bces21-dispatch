@@ -97,6 +97,7 @@ _GROUP_ALTER_STATEMENTS = [
 _TRAINING_ALTER_STATEMENTS = [
     "ALTER TABLE trainings ADD COLUMN permissions TEXT DEFAULT '[]' NOT NULL",
     "ALTER TABLE trainings ADD COLUMN category VARCHAR(16) DEFAULT 'pole' NOT NULL",
+    "ALTER TABLE intern_modules ADD COLUMN is_required BOOLEAN DEFAULT FALSE NOT NULL",
 ]
 
 
@@ -353,12 +354,15 @@ async def _seed_intervention_statuses(conn) -> None:
     )
 
 
-async def _seed_once(conn, key: str, statement: str, rows: list[dict]) -> None:
+async def _seed_once(conn, key: str, statement: str, rows: list[dict] | None = None) -> None:
     """Injecte des valeurs par défaut une seule fois : la clé dans
-    application_settings empêche de les recréer après les avoir supprimées."""
+    application_settings empêche de les recréer après les avoir supprimées.
+    Sans `rows`, l'instruction s'exécute une fois, sans paramètre."""
     if await conn.scalar(text("SELECT COUNT(*) FROM application_settings WHERE key = :key"), {"key": key}):
         return
-    if rows:
+    if rows is None:
+        await conn.execute(text(statement))
+    elif rows:
         await conn.execute(text(statement), rows)
     await conn.execute(
         text("INSERT INTO application_settings (key, value, updated_at) VALUES (:key, 'true', :now)"),
@@ -368,29 +372,40 @@ async def _seed_once(conn, key: str, statement: str, rows: list[dict]) -> None:
 
 async def _seed_intern_defaults(conn) -> None:
     """Modules et questionnaire de la page Formation (feuille de suivi du BCES)."""
-    from app.services.intern_defaults import DEFAULT_INTERN_MODULES, DEFAULT_INTERN_QUESTIONS, DEFAULT_RESIDENT_MODULES
+    from app.services.intern_defaults import (
+        DEFAULT_INTERN_MODULES,
+        DEFAULT_INTERN_QUESTIONS,
+        DEFAULT_RESIDENT_MODULES,
+        REQUIRED_CATEGORIES,
+    )
 
     now = datetime.now(timezone.utc)
     module_statement = (
-        "INSERT INTO intern_modules (category, name, emoji, created_at) VALUES (:category, :name, NULL, :now)"
+        "INSERT INTO intern_modules (category, name, emoji, is_required, created_at) "
+        "VALUES (:category, :name, NULL, :is_required, :now)"
     )
-    await _seed_once(
-        conn,
-        "intern_defaults_seeded",
-        module_statement,
-        [{"category": category, "name": name, "now": now} for category, name in DEFAULT_INTERN_MODULES],
-    )
+
+    def module_rows(modules: list[tuple[str, str]]) -> list[dict]:
+        return [
+            {"category": category, "name": name, "is_required": category in REQUIRED_CATEGORIES, "now": now}
+            for category, name in modules
+        ]
+
+    await _seed_once(conn, "intern_defaults_seeded", module_statement, module_rows(DEFAULT_INTERN_MODULES))
     await _seed_once(
         conn,
         "intern_questions_seeded",
         "INSERT INTO intern_questions (question, answer, created_at) VALUES (:question, :answer, :now)",
         [{"question": question, "answer": answer, "now": now} for question, answer in DEFAULT_INTERN_QUESTIONS],
     )
+    await _seed_once(conn, "resident_defaults_seeded", module_statement, module_rows(DEFAULT_RESIDENT_MODULES))
+    # Modules créés avant la case « Obligatoire » : ceux des types qui la
+    # cochent par défaut la reçoivent une fois.
+    categories = ", ".join(f"'{category}'" for category in REQUIRED_CATEGORIES)
     await _seed_once(
         conn,
-        "resident_defaults_seeded",
-        module_statement,
-        [{"category": category, "name": name, "now": now} for category, name in DEFAULT_RESIDENT_MODULES],
+        "intern_required_seeded",
+        f"UPDATE intern_modules SET is_required = TRUE WHERE category IN ({categories})",
     )
 
 

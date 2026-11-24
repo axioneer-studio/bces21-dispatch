@@ -1,9 +1,10 @@
 """Routes de la page Formation (couche transport mince).
 
 Toutes les routes demandent le droit « Formateur » (formation de Pôles & Spé qui
-le donne ; les super-admins l'ont). Les modules et le questionnaire se gèrent par
-la Direction, « Gérer l'hôpital » et le Responsable du pôle qui donne le droit
-Formateur. Le forçage d'un passage se vérifie dans le contrôleur.
+le donne ; les super-admins l'ont). Les modules, le questionnaire et les seuils
+de passage se gèrent par la Direction, « Gérer l'hôpital » et le Responsable du
+pôle qui donne le droit Formateur. Le forçage d'un passage se vérifie dans le
+contrôleur.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,6 +24,8 @@ from app.schemas import (
     InternRecordOut,
     InternRecordUpdate,
     InternsPageOut,
+    InternThresholdsOut,
+    InternThresholdsUpdate,
     MessageResponse,
 )
 from app.services.training_rights import TRAINER_PERMISSION, require_training_permission
@@ -36,7 +39,7 @@ async def require_formation_manager(
         return user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Seuls la Direction, « Gérer l’hôpital » et le Responsable du pôle Formation modifient les modules et le questionnaire.",
+        detail="Seuls la Direction, « Gérer l’hôpital » et le Responsable du pôle Formation modifient les modules, le questionnaire et les seuils.",
     )
 
 
@@ -115,6 +118,17 @@ async def update_question(
 )
 async def delete_question(question_id: int, db: AsyncSession = Depends(get_db)) -> MessageResponse:
     return await cf.delete_question(question_id, db)
+
+
+@router.put(
+    "/thresholds",
+    response_model=InternThresholdsOut,
+    dependencies=[Depends(require_formation_manager)],
+)
+async def update_thresholds(
+    payload: InternThresholdsUpdate, db: AsyncSession = Depends(get_db)
+) -> InternThresholdsOut:
+    return await cf.update_thresholds(payload, db)
 
 
 # --- Fiche ---

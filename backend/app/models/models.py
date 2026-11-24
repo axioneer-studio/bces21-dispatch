@@ -525,7 +525,8 @@ class InternModule(Base):
     outils), « interventions » (Type d'intervention), « injuries » (Blessures),
     notés de 0 à 3. En formation : « mandatory » (formations obligatoires) et
     « optional » (facultatives), notés de 0 à 2. Son emoji, facultatif, rejoint
-    les compétences de l'employé au niveau le plus haut."""
+    les compétences de l'employé au niveau le plus haut. Obligatoire
+    (`is_required`) : à valider au plus haut pour le passage, même forcé."""
 
     __tablename__ = "intern_modules"
 
@@ -533,6 +534,7 @@ class InternModule(Base):
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     emoji: Mapped[Optional[str]] = mapped_column(String(16), unique=True, nullable=True)
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 

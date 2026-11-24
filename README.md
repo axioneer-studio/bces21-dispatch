@@ -173,27 +173,41 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   - **Emoji d'un module** (facultatif) : il rejoint les compétences au niveau le
     plus haut et les quitte en dessous, tant que l'employé est à l'étape du
     module.
-  - **Passages**, avec confirmation, et annulables :
-    - **Passage au grade « En formation »** juste au-dessus. Il faut tous les
-      modules de période d'essai en autonomie et une moyenne questionnaire +
-      simulation d'au moins 14/20. Les emojis des modules de période d'essai
-      quittent les compétences. Le bouton d'annulation, tout en bas de la
-      fiche « En formation », rend le grade d'avant et ses emojis. Pour un
-      employé passé « En formation » hors de la page, il rend le grade «
-      Période d'essai » juste en dessous du sien.
-    - **Fin de formation**, passage au grade juste au-dessus. Il faut toutes
-      les formations obligatoires validées et une simulation d'au moins 14/20.
-      Les emojis des formations quittent les compétences. Annuler (depuis «
-      Formation terminée ») rend le grade « En formation » et ses emojis.
+  - **Module obligatoire** : une case du module (marqué d'un `*` rouge). Il faut
+    le valider au niveau le plus haut pour le passage, même forcé. La case est
+    cochée par défaut pour les validations basiques et les formations
+    obligatoires.
+  - **Seuils de passage**, communs à toutes les fiches et réglés à côté des
+    barres :
+    - chaque barre de progression de l'étape a un seuil en %, marqué d'un repère
+      sur la barre ;
+    - la note de l'étape a un seuil sur 20. C'est la moyenne questionnaire +
+      simulation en période d'essai, la simulation en période de formation.
+      Avec un seuil au-dessus de 0, la note doit être donnée.
+
+    Un seuil à 0 n'exige rien, pas même une note donnée.
+
+    Valeurs par défaut, celles de la feuille de suivi : Progression totale
+    100 % et moyenne 14/20 en période d'essai ; Formations obligatoires 100 %
+    et simulation 14/20 en période de formation. Les autres seuils sont à 0.
+  - **Passages**, avec confirmation, et annulables. Le bouton se dégrise quand
+    les modules obligatoires sont validés et tous les seuils de l'étape
+    atteints. Son info-bulle dit ce qui manque.
+    - **Passage au grade « En formation »** juste au-dessus. Les emojis des
+      modules de période d'essai quittent les compétences. Le bouton
+      d'annulation, tout en bas de la fiche « En formation », rend le grade
+      d'avant et ses emojis. Pour un employé passé « En formation » hors de la
+      page, il rend le grade « Période d'essai » juste en dessous du sien.
+    - **Fin de formation**, passage au grade juste au-dessus. Les emojis des
+      formations quittent les compétences. Annuler (depuis « Formation
+      terminée ») rend le grade « En formation » et ses emojis.
     - **Forcer** : une case à côté du bouton dégrise le passage malgré les
-      conditions manquantes. Même forcé, il faut toutes les validations
-      basiques (période d'essai) ou toutes les formations obligatoires
-      (période de formation).
-  - **Qui fait quoi** : tous les formateurs remplissent les fiches. Les modules
-    et le questionnaire se gèrent par la Direction, « Gérer l'hôpital » et le
-    Responsable du pôle qui donne le droit Formateur. Forcer un passage est
-    réservé à la Direction et au Responsable de ce pôle (pas « Gérer
-    l'hôpital »).
+      seuils manquants. Même forcé, il faut les modules obligatoires validés.
+  - **Qui fait quoi** : tous les formateurs remplissent les fiches. Les
+    modules, le questionnaire et les seuils se gèrent par la Direction, «
+    Gérer l'hôpital » et le Responsable du pôle qui donne le droit Formateur.
+    Forcer un passage est réservé à la Direction et au Responsable de ce pôle
+    (pas « Gérer l'hôpital »).
   - **Au premier démarrage**, la base reçoit une seule fois les modules, les
     formations et le questionnaire de la feuille de suivi
     (`backend/app/services/intern_defaults.py`).
@@ -726,24 +740,28 @@ donner le rôle (`403` sinon). Les super-admins ont tous les droits.
 
 ### Formation
 
-Toutes les routes demandent le droit « Formateur » (`403` sinon). Les modules et
-les questions se gèrent par la Direction, « Gérer l'hôpital » ou le Responsable
-du pôle qui donne le droit Formateur (`403` sinon). Une fiche ne se remplit que
+Toutes les routes demandent le droit « Formateur » (`403` sinon). Les modules,
+les questions et les seuils se gèrent par la Direction, « Gérer l'hôpital » ou
+le Responsable du pôle qui donne le droit Formateur (`403` sinon). Un passage
+demande les modules obligatoires de l'étape au plus haut, ses barres à leur
+seuil et sa note à son seuil, donc donnée si ce seuil dépasse 0 (`409` sinon,
+avec ce qui manque). Une fiche ne se remplit que
 pour un employé d'un grade « Période d'essai » ou « En formation », et seulement
 pour son étape : modules, simulation et questionnaire (`409` sinon). Un emoji
 est unique parmi toutes les formations et tous les modules.
 
 | Méthode | Chemin | Description |
 |---|---|---|
-| `GET` | `/api/formation` | Modules, questions, critères des deux simulations, fiches des deux étapes (progression, notes, statut, `can_pass_resident`, `can_complete`, `next_grade_name`), formations terminées, formateurs (mentors possibles), grades « Période d'essai » et « En formation », `can_manage` |
+| `GET` | `/api/formation` | Modules (`is_required`), questions, critères des deux simulations, fiches des deux étapes (progression, notes, statut, `blockers` : ce qui manque pour le passage, `missing_required`, `can_pass_resident`, `can_complete`, `next_grade_name`), formations terminées, formateurs (mentors possibles), grades « Période d'essai » et « En formation », `thresholds`, `can_manage`, `can_force` |
+| `PUT` | `/api/formation/thresholds` | Seuils à changer : barres en % de 0 à 100 (`basics`, `tools`, `interventions`, `injuries`, `overall`, `mandatory`, `optional`), notes sur 20 (`average`, `resident_simulation`) |
 | `PATCH` | `/api/formation/{employee_id}` | `arrival_date` (fiche RH), `notes`, `mentor_ids` (formateurs), `simulation` ou `resident_simulation` selon l'étape (`{critère: 1 à 5}`) |
 | `PUT` | `/api/formation/{employee_id}/modules/{module_id}` | Niveau `level` (0 à 3 en période d'essai, 0 à 2 en formation) ; l'emoji du module suit le niveau le plus haut |
 | `PUT` | `/api/formation/{employee_id}/questions/{question_id}` | Bonne réponse ou non : `correct` (période d'essai) |
-| `POST` | `/api/formation/{employee_id}/resident` | Passage au grade « En formation » (modules de période d'essai au plus haut, moyenne ≥ 14 ; `409` sinon) ; leurs emojis quittent les compétences. `{"force": true}` : validations basiques seules exigées, Direction ou Responsable du pôle Formation (`403` sinon) |
+| `POST` | `/api/formation/{employee_id}/resident` | Passage au grade « En formation » ; les emojis des modules de période d'essai quittent les compétences. `{"force": true}` : modules obligatoires seuls exigés, Direction ou Responsable du pôle Formation (`403` sinon) |
 | `DELETE` | `/api/formation/{employee_id}/resident` | Annule le passage d'un employé « En formation » : grade d'avant (à défaut, le grade « Période d'essai » juste en dessous), ses emojis reviennent |
-| `POST` | `/api/formation/{employee_id}/complete` | Fin de formation : grade au-dessus (formations obligatoires validées, simulation ≥ 14 ; `409` sinon) ; leurs emojis quittent les compétences. `{"force": true}` : formations obligatoires seules exigées, Direction ou Responsable du pôle Formation (`403` sinon) |
+| `POST` | `/api/formation/{employee_id}/complete` | Fin de formation : grade au-dessus ; les emojis des formations quittent les compétences. `{"force": true}` : modules obligatoires seuls exigés, Direction ou Responsable du pôle Formation (`403` sinon) |
 | `DELETE` | `/api/formation/{employee_id}/complete` | Annule la fin de formation : grade « En formation », ses emojis reviennent |
-| `POST` | `/api/formation/modules` | Crée un module : `category` (`basics` \| `tools` \| `interventions` \| `injuries` pour la période d'essai, `mandatory` \| `optional` pour la formation), `name`, `emoji` facultatif |
+| `POST` | `/api/formation/modules` | Crée un module : `category` (`basics` \| `tools` \| `interventions` \| `injuries` pour la période d'essai, `mandatory` \| `optional` pour la formation), `name`, `emoji` facultatif, `is_required` (obligatoire pour le passage, même forcé) |
 | `PATCH` | `/api/formation/modules/{id}` | Modifie un module (sans changer d'étape) ; l'emoji est remplacé, ajouté ou retiré chez les employés |
 | `DELETE` | `/api/formation/modules/{id}` | Supprime le module, les niveaux et son emoji des compétences |
 | `POST` | `/api/formation/questions` | Crée une question : `question`, `answer` |

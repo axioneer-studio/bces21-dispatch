@@ -2,6 +2,10 @@
 premier démarrage : ce sont ceux de la feuille de suivi que le BCES utilisait.
 Ils se modifient ensuite dans la page Formation."""
 
+# Types dont les modules sont obligatoires par défaut (case cochée à la
+# création) : les validations basiques et les formations obligatoires.
+REQUIRED_CATEGORIES: tuple[str, ...] = ("basics", "mandatory")
+
 # (type, nom)
 DEFAULT_INTERN_MODULES: list[tuple[str, str]] = [
     ("basics", "DDS"),

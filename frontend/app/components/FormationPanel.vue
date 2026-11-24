@@ -5,19 +5,24 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue'
  * Page Formation : une fiche par employé en formation, comme la feuille de
  * suivi du BCES. Deux onglets, nommés d'après les grades cochés dans Direction :
  * « Période d'essai » (ex. Interne) et « En formation » (ex. Résident). Les
- * formateurs remplissent les fiches ; les modules et le questionnaire se gèrent
- * par la Direction, « Gérer l'hôpital » et le Responsable du pôle Formation
- * (`can_manage`).
+ * formateurs remplissent les fiches ; les modules, le questionnaire et les
+ * seuils de passage se gèrent par la Direction, « Gérer l'hôpital » et le
+ * Responsable du pôle Formation (`can_manage`).
  */
 type Stage = 'trial' | 'training'
 type Category = 'basics' | 'tools' | 'interventions' | 'injuries' | 'mandatory' | 'optional'
 type Tone = 'done' | 'ready' | 'normal' | 'warning' | 'urgent'
+type Bar = Category | 'overall'
+/** Seuils du passage : barres en %, notes sur 20 (moyenne, simulation de la période de formation). */
+type ThresholdKey = Bar | 'average' | 'resident_simulation'
 
 interface FormationModule {
   id: number
   category: Category
   name: string
   emoji: string | null
+  /** À valider au plus haut pour le passage, même forcé. */
+  is_required: boolean
 }
 
 interface Question {
@@ -64,6 +69,10 @@ interface Fiche {
   average: number | null
   resident_simulation_score: number | null
   status: { label: string; tone: Tone } | null
+  /** Ce qui manque pour le passage sans forcer (vide : possible). */
+  blockers: string[]
+  /** Modules obligatoires pas encore validés : exigés même pour forcer. */
+  missing_required: string[]
   can_pass_resident: boolean
   resident_at: string | null
   can_complete: boolean
@@ -82,13 +91,13 @@ interface FormationPage {
   trainers: Person[]
   trial_grades: Grade[]
   training_grades: Grade[]
+  thresholds: Record<ThresholdKey, number>
   can_manage: boolean
   /** Forcer un passage : Direction et Responsable du pôle Formation. */
   can_force: boolean
 }
 
 const API = '/api/formation'
-const PASS_AVERAGE = 14
 
 const CATEGORIES: Record<Stage, { key: Category; label: string }[]> = {
   trial: [
@@ -102,6 +111,15 @@ const CATEGORIES: Record<Stage, { key: Category; label: string }[]> = {
     { key: 'optional', label: 'Formations facultatives' }
   ]
 }
+
+/** Barres de progression de chaque étape, avec leur seuil de passage. */
+const BARS: Record<Stage, { key: Bar; label: string; total?: boolean }[]> = {
+  trial: [...CATEGORIES.trial, { key: 'overall', label: 'Progression totale', total: true }],
+  training: CATEGORIES.training
+}
+
+/** Types dont la case « Obligatoire » est cochée par défaut à la création d'un module. */
+const REQUIRED_BY_DEFAULT: Category[] = ['basics', 'mandatory']
 
 /** Niveaux et leur couleur : 0 rouge, puis jusqu'au vert au plus haut. */
 /**
@@ -177,9 +195,30 @@ function messageFromError(cause: unknown, fallback: string) {
   return fallback
 }
 
+/** Pourcentage entier, arrondi vers le bas comme les seuils : 99,6 % n'affiche pas 100 %. */
+function percentValue(value: number) {
+  return Math.floor(value * 100 + 1e-9)
+}
+
 /** Pourcentage affiché, à la française (« 25 % »). */
 function percent(value: number) {
-  return `${Math.round(value * 100)} %`
+  return `${percentValue(value)} %`
+}
+
+/** Seuil de l'étape atteint (un seuil à 0 n'exige rien : rien n'est mis en avant). */
+function reached(key: ThresholdKey, value: number | null) {
+  const goal = page.value?.thresholds[key] ?? 0
+  if (value === null || goal <= 0) return false
+  if (key === 'average' || key === 'resident_simulation') return value >= goal
+  return percentValue(value) >= goal
+}
+
+/** Étapes des barres et notes des informations générales : la période d'essai, puis celle de formation. */
+const infoStages = computed<Stage[]>(() => (current.value?.stage === 'training' ? ['trial', 'training'] : ['trial']))
+
+/** Seuil affiché sur la barre : ceux de l'étape de la fiche, pas ceux d'une étape passée. */
+function goalOn(key: Bar, barStage: Stage) {
+  return current.value?.stage === barStage && (page.value?.thresholds[key] ?? 0) > 0
 }
 
 /** Largeur d'une barre de progression : sans espace, sinon le CSS l'ignore. */
@@ -214,25 +253,12 @@ const mentorOptions = computed(() => {
   return page.value.trainers.filter((trainer) => trainer.id !== fiche.employee_id && !taken.has(trainer.id))
 })
 
-/** Ce qui manque pour le passage, dans l'info-bulle du bouton. */
-const blockers = computed(() => {
-  const fiche = current.value
-  if (!fiche) return []
-  const missing: string[] = []
-  if (fiche.stage === 'trial') {
-    if (fiche.progress.overall < 1) missing.push(`Progression totale : ${percent(fiche.progress.overall)}`)
-    if (fiche.average === null) missing.push('Questionnaire et simulation à noter')
-    else if (fiche.average < PASS_AVERAGE) missing.push(`Moyenne ${score(fiche.average)} (${PASS_AVERAGE} requis)`)
-  } else {
-    if (fiche.progress.mandatory < 1) missing.push(`Formations obligatoires : ${percent(fiche.progress.mandatory)}`)
-    if (fiche.resident_simulation_score === null) missing.push('Simulation à noter')
-    else if (fiche.resident_simulation_score < PASS_AVERAGE) {
-      missing.push(`Simulation ${score(fiche.resident_simulation_score)} (${PASS_AVERAGE} requis)`)
-    }
-  }
-  if (!fiche.next_grade_name) missing.push('Aucun grade au-dessus dans Direction')
-  return missing
-})
+/**
+ * Ce qui manque pour le passage, dans l'info-bulle du bouton : modules
+ * obligatoires, seuils des barres et de la note, grade au-dessus (calculé par
+ * le serveur, qui vérifie les mêmes conditions au passage).
+ */
+const blockers = computed(() => current.value?.blockers ?? [])
 
 /** Passage possible sans forcer. */
 const canPass = computed(() => {
@@ -242,15 +268,16 @@ const canPass = computed(() => {
 
 /**
  * Forcer le passage : la Direction et le Responsable du pôle Formation passent
- * outre les autres conditions, mais les validations basiques (période d'essai)
- * ou les formations obligatoires (période de formation) restent exigées.
+ * outre les seuils, mais les modules obligatoires restent exigés.
  */
 const force = ref(false)
-const forceRequirement = computed(() => (stage.value === 'trial' ? 'les validations basiques' : 'les formations obligatoires'))
-const canForce = computed(() => {
+const canForce = computed(() => Boolean(current.value?.next_grade_name && !current.value.missing_required.length))
+const forceHint = computed(() => {
   const fiche = current.value
-  if (!fiche || !fiche.next_grade_name) return false
-  return (fiche.stage === 'trial' ? fiche.progress.basics : fiche.progress.mandatory) >= 1
+  if (!fiche) return ''
+  if (fiche.missing_required.length) return `Pour forcer, il faut valider les modules obligatoires : ${fiche.missing_required.join(', ')}`
+  if (!fiche.next_grade_name) return 'Aucun grade au-dessus dans Direction'
+  return 'Passe outre les seuils ; les modules obligatoires sont validés'
 })
 const passEnabled = computed(() => canPass.value || (force.value && canForce.value))
 
@@ -375,6 +402,22 @@ function saveNotes() {
   void send('', 'PATCH', { notes: notesDraft.value }, 'Notes impossibles à enregistrer.')
 }
 
+/** Seuil de passage, commun à toutes les fiches : la page se recharge pour recalculer les passages. */
+async function saveThreshold(key: ThresholdKey, value: number) {
+  if (busy.value) return false
+  busy.value = true
+  try {
+    await $fetch(`${API}/thresholds`, { method: 'PUT', body: { [key]: value }, credentials: 'include' })
+    await load()
+    return true
+  } catch (cause) {
+    toast.error(messageFromError(cause, 'Seuil impossible à enregistrer.'))
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
 // --- Passages de grade et annulations ---
 
 type Transition = { fiche: Fiche; method: 'POST' | 'DELETE'; path: 'resident' | 'complete'; title: string; message: string; label: string; danger: boolean; done: string; force: boolean }
@@ -450,7 +493,7 @@ async function runTransition() {
 // --- Modules et questions (Direction, « Gérer l'hôpital », Responsable du pôle Formation) ---
 
 const moduleDialog = ref<HTMLDialogElement | null>(null)
-const moduleForm = reactive({ id: null as number | null, category: 'basics' as Category, name: '', emoji: '' })
+const moduleForm = reactive({ id: null as number | null, category: 'basics' as Category, name: '', emoji: '', is_required: false })
 const questionDialog = ref<HTMLDialogElement | null>(null)
 const questionForm = reactive({ id: null as number | null, question: '', answer: '' })
 const saving = ref(false)
@@ -464,6 +507,7 @@ async function openModule(category: Category, module?: FormationModule) {
   moduleForm.category = category
   moduleForm.name = module?.name ?? ''
   moduleForm.emoji = module?.emoji ?? ''
+  moduleForm.is_required = module?.is_required ?? REQUIRED_BY_DEFAULT.includes(category)
   await nextTick()
   if (!moduleDialog.value?.open) moduleDialog.value?.showModal()
   moduleDialog.value?.querySelector<HTMLInputElement>('input[name="name"]')?.focus()
@@ -497,7 +541,8 @@ function saveModule() {
   void save(moduleDialog.value, 'modules', moduleForm.id, {
     category: moduleForm.category,
     name: moduleForm.name,
-    emoji: moduleForm.emoji.trim() || null
+    emoji: moduleForm.emoji.trim() || null,
+    is_required: moduleForm.is_required
   })
 }
 
@@ -643,12 +688,8 @@ onBeforeUnmount(() => {
             <span v-if="current.status" class="formation-tone" :class="`is-${current.status.tone}`">{{ current.status.label }}</span>
           </div>
           <div class="fiche-pass">
-            <!-- Forcer : Direction et Responsable du pôle Formation, si les basiques / obligatoires sont validés. -->
-            <span
-              v-if="page.can_force && !canPass"
-              class="fiche-force"
-              :title="canForce ? 'Passe outre les autres conditions' : `Pour forcer, il faut toutes ${forceRequirement} validées`"
-            >
+            <!-- Forcer : Direction et Responsable du pôle Formation, si les modules obligatoires sont validés. -->
+            <span v-if="page.can_force && !canPass" class="fiche-force" :title="forceHint">
               <label :class="{ 'is-disabled': !canForce }">
                 <input v-model="force" type="checkbox" :disabled="busy || !canForce">
                 Forcer
@@ -715,27 +756,73 @@ onBeforeUnmount(() => {
                   Un mentor doit avoir validé un pôle qui donne le droit Formateur (Pôles &amp; Spé).
                 </span>
               </dd>
-              <template v-for="category in CATEGORIES.trial" :key="category.key">
-                <dt>{{ category.label }}</dt>
-                <dd class="fiche-progress"><span class="formation-bar"><span :style="{ width: barWidth(current.progress[category.key]) }"></span></span>{{ percent(current.progress[category.key]) }}</dd>
-              </template>
-              <dt><strong>Progression totale</strong></dt>
-              <dd class="fiche-progress"><span class="formation-bar"><span :style="{ width: barWidth(current.progress.overall) }"></span></span><strong>{{ percent(current.progress.overall) }}</strong></dd>
-              <dt>Note du questionnaire</dt>
-              <dd>{{ score(current.questionnaire_score) }}</dd>
-              <dt>Note de la simulation {{ trialLabel }}</dt>
-              <dd>{{ score(current.simulation_score) }}</dd>
-              <dt><strong>Moyenne</strong></dt>
-              <dd><strong :class="{ 'is-ok': current.average !== null && current.average >= PASS_AVERAGE }">{{ score(current.average) }}</strong></dd>
-              <template v-if="current.stage === 'training'">
-                <dt>Passage {{ trainingLabel }}</dt>
-                <dd>{{ formatDate(current.resident_at) }}</dd>
-                <template v-for="category in CATEGORIES.training" :key="category.key">
-                  <dt>{{ category.label }}</dt>
-                  <dd class="fiche-progress"><span class="formation-bar"><span :style="{ width: barWidth(current.progress[category.key]) }"></span></span>{{ percent(current.progress[category.key]) }}</dd>
+              <!--
+                Barres et note de l'étape : seuil du passage sans forcer (repère sur la barre,
+                valeur à droite, modifiable par ceux qui gèrent la formation). Ceux d'une étape
+                passée ne s'affichent plus.
+              -->
+              <template v-for="barStage in infoStages" :key="barStage">
+                <template v-if="barStage === 'training'">
+                  <dt>Passage {{ trainingLabel }}</dt>
+                  <dd>{{ formatDate(current.resident_at) }}</dd>
                 </template>
-                <dt>Note de la simulation {{ trainingLabel }}</dt>
-                <dd>{{ score(current.resident_simulation_score) }}</dd>
+                <template v-for="bar in BARS[barStage]" :key="bar.key">
+                  <dt><strong v-if="bar.total">{{ bar.label }}</strong><template v-else>{{ bar.label }}</template></dt>
+                  <dd class="fiche-progress">
+                    <span class="formation-bar">
+                      <span :style="{ width: barWidth(current.progress[bar.key]) }"></span>
+                      <i v-if="goalOn(bar.key, barStage)" class="formation-bar__goal" :style="{ '--goal': page.thresholds[bar.key] }"></i>
+                    </span>
+                    <span class="fiche-progress__value" :class="{ 'is-ok': current.stage === barStage && reached(bar.key, current.progress[bar.key]), 'is-total': bar.total }">{{ percent(current.progress[bar.key]) }}</span>
+                    <FormationGoal
+                      v-if="current.stage === barStage"
+                      :value="page.thresholds[bar.key]"
+                      :max="100"
+                      unit="%"
+                      :label="bar.label"
+                      :editable="page.can_manage"
+                      :disabled="busy"
+                      :save="(value: number) => saveThreshold(bar.key, value)"
+                    />
+                  </dd>
+                </template>
+                <template v-if="barStage === 'trial'">
+                  <dt>Note du questionnaire</dt>
+                  <dd>{{ score(current.questionnaire_score) }}</dd>
+                  <dt>Note de la simulation {{ trialLabel }}</dt>
+                  <dd>{{ score(current.simulation_score) }}</dd>
+                  <dt><strong>Moyenne</strong></dt>
+                  <dd class="fiche-note">
+                    <strong :class="{ 'is-ok': current.stage === 'trial' && reached('average', current.average) }">{{ score(current.average) }}</strong>
+                    <FormationGoal
+                      v-if="current.stage === 'trial'"
+                      :value="page.thresholds.average"
+                      :max="20"
+                      :step="0.5"
+                      unit="/ 20"
+                      label="Moyenne"
+                      :editable="page.can_manage"
+                      :disabled="busy"
+                      :save="(value: number) => saveThreshold('average', value)"
+                    />
+                  </dd>
+                </template>
+                <template v-else>
+                  <dt>Note de la simulation {{ trainingLabel }}</dt>
+                  <dd class="fiche-note">
+                    <strong :class="{ 'is-ok': reached('resident_simulation', current.resident_simulation_score) }">{{ score(current.resident_simulation_score) }}</strong>
+                    <FormationGoal
+                      :value="page.thresholds.resident_simulation"
+                      :max="20"
+                      :step="0.5"
+                      unit="/ 20"
+                      :label="`Simulation ${trainingLabel}`"
+                      :editable="page.can_manage"
+                      :disabled="busy"
+                      :save="(value: number) => saveThreshold('resident_simulation', value)"
+                    />
+                  </dd>
+                </template>
               </template>
             </dl>
           </article>
@@ -750,6 +837,7 @@ onBeforeUnmount(() => {
         <h4 class="fiche-title">Validation grade {{ viewStage === 'trial' ? trialLabel : trainingLabel }}</h4>
         <p class="fiche-legend">
           <span v-for="level in LEVELS[viewStage]" :key="level.value">{{ level.icon }} {{ level.label }}</span>
+          <span><span class="fiche-required" aria-hidden="true">*</span> Obligatoire pour le passage, même forcé</span>
         </p>
 
         <div class="fiche-modules" :class="[`is-${viewStage}`, { 'is-archived': archived }]">
@@ -765,6 +853,7 @@ onBeforeUnmount(() => {
                 <span class="fiche-rows__name">
                   <span v-if="module.emoji" class="fiche-rows__emoji" title="Emoji ajouté aux compétences au niveau le plus haut">{{ module.emoji }}</span>
                   <span class="fiche-rows__label" :title="module.name">{{ module.name }}</span>
+                  <span v-if="module.is_required" class="fiche-required" title="Obligatoire pour le passage, même forcé">*<span class="fiche-sr-only"> (obligatoire)</span></span>
                   <span v-if="page.can_manage && !archived" class="fiche-actions">
                     <button type="button" :aria-label="`Modifier ${module.name}`" title="Modifier" @click="openModule(category.key, module)"><Icon name="lucide:pencil" size="11" /></button>
                     <button type="button" class="is-danger" :aria-label="`Supprimer ${module.name}`" title="Supprimer" @click="askDeleteModule(module)"><Icon name="lucide:trash-2" size="11" /></button>
@@ -853,6 +942,13 @@ onBeforeUnmount(() => {
           <label>
             <span>Nom</span>
             <input v-model="moduleForm.name" name="name" required maxlength="64" placeholder="Ex. DDS">
+          </label>
+          <label class="formation-check">
+            <input v-model="moduleForm.is_required" type="checkbox">
+            <span>
+              <strong>Obligatoire</strong>
+              <small>À valider au niveau le plus haut pour le passage, même forcé.</small>
+            </span>
           </label>
           <p class="formation-muted">
             Avec un emoji, il rejoint les compétences de l’employé au niveau le plus haut.
@@ -944,6 +1040,8 @@ onBeforeUnmount(() => {
 .formation-item__days { color: var(--dp-text-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
 .formation-bar { position: relative; display: block; height: 5px; overflow: hidden; border-radius: 999px; background: var(--dp-line); }
 .formation-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--dp-accent); }
+/* Repère du seuil de passage : décalé de sa propre largeur à 100 % pour rester dans la barre. */
+.formation-bar__goal { position: absolute; top: 0; bottom: 0; left: calc(var(--goal) * 1%); width: 2px; background: var(--dp-text); opacity: .6; transform: translateX(calc(var(--goal) * -1%)); }
 .formation-tone { justify-self: start; padding: 2px 8px; border: 1px solid var(--dp-line); border-radius: 999px; color: var(--dp-text-2); font-size: 10px; font-weight: 600; }
 .formation-tone.is-done, .formation-tone.is-ready { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
 .formation-tone.is-warning { border-color: color-mix(in srgb, var(--dp-warn) 55%, transparent); color: var(--dp-warn); background: var(--dp-warn-soft); }
@@ -991,16 +1089,19 @@ onBeforeUnmount(() => {
 .fiche-icon { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--dp-line); border-radius: 7px; color: var(--dp-text-2); background: var(--dp-bg); cursor: pointer; }
 .fiche-icon:hover { color: var(--dp-accent); border-color: var(--dp-accent-line); }
 .fiche-top { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
-.fiche-info { display: grid; grid-template-columns: minmax(130px, auto) minmax(0, 1fr); align-items: center; gap: 7px 12px; margin: 0; font-size: 11px; }
+.fiche-info { --formation-goal-width: 116px; display: grid; grid-template-columns: minmax(130px, auto) minmax(0, 1fr); align-items: center; gap: 7px 12px; margin: 0; font-size: 11px; }
 .fiche-info dt { color: var(--dp-text-2); }
 .fiche-info dd { margin: 0; color: var(--dp-text); font-variant-numeric: tabular-nums; }
-.fiche-info strong.is-ok { color: var(--dp-accent); }
+.fiche-info .is-ok { color: var(--dp-accent); }
 .fiche-info input[type='date'], .fiche-mentors select, .fiche-level, .fiche-score { min-height: 28px; padding: 0 8px; border: 1px solid var(--dp-line); border-radius: 7px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 11px; }
 .fiche-mentors { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .fiche-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border: 1px solid var(--dp-accent-line); border-radius: 999px; color: var(--dp-accent); background: var(--dp-accent-soft); font-size: 10px; font-weight: 650; }
 .fiche-chip button { display: grid; width: 18px; height: 18px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: inherit; background: transparent; cursor: pointer; }
 .fiche-chip button:hover { background: var(--dp-panel); }
-.fiche-progress { display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: center; gap: 8px; text-align: right; }
+/* Barre, pourcentage, seuil : la colonne du seuil reste réservée (même vide) pour aligner les barres. */
+.fiche-progress { display: grid; grid-template-columns: minmax(0, 1fr) 42px var(--formation-goal-width); align-items: center; gap: 8px; text-align: right; }
+.fiche-progress__value.is-total { font-weight: 700; }
+.fiche-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .fiche-notes textarea { min-height: 160px; height: 100%; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
 .fiche-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0; padding: 8px; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text-2); font-size: 11px; }
 /* Une seule rangée : les blocs de l'étape et la simulation côte à côte (sur écran étroit, ils passent à la ligne). */
@@ -1021,6 +1122,7 @@ onBeforeUnmount(() => {
  */
 .fiche-rows__name .fiche-actions { position: absolute; top: 50%; right: 0; padding: 1px; border-radius: 6px; background: var(--dp-panel-2); transform: translateY(-50%); }
 .fiche-rows__emoji { flex-shrink: 0; font-size: 13px; }
+.fiche-required { position: relative; flex-shrink: 0; color: var(--dp-danger); font-weight: 700; }
 .fiche-level { width: 132px; font-weight: 600; }
 .fiche-level.is-none { border-color: var(--dp-danger-line); background: var(--dp-danger-soft); }
 .fiche-level.is-seen { border-color: color-mix(in srgb, var(--dp-info) 45%, transparent); background: var(--dp-info-soft); }
@@ -1057,6 +1159,10 @@ onBeforeUnmount(() => {
 .formation-form input:not([type='checkbox']), .formation-form textarea { width: 100%; min-height: 36px; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 12px; }
 .formation-form textarea { resize: vertical; }
 .formation-form > .formation-muted { grid-column: 1 / -1; }
+.formation-form > label.formation-check { display: flex; grid-column: 1 / -1; align-items: flex-start; gap: 9px; color: var(--dp-text); font-size: 11px; cursor: pointer; }
+.formation-check input { flex-shrink: 0; width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--dp-accent); }
+.formation-check span { display: grid; gap: 2px; }
+.formation-check small { color: var(--dp-text-dim); font-size: 10px; }
 .formation-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--dp-line); }
 
 /* Écran étroit : les blocs passent à la ligne plutôt que d'écraser les noms. */
