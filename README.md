@@ -172,7 +172,11 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
       soit de 0 à 4 points ; le total est ramené sur 20.
   - **Emoji d'un module** (facultatif) : il rejoint les compétences au niveau le
     plus haut et les quitte en dessous, tant que l'employé est à l'étape du
-    module.
+    module. Deux modules n'ont jamais le même emoji, mais un module peut avoir
+    celui d'un pôle ou d'une spécialité. Chez un employé à l'étape du module,
+    l'emoji vient du module : il ne vaut ni validation du pôle (Pôles & Spé) ni
+    ses droits. Renommer ou supprimer l'emoji du module ne touche que les
+    employés à son étape, et celui du pôle que les autres.
   - **Module obligatoire** : une case du module (marqué d'un `*` rouge). Il faut
     le valider au niveau le plus haut pour le passage, même forcé. La case est
     cochée par défaut pour les validations basiques et les formations
@@ -732,7 +736,7 @@ donner le rôle (`403` sinon). Les super-admins ont tous les droits.
 | Méthode | Chemin | Description |
 |---|---|---|
 | `GET` | `/api/trainings` | Formations générales, employés actifs (compétences, grade, téléphone), rôles des équipes, droits qu'une formation peut donner, `can_manage` et `can_assign_lead` |
-| `POST` | `/api/trainings` | Crée une formation générale : `name`, `emoji` (unique parmi toutes les formations), `category` (`pole` par défaut \| `specialty`), `permissions` (droits donnés : `training.validate`, `hospital.forensic`, `human_resources.manage`, `stock.manage`) |
+| `POST` | `/api/trainings` | Crée une formation générale : `name`, `emoji` (unique parmi les pôles et spécialités ; un module de la page Formation peut avoir le même), `category` (`pole` par défaut \| `specialty`), `permissions` (droits donnés : `training.validate`, `hospital.forensic`, `human_resources.manage`, `stock.manage`) |
 | `PATCH` | `/api/trainings/{id}` | Modifie une formation ; un nouvel emoji remplace l'ancien chez les employés |
 | `DELETE` | `/api/trainings/{id}` | Supprime la formation et retire son emoji des compétences |
 | `PUT` | `/api/trainings/{id}/employees/{employee_id}` | Donne un rôle dans la formation : `status` facultatif (`validated` par défaut, `lead`, `second`, `in_progress`) |
@@ -748,7 +752,8 @@ seuil et sa note à son seuil, donc donnée si ce seuil dépasse 0 (`409` sinon,
 avec ce qui manque). Une fiche ne se remplit que
 pour un employé d'un grade « Période d'essai » ou « En formation », et seulement
 pour son étape : modules, simulation et questionnaire (`409` sinon). Un emoji
-est unique parmi toutes les formations et tous les modules.
+est unique parmi les pôles et spécialités, et parmi les modules (`409` sinon) ;
+un pôle et un module peuvent avoir le même.
 
 | Méthode | Chemin | Description |
 |---|---|---|

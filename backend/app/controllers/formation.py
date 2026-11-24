@@ -49,7 +49,6 @@ from app.controllers.dispatch import push_employees_changed
 from app.controllers.trainings import (
     active_employees,
     add_emoji,
-    ensure_emoji_available,
     get_active_employee,
     remove_emoji,
     remove_emoji_everywhere,
@@ -88,18 +87,23 @@ from app.schemas import (
     SimulationCriterionOut,
     TrainingGradeOut,
 )
+from app.services.formation_stages import (
+    TRAINING,
+    TRAINING_CATEGORIES,
+    TRIAL,
+    TRIAL_CATEGORIES,
+    employee_stage,
+    module_stage,
+)
 from app.services.formation_thresholds import read_thresholds, write_thresholds
 from app.services.hospital_access import is_direction, linked_employee, user_can_manage_hospital
 from app.services.training_rights import (
     TRAINER_PERMISSION,
+    emoji_key,
     employees_with_training_permission,
     parse_training_permissions,
 )
 
-TRIAL = "trial"
-TRAINING = "training"
-TRIAL_CATEGORIES = ("basics", "tools", "interventions", "injuries")
-TRAINING_CATEGORIES = ("mandatory", "optional")
 # Niveau le plus haut : Pratiqué en autonomie (période d'essai), Validé (période de formation).
 MAX_LEVELS = {TRIAL: 3, TRAINING: 2}
 # Barres de progression de chaque étape, qui ont un seuil de passage.
@@ -135,23 +139,8 @@ CRITERIA = {
 }
 
 
-def module_stage(module: InternModule) -> str:
-    return TRIAL if module.category in TRIAL_CATEGORIES else TRAINING
-
-
 def max_level(module: InternModule) -> int:
     return MAX_LEVELS[module_stage(module)]
-
-
-def employee_stage(employee: Employee) -> str | None:
-    grade = employee.grade
-    if grade is None:
-        return None
-    if grade.is_trial:
-        return TRIAL
-    if grade.is_training:
-        return TRAINING
-    return None
 
 
 def _grade_out(grade: Grade) -> TrainingGradeOut:
@@ -544,9 +533,26 @@ async def formation_page(user: User, db: AsyncSession) -> InternsPageOut:
 # --- Modules et questionnaire ---
 
 
+async def _ensure_module_emoji_available(db: AsyncSession, emoji: str, module_id: int | None = None) -> None:
+    """L'emoji est unique parmi les modules ; un pôle ou une spécialité peut avoir
+    le même (services/formation_stages.py)."""
+    modules = (await db.execute(select(InternModule).where(InternModule.emoji.is_not(None)))).scalars().all()
+    for module in modules:
+        if module.id != module_id and emoji_key(module.emoji) == emoji_key(emoji):
+            raise HTTPException(
+                status_code=409,
+                detail=f"L’emoji {emoji} est déjà celui du module « {module.name} ».",
+            )
+
+
+def _at_stage_of(module: InternModule):
+    """Employés à l'étape du module : les seuls chez qui son emoji vient de lui."""
+    return lambda employee: employee_stage(employee) == module_stage(module)
+
+
 async def create_module(payload: InternModuleRequest, db: AsyncSession) -> InternModuleOut:
     if payload.emoji:
-        await ensure_emoji_available(db, payload.emoji)
+        await _ensure_module_emoji_available(db, payload.emoji)
     module = InternModule(
         category=payload.category, name=payload.name, emoji=payload.emoji, is_required=payload.is_required
     )
@@ -557,21 +563,23 @@ async def create_module(payload: InternModuleRequest, db: AsyncSession) -> Inter
 
 
 async def update_module(module_id: int, payload: InternModuleRequest, db: AsyncSession) -> InternModuleOut:
-    """Un nouvel emoji remplace l'ancien chez les employés ; un emoji ajouté va
-    à ceux qui ont déjà le module au plus haut ; un emoji retiré quitte leurs
-    compétences. Le module reste à son étape (période d'essai ou de formation)."""
+    """Chez les employés à l'étape du module, un nouvel emoji remplace l'ancien
+    et un emoji retiré quitte leurs compétences ; un emoji ajouté va à ceux qui
+    ont déjà le module au plus haut. Les autres gardent le leur (un pôle peut
+    avoir le même). Le module reste à son étape (période d'essai ou de
+    formation)."""
     module = await db.get(InternModule, module_id)
     if module is None:
         raise HTTPException(status_code=404, detail="Module introuvable.")
     if (payload.category in TRIAL_CATEGORIES) != (module.category in TRIAL_CATEGORIES):
         raise HTTPException(status_code=422, detail="Un module ne change pas d’étape : créez-le dans l’autre.")
     if payload.emoji:
-        await ensure_emoji_available(db, payload.emoji, module_id=module.id)
+        await _ensure_module_emoji_available(db, payload.emoji, module_id=module.id)
     changed = False
     if module.emoji and payload.emoji:
-        changed = await replace_emoji_everywhere(db, module.emoji, payload.emoji)
+        changed = await replace_emoji_everywhere(db, module.emoji, payload.emoji, only=_at_stage_of(module))
     elif module.emoji:
-        changed = await remove_emoji_everywhere(db, module.emoji)
+        changed = await remove_emoji_everywhere(db, module.emoji, only=_at_stage_of(module))
     elif payload.emoji:
         for employee in await _employees_at_level_max(db, module):
             changed = add_emoji(employee, payload.emoji) or changed
@@ -587,11 +595,14 @@ async def update_module(module_id: int, payload: InternModuleRequest, db: AsyncS
 
 
 async def delete_module(module_id: int, db: AsyncSession) -> MessageResponse:
-    """Supprime le module, les niveaux des employés et son emoji de leurs compétences."""
+    """Supprime le module, les niveaux des employés et son emoji des compétences
+    des employés à son étape."""
     module = await db.get(InternModule, module_id)
     if module is None:
         raise HTTPException(status_code=404, detail="Module introuvable.")
-    changed = await remove_emoji_everywhere(db, module.emoji) if module.emoji else False
+    changed = (
+        await remove_emoji_everywhere(db, module.emoji, only=_at_stage_of(module)) if module.emoji else False
+    )
     await db.execute(delete(InternModuleLevel).where(InternModuleLevel.module_id == module.id))
     await db.delete(module)
     await db.commit()

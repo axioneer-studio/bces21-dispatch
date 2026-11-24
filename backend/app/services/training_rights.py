@@ -2,9 +2,10 @@
 
 Une formation générale peut donner des droits (Formateur, Médecin légiste, RH)
 à ceux qui l'ont validée, c'est-à-dire aux employés qui ont son emoji dans leurs
-compétences. Le compte lié à la tuile de l'employé reçoit ces droits. La
-Direction (grade `is_direction`) a le droit RH par défaut. Les super-admins ont
-tous les droits.
+compétences (`pole_competencies` : sans les emojis des modules de leur étape de
+formation, qu'un pôle peut partager). Le compte lié à la tuile de l'employé
+reçoit ces droits. La Direction (grade `is_direction`) a le droit RH par
+défaut. Les super-admins ont tous les droits.
 """
 
 import json
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import Employee, Training, User
+from app.services.formation_stages import employee_stage, module_emojis_by_stage
 
 TRAINER_PERMISSION = "training.validate"
 FORENSIC_PERMISSION = "hospital.forensic"
@@ -47,6 +49,19 @@ def employee_competencies(employee: Employee) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
+def from_stage_module(employee: Employee, emoji: str, module_emojis: dict[str, list[str]]) -> bool:
+    """L'emoji est celui d'un module de l'étape de l'employé : chez lui, il vient
+    de sa fiche de formation, pas d'un pôle ou d'une spécialité."""
+    stage = employee_stage(employee)
+    return stage is not None and any(emoji_key(item) == emoji_key(emoji) for item in module_emojis[stage])
+
+
+def pole_competencies(employee: Employee, module_emojis: dict[str, list[str]]) -> list[str]:
+    """Compétences qui comptent pour les pôles et spécialités (`module_emojis` :
+    `formation_stages.module_emojis_by_stage`)."""
+    return [item for item in employee_competencies(employee) if not from_stage_module(employee, item, module_emojis)]
+
+
 def parse_training_permissions(value: str | None) -> list[str]:
     try:
         permissions = json.loads(value or "[]")
@@ -62,8 +77,8 @@ async def _granting_trainings(db: AsyncSession) -> list[Training]:
     return [training for training in trainings if parse_training_permissions(training.permissions)]
 
 
-def _permissions_of(employee: Employee, trainings: list[Training]) -> set[str]:
-    owned = {emoji_key(item) for item in employee_competencies(employee)}
+def _permissions_of(employee: Employee, trainings: list[Training], module_emojis: dict[str, list[str]]) -> set[str]:
+    owned = {emoji_key(item) for item in pole_competencies(employee, module_emojis)}
     return {
         permission
         for training in trainings
@@ -82,7 +97,8 @@ async def employees_with_training_permission(db: AsyncSession, permission: str) 
             select(Employee).where(Employee.is_active.is_(True)).order_by(Employee.first_name, Employee.last_name)
         )
     ).scalars().all()
-    return [employee for employee in employees if permission in _permissions_of(employee, trainings)]
+    module_emojis = await module_emojis_by_stage(db)
+    return [employee for employee in employees if permission in _permissions_of(employee, trainings, module_emojis)]
 
 
 async def user_training_permissions(db: AsyncSession, user: User) -> list[str]:
@@ -93,7 +109,7 @@ async def user_training_permissions(db: AsyncSession, user: User) -> list[str]:
     employee = await db.scalar(select(Employee).where(Employee.account_user_id == user.id))
     if employee is None or not employee.is_active:
         return []
-    permissions = _permissions_of(employee, await _granting_trainings(db))
+    permissions = _permissions_of(employee, await _granting_trainings(db), await module_emojis_by_stage(db))
     if employee.grade and employee.grade.is_direction:
         permissions.add(HR_PERMISSION)
     return [permission for permission in TRAINING_PERMISSION_CATALOG if permission in permissions]
