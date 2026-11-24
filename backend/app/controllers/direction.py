@@ -29,7 +29,7 @@ from app.services.frequency_settings import (
     set_current_frequency,
     write_bounds,
 )
-from app.services.grade_permissions import GRADE_PERMISSION_CATALOG
+from app.services.grade_permissions import GRADE_PERMISSION_CATALOG, parse_grade_permissions
 
 
 def _validated_permissions(permissions: list[str] | None) -> list[str]:
@@ -45,10 +45,6 @@ def _validated_permissions(permissions: list[str] | None) -> list[str]:
 
 
 async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
-    try:
-        permissions = json.loads(grade.permissions or "[]")
-    except (TypeError, ValueError):
-        permissions = []
     count = await db.scalar(
         select(func.count(Employee.id)).where(Employee.grade_id == grade.id)
     )
@@ -57,10 +53,22 @@ async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
         name=grade.name,
         level=grade.level,
         color=grade.color,
-        permissions=_validated_permissions(permissions if isinstance(permissions, list) else []),
+        permissions=parse_grade_permissions(grade.permissions),
         is_direction=grade.is_direction,
+        is_trial=grade.is_trial,
+        is_training=grade.is_training,
         employees_count=count or 0,
     )
+
+
+def _check_training_flags(grade: Grade) -> None:
+    """Un grade est en période d'essai (formation initiale) ou en formation
+    (formation complémentaire), pas les deux."""
+    if grade.is_trial and grade.is_training:
+        raise HTTPException(
+            status_code=422,
+            detail="Un grade ne peut pas être à la fois « Période d’essai » et « En formation ».",
+        )
 
 
 async def list_grade_permissions() -> list[dict]:
@@ -92,9 +100,12 @@ async def create_grade(
         color=payload.color,
         permissions=json.dumps(_validated_permissions(payload.permissions)),
         is_direction=payload.is_direction,
+        is_trial=payload.is_trial,
+        is_training=payload.is_training,
     )
     db.add(grade)
     try:
+        _check_training_flags(grade)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -125,6 +136,7 @@ async def update_grade(
     for key, value in data.items():
         setattr(grade, key, value)
     try:
+        _check_training_flags(grade)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()

@@ -67,7 +67,7 @@ class Settings(BaseSettings):
         return [scope.strip() for scope in self.discord_scopes.split(",") if scope.strip()]
 
     @property
-    def discord_bypass_user_ids(self) -> list[str]:
+    def discord_bypass_user_id_list(self) -> list[str]:
         return [uid.strip() for uid in self.discord_bypass_user_ids.split(",") if uid.strip()]
 
 

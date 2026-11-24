@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.controllers import morgue as cg
 from app.deps import get_current_user, get_db, require_page_access
 from app.models import User
-from app.services.app_permissions import require_app_permission
-from app.services.hospital_access import FORENSIC_PERMISSION
+from app.services.training_rights import FORENSIC_PERMISSION, require_training_permission
 
 router = APIRouter(
     prefix="/api/hospital/morgue",
@@ -67,7 +66,7 @@ async def set_examiner(
 @router.post("/{entry_id}/incinerate", response_model=cg.MorgueEntryOut)
 async def incinerate_entry(
     entry_id: int,
-    _: User = Depends(require_app_permission(FORENSIC_PERMISSION)),
+    _: User = Depends(require_training_permission(FORENSIC_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> cg.MorgueEntryOut:
     return await cg.incinerate_entry(entry_id, db)
@@ -76,7 +75,7 @@ async def incinerate_entry(
 @router.post("/{entry_id}/coffin", response_model=cg.MorgueEntryOut)
 async def coffin_entry(
     entry_id: int,
-    _: User = Depends(require_app_permission(FORENSIC_PERMISSION)),
+    _: User = Depends(require_training_permission(FORENSIC_PERMISSION)),
     db: AsyncSession = Depends(get_db),
 ) -> cg.MorgueEntryOut:
     return await cg.coffin_entry(entry_id, db)

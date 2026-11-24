@@ -96,7 +96,7 @@ async def _check_guild_membership(access_token: str, user_id: str | None = None)
     settings = get_settings()
     if not settings.required_discord_guild_id:
         return
-    if user_id and user_id in settings.discord_bypass_user_ids:
+    if user_id and user_id in settings.discord_bypass_user_id_list:
         return
     guilds = await fetch_user_guilds(access_token)
     if not any(str(g.get("id")) == settings.required_discord_guild_id for g in guilds):

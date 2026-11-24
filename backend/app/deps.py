@@ -9,9 +9,11 @@ from app.database import get_db
 from app.models import User
 
 # Pages ouvertes à tout compte validé par un admin, même sans rôle.
-OPEN_PAGES = frozenset({"dispatch", "crisis", "hospital", "agenda", "stock"})
-# Pages à cocher dans un rôle (« Pages accessibles »).
-PAGE_KEYS = frozenset({"human-resources", "direction", "administration"})
+OPEN_PAGES = frozenset({"dispatch", "crisis", "hospital", "agenda", "stock", "training"})
+# Pages à cocher dans un rôle (« Pages accessibles »). Ressources humaines n'en
+# fait pas partie : elle est réservée aux droits RH et à la Direction (voir
+# training_rights).
+PAGE_KEYS = frozenset({"direction", "administration"})
 
 
 async def get_current_user(

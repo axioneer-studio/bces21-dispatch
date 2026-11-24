@@ -1,14 +1,15 @@
-"""Routes des ressources humaines (couche transport mince)."""
+"""Routes des ressources humaines (couche transport mince).
+
+Tout compte validé voit la liste des employés (Dispatch) ; le reste de la page
+est réservé au droit RH (formation qui le donne, ou grade de la Direction), qui
+permet toutes ses actions.
+"""
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers import human_resources as chr_
-from app.deps import (
-    get_db,
-    require_any_page_access,
-    require_page_access,
-)
+from app.deps import get_db, require_page_access
 from app.models import User
 from app.schemas import (
     EmployeeAccountLinkRequest,
@@ -18,8 +19,7 @@ from app.schemas import (
     GradeOption,
     MessageResponse,
 )
-from app.services.app_permissions import require_app_permission
-from app.services.grade_permissions import require_grade_permission
+from app.services.training_rights import require_hr_access
 
 router = APIRouter(prefix="/api", tags=["human resources"])
 
@@ -30,19 +30,14 @@ router = APIRouter(prefix="/api", tags=["human resources"])
 )
 async def list_employees(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(
-        require_any_page_access("dispatch", "human-resources")
-    ),
+    current_user: User = Depends(require_page_access("dispatch")),
 ) -> list[EmployeeOut]:
     return await chr_.list_employees(db, current_user)
 
 
 @router.get(
     "/employee-accounts",
-    dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_app_permission("human_resources.link_accounts")),
-    ],
+    dependencies=[Depends(require_hr_access)],
 )
 async def list_employee_accounts(db: AsyncSession = Depends(get_db)) -> list[dict]:
     return await chr_.list_employee_accounts(db)
@@ -51,7 +46,7 @@ async def list_employee_accounts(db: AsyncSession = Depends(get_db)) -> list[dic
 @router.get(
     "/employee-grades",
     response_model=list[GradeOption],
-    dependencies=[Depends(require_page_access("human-resources"))],
+    dependencies=[Depends(require_hr_access)],
 )
 async def list_employee_grade_options(db: AsyncSession = Depends(get_db)) -> list[GradeOption]:
     return await chr_.list_employee_grade_options(db)
@@ -61,10 +56,7 @@ async def list_employee_grade_options(db: AsyncSession = Depends(get_db)) -> lis
     "/employees",
     response_model=EmployeeOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_grade_permission("human_resources.manage_employees")),
-    ],
+    dependencies=[Depends(require_hr_access)],
 )
 async def create_employee(
     payload: EmployeeCreateRequest,
@@ -76,10 +68,7 @@ async def create_employee(
 @router.patch(
     "/employees/{employee_id}",
     response_model=EmployeeOut,
-    dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_grade_permission("human_resources.manage_employees")),
-    ],
+    dependencies=[Depends(require_hr_access)],
 )
 async def update_employee(
     employee_id: int,
@@ -92,10 +81,7 @@ async def update_employee(
 @router.patch(
     "/employees/{employee_id}/account",
     response_model=EmployeeOut,
-    dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_app_permission("human_resources.link_accounts")),
-    ],
+    dependencies=[Depends(require_hr_access)],
 )
 async def link_employee_account(
     employee_id: int,
@@ -108,10 +94,7 @@ async def link_employee_account(
 @router.delete(
     "/employees/{employee_id}",
     response_model=MessageResponse,
-    dependencies=[
-        Depends(require_page_access("human-resources")),
-        Depends(require_grade_permission("human_resources.manage_employees")),
-    ],
+    dependencies=[Depends(require_hr_access)],
 )
 async def delete_employee(
     employee_id: int, db: AsyncSession = Depends(get_db)

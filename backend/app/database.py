@@ -78,6 +78,8 @@ _EMPLOYEE_ALTER_STATEMENTS = [
 _GRADE_ALTER_STATEMENTS = [
     "ALTER TABLE grades ADD COLUMN color VARCHAR(7) DEFAULT '#46996d' NOT NULL",
     "ALTER TABLE grades ADD COLUMN is_direction BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE grades ADD COLUMN is_trial BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE grades ADD COLUMN is_training BOOLEAN DEFAULT FALSE NOT NULL",
 ]
 
 _VEHICLE_ALTER_STATEMENTS = [
@@ -90,6 +92,12 @@ _MORGUE_ALTER_STATEMENTS = [
 
 _GROUP_ALTER_STATEMENTS = [
     "ALTER TABLE affiliation_groups ADD COLUMN color VARCHAR(7)",
+]
+
+_TRAINING_ALTER_STATEMENTS = [
+    "ALTER TABLE trainings ADD COLUMN permissions TEXT DEFAULT '[]' NOT NULL",
+    "ALTER TABLE trainings ADD COLUMN category VARCHAR(16) DEFAULT 'pole' NOT NULL",
+    "ALTER TABLE intern_modules ADD COLUMN is_required BOOLEAN DEFAULT FALSE NOT NULL",
 ]
 
 
@@ -218,6 +226,15 @@ async def _run_group_migrations(conn) -> None:
             pass
 
 
+async def _run_training_migrations(conn) -> None:
+    for stmt in _TRAINING_ALTER_STATEMENTS:
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
+
+
 _DISPATCH_STATE_RENAMES = [
     ("freq_147", "freq_bces"),
     ("freq_570", "freq_shared"),
@@ -337,6 +354,61 @@ async def _seed_intervention_statuses(conn) -> None:
     )
 
 
+async def _seed_once(conn, key: str, statement: str, rows: list[dict] | None = None) -> None:
+    """Injecte des valeurs par défaut une seule fois : la clé dans
+    application_settings empêche de les recréer après les avoir supprimées.
+    Sans `rows`, l'instruction s'exécute une fois, sans paramètre."""
+    if await conn.scalar(text("SELECT COUNT(*) FROM application_settings WHERE key = :key"), {"key": key}):
+        return
+    if rows is None:
+        await conn.execute(text(statement))
+    elif rows:
+        await conn.execute(text(statement), rows)
+    await conn.execute(
+        text("INSERT INTO application_settings (key, value, updated_at) VALUES (:key, 'true', :now)"),
+        {"key": key, "now": datetime.now(timezone.utc)},
+    )
+
+
+async def _seed_intern_defaults(conn) -> None:
+    """Modules et questionnaire de la page Formation (feuille de suivi du BCES)."""
+    from app.services.intern_defaults import (
+        DEFAULT_INTERN_MODULES,
+        DEFAULT_INTERN_QUESTIONS,
+        DEFAULT_RESIDENT_MODULES,
+        REQUIRED_CATEGORIES,
+    )
+
+    now = datetime.now(timezone.utc)
+    module_statement = (
+        "INSERT INTO intern_modules (category, name, emoji, is_required, created_at) "
+        "VALUES (:category, :name, NULL, :is_required, :now)"
+    )
+
+    def module_rows(modules: list[tuple[str, str]]) -> list[dict]:
+        return [
+            {"category": category, "name": name, "is_required": category in REQUIRED_CATEGORIES, "now": now}
+            for category, name in modules
+        ]
+
+    await _seed_once(conn, "intern_defaults_seeded", module_statement, module_rows(DEFAULT_INTERN_MODULES))
+    await _seed_once(
+        conn,
+        "intern_questions_seeded",
+        "INSERT INTO intern_questions (question, answer, created_at) VALUES (:question, :answer, :now)",
+        [{"question": question, "answer": answer, "now": now} for question, answer in DEFAULT_INTERN_QUESTIONS],
+    )
+    await _seed_once(conn, "resident_defaults_seeded", module_statement, module_rows(DEFAULT_RESIDENT_MODULES))
+    # Modules créés avant la case « Obligatoire » : ceux des types qui la
+    # cochent par défaut la reçoivent une fois.
+    categories = ", ".join(f"'{category}'" for category in REQUIRED_CATEGORIES)
+    await _seed_once(
+        conn,
+        "intern_required_seeded",
+        f"UPDATE intern_modules SET is_required = TRUE WHERE category IN ({categories})",
+    )
+
+
 async def _backfill_employees() -> None:
     from app.models import DispatchAssignment, DispatchRadio, Employee
 
@@ -414,9 +486,11 @@ async def init_db() -> None:
         await _run_vehicle_migrations(conn)
         await _run_morgue_migrations(conn)
         await _run_group_migrations(conn)
+        await _run_training_migrations(conn)
         await _run_access_migrations(conn)
         await _run_dispatch_migrations(conn)
         await _seed_intervention_statuses(conn)
+        await _seed_intern_defaults(conn)
 
     await _backfill_employees()
 

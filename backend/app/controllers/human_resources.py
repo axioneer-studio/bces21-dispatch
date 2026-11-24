@@ -16,8 +16,8 @@ from app.schemas import (
     GradeOption,
     MessageResponse,
 )
-from app.services.app_permissions import require_app_permission
-from app.services.grade_permissions import parse_grade_permissions, require_grade_permission
+from app.services.grade_permissions import parse_grade_permissions
+from app.services.training_rights import user_has_hr_access
 
 
 def _employee_out(
@@ -74,20 +74,16 @@ async def list_employees(db: AsyncSession, current_user: User) -> list[EmployeeO
     employees_query = select(Employee).order_by(
         Employee.is_active.desc(), Employee.first_name.asc(), Employee.last_name.asc()
     )
-    if not current_user_has_hr(current_user):
+    # Tout le monde voit la liste des employés (Dispatch) ; les employés
+    # désactivés et les détails RH sont réservés au droit RH (formation ou Direction).
+    include_hr_details = await user_has_hr_access(db, current_user)
+    if not include_hr_details:
         employees_query = employees_query.where(Employee.is_active.is_(True))
     employees = (await db.execute(employees_query)).scalars().all()
-    include_hr_details = current_user_has_hr(current_user)
     return [
         _employee_out(employee, include_hr_details=include_hr_details)
         for employee in employees
     ]
-
-
-def current_user_has_hr(current_user: User) -> bool:
-    from app.deps import user_has_page_access
-
-    return user_has_page_access(current_user, "human-resources")
 
 
 async def list_employee_accounts(db: AsyncSession) -> list[dict]:

@@ -1,4 +1,11 @@
-"""Contrôleur de la morgue : logique métier des défunts (cellule, autopsie, cercueil)."""
+"""Contrôleur de la morgue : logique métier des défunts (cellule, autopsie, cercueil).
+
+L'autopsie et le légiste ne se renseignent que par un médecin légiste (formation
+qui donne le droit « Médecin légiste », voir training_rights) ou par la
+Direction (grade `is_direction`) ; le légiste qui déclare l'autopsie devient le
+légiste du défunt. Seuls les légistes incinèrent un corps ou le mettent en
+cercueil, une fois l'autopsie faite.
+"""
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -16,12 +23,12 @@ from app.schemas import (
     MorgueExaminerRequest,
     MorgueOut,
 )
-from app.services.app_permissions import (
-    require_app_permission,
-    user_has_app_permission,
-    user_role_permissions,
+from app.services.hospital_access import is_direction, linked_employee
+from app.services.training_rights import (
+    FORENSIC_PERMISSION,
+    employees_with_training_permission,
+    user_has_training_permission,
 )
-from app.services.hospital_access import FORENSIC_PERMISSION, is_direction, linked_employee
 
 
 def _employee_name(employee: Employee) -> str:
@@ -35,14 +42,14 @@ def _entry_out(entry: MorgueEntry) -> MorgueEntryOut:
 
 
 async def _can_manage_autopsy(db: AsyncSession, user: User) -> bool:
-    if user_has_app_permission(user, FORENSIC_PERMISSION):
+    if await user_has_training_permission(db, user, FORENSIC_PERMISSION):
         return True
     return is_direction(await linked_employee(db, user))
 
 
 async def _require_autopsy_rights(db: AsyncSession, user: User) -> tuple[bool, Employee | None]:
     """Vérifie que le compte est légiste ou Direction ; renvoie s'il est légiste et sa tuile."""
-    is_forensic = user_has_app_permission(user, FORENSIC_PERMISSION)
+    is_forensic = await user_has_training_permission(db, user, FORENSIC_PERMISSION)
     employee = await linked_employee(db, user)
     if not is_forensic and not is_direction(employee):
         raise HTTPException(
@@ -53,19 +60,11 @@ async def _require_autopsy_rights(db: AsyncSession, user: User) -> tuple[bool, E
 
 
 async def _examiners(db: AsyncSession) -> list[Employee]:
-    """Employés actifs dont le compte lié a un rôle de médecin légiste."""
-    employees = (
-        await db.execute(
-            select(Employee)
-            .where(Employee.is_active.is_(True), Employee.account_user_id.is_not(None))
-            .order_by(Employee.first_name, Employee.last_name)
-        )
-    ).scalars().all()
+    """Employés actifs, liés à un compte, qui ont validé une formation de médecin légiste."""
     return [
         employee
-        for employee in employees
-        if employee.account_user
-        and FORENSIC_PERMISSION in user_role_permissions(employee.account_user)
+        for employee in await employees_with_training_permission(db, FORENSIC_PERMISSION)
+        if employee.account_user_id is not None
     ]
 
 
@@ -104,7 +103,7 @@ async def get_morgue(user: User, db: AsyncSession) -> MorgueOut:
             for employee in (await _examiners(db) if can_manage_autopsy else [])
         ],
         can_manage_autopsy=can_manage_autopsy,
-        is_forensic=user_has_app_permission(user, FORENSIC_PERMISSION),
+        is_forensic=await user_has_training_permission(db, user, FORENSIC_PERMISSION),
         groups=await cg_affiliation.group_choices(db),
     )
 

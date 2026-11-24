@@ -15,7 +15,6 @@ from app.deps import get_current_user
 from app.models import Employee, User
 
 MANAGE_PERMISSION = "hospital.manage"
-FORENSIC_PERMISSION = "hospital.forensic"
 
 
 async def linked_employee(db: AsyncSession, user: User) -> Employee | None:
