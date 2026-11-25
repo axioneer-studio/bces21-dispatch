@@ -442,6 +442,11 @@ async def reset_assignments(
                 DispatchSlot.kind.in_(("intervention", "consultation"))
             )
         )
+        await db.execute(
+            update(DispatchSlot)
+            .where(DispatchSlot.kind == "centrale")
+            .values(status=None, location=None, zip_code=None)
+        )
     state = await db.get(DispatchState, 1)
     if state is None:
         state = DispatchState(id=1)

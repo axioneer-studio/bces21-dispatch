@@ -99,7 +99,7 @@ async function resetDispatchAssignments() {
     applyResetSnapshot(updatedSnapshot)
     toast.success(
       deleteInterventions.value
-        ? 'Dispatch réinitialisé : hôpital fermé, affectations retirées, radios éteintes et interventions supprimées.'
+        ? 'Dispatch réinitialisé : hôpital fermé, affectations retirées, radios éteintes, interventions supprimées et centrale vidée.'
         : 'Dispatch réinitialisé : hôpital fermé, radios éteintes et employés remis hors service BCES.'
     )
     confirmVisible.value = false

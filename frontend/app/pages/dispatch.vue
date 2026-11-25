@@ -223,7 +223,7 @@ async function finishNoteEdit() {
             :agents="agents"
             :fixed="true"
             compact
-            label="Centrale"
+            label="Central"
             @employee-drop="onEmployeeDrop"
             @employee-remove="onEmployeeDrop"
           />
@@ -253,7 +253,7 @@ async function finishNoteEdit() {
             :slot="slot"
             :agents="agents"
             :hospital-slot-id="hopital?.id"
-            :label="slot.kind === 'consultation' ? 'Consultation' : `Int. ${i + 1}`"
+            :label="`Int. ${i + 1}`"
             @employee-drop="onEmployeeDrop"
             @employee-remove="onEmployeeDrop"
           />

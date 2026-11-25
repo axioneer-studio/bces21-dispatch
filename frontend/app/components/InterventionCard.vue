@@ -4,6 +4,7 @@ import type { Agent } from '~/utils/agent'
 import { sortAgentsByGradeAndArrival } from '~/utils/agent'
 import { assignUser, deleteSlot, updateSlot } from '~/composables/useDispatchApi'
 import { findStatus } from '~/utils/statuses'
+import StatusPicker from '~/components/StatusPicker.vue'
 
 const props = defineProps<{
   slot: DispatchSlot
@@ -24,10 +25,13 @@ const toast = useAppToast()
 const { snapshot } = useDispatchStore()
 /** Couleur du statut de l'intervention, choisie dans Administration (aucune par défaut). */
 const statusColor = computed(() => findStatus(snapshot.value.statuses, props.slot.status)?.color ?? null)
+const currentStatus = computed(() => findStatus(snapshot.value.statuses, props.slot.status))
+const statusPickerOpen = ref(false)
 const dropOver = ref<boolean>(false)
 const removing = ref<boolean>(false)
 
 function setStatus(statusId: string | null) {
+  statusPickerOpen.value = false
   updateSlot(props.slot.id, { status: statusId, location: null }).catch(() => {
     toast.error('Mise à jour impossible.')
   })
@@ -139,14 +143,27 @@ function unassign(agentId: number) {
   >
     <div class="iv__bar">
       <span class="iv__label">{{ label ?? slot.title ?? 'Intervention' }}</span>
-      <ZipPicker
-        :model-value="slot.zip_code"
-        @update:model-value="setZip"
-      />
-      <StatusPicker
-        :model-value="slot.status ?? slot.location"
-        @update:model-value="setStatus"
-      />
+      <div class="iv__controls">
+        <ZipPicker
+          :model-value="slot.zip_code"
+          @update:model-value="setZip"
+        />
+        <div class="iv__status-popup">
+          <button
+            type="button"
+            class="iv__status-trigger"
+            :class="{ 'iv__status-trigger--set': currentStatus }"
+            :style="statusColor ? { '--status-color': statusColor } : undefined"
+            :title="currentStatus ? `Statut : ${currentStatus.label}` : 'Choisir un statut'"
+            aria-label="Afficher ou modifier le statut"
+            @click="statusPickerOpen = true"
+          >
+            <span class="iv__status-dot" />
+            <span class="iv__status-value">{{ currentStatus ? `${currentStatus.emoji} ${currentStatus.label}` : 'Statut' }}</span>
+            <Icon name="lucide:chevron-down" size="12" />
+          </button>
+        </div>
+      </div>
       <button
         v-if="!fixed"
         type="button"
@@ -159,6 +176,13 @@ function unassign(agentId: number) {
         <Icon name="lucide:x" size="12" />
       </button>
     </div>
+
+    <StatusPicker
+      v-if="statusPickerOpen"
+      :model-value="slot.status ?? slot.location"
+      @update:model-value="setStatus"
+      @close="statusPickerOpen = false"
+    />
 
     <div class="iv__drop">
       <AgentTile
@@ -231,6 +255,51 @@ function unassign(agentId: number) {
   flex-shrink: 0;
 }
 
+.iv__controls {
+  display: grid;
+  gap: 4px;
+}
+
+.iv__status-popup {
+  position: relative;
+  width: 100%;
+}
+
+.iv__status-trigger {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 27px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--dp-line-strong);
+  border-radius: 2px;
+  background: var(--dp-panel-2);
+  color: var(--dp-text-2);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.iv__status-trigger::-webkit-details-marker { display: none; }
+.iv__status-trigger--set {
+  border-color: var(--status-color);
+  color: var(--dp-text);
+  background: color-mix(in srgb, var(--status-color) 22%, var(--dp-panel-2));
+}
+
+.iv__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-color, var(--dp-text-dim));
+  flex: 0 0 auto;
+}
+
+.iv__status-value { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+
 .iv__label {
   min-height: 14px;
   font-size: 9.5px;
@@ -289,11 +358,10 @@ function unassign(agentId: number) {
   padding-right: 14px;
 }
 
-.iv--compact .iv__bar :deep(.zp__input),
-.iv--compact .iv__bar :deep(.sp__select) {
-  height: 18px;
-  padding: 1px 3px;
-  font-size: 9px;
+.iv--compact .iv__controls :deep(.zp__input) {
+  height: 27px;
+  padding: 3px 6px;
+  font-size: 12px;
 }
 
 .iv__x:hover {
