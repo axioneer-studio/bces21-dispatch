@@ -15,7 +15,8 @@ type TrainingCategory = 'pole' | 'specialty'
 interface Training {
   id: number
   name: string
-  emoji: string
+  /** Facultatif : sans emoji, la validation ne se voit que dans l'équipe. */
+  emoji: string | null
   kind: 'general'
   category: TrainingCategory
   /** Droits donnés à ceux qui l'ont validée. */
@@ -70,7 +71,7 @@ const PERMISSION_HINTS: Record<string, string> = {
   'stock.manage': 'Gestion des stocks du BCES (page Stock).'
 }
 
-/** Rôles d'une formation, dans leur ordre d'affichage. Seul « En cours » n'a pas l'emoji. */
+/** Rôles d'une formation, dans leur ordre d'affichage. Seul « En cours » n'a pas l'emoji, ni la validation. */
 const STATUSES: { value: MemberStatus; label: string }[] = [
   { value: 'lead', label: 'Responsable' },
   { value: 'second', label: 'Second' },
@@ -112,8 +113,15 @@ function emojiKey(value: string) {
   return value.replace(/️/g, '').trim()
 }
 
+/** Validée : par l'emoji dans les compétences, ou, sans emoji, par un rôle autre que « En cours ». */
 function hasTraining(employee: TrainingEmployee, training: Training) {
-  return employee.competencies.some((item) => emojiKey(item) === emojiKey(training.emoji))
+  const emoji = training.emoji
+  if (!emoji) {
+    return members.value.some((member) =>
+      member.training_id === training.id && member.employee_id === employee.id && member.status !== 'in_progress'
+    )
+  }
+  return employee.competencies.some((item) => emojiKey(item) === emojiKey(emoji))
 }
 
 /** Le compte connecté est le Responsable de cette formation. */
@@ -214,7 +222,8 @@ async function load() {
 
 /**
  * Donne un rôle à l'employé dans la formation (« validated » pour une simple
- * validation), ou l'en retire avec `null` : l'emoji suit le rôle.
+ * validation), ou l'en retire avec `null` : l'emoji suit le rôle. Avec emoji, le
+ * Validé n'a pas de ligne dans l'équipe ; sans emoji, il en a une.
  */
 async function setStatus(training: Training, employee: TrainingEmployee, status: MemberStatus | null) {
   const key = `${training.id}:${employee.id}`
@@ -228,7 +237,7 @@ async function setStatus(training: Training, employee: TrainingEmployee, status:
     })
     employee.competencies = updated.competencies
     members.value = members.value.filter((item) => item.training_id !== training.id || item.employee_id !== employee.id)
-    if (status && status !== 'validated') {
+    if (status && (status !== 'validated' || !training.emoji)) {
       members.value = [...members.value, { training_id: training.id, employee_id: employee.id, status }]
     }
   } catch (cause) {
@@ -269,10 +278,10 @@ function closeDialog() {
 }
 
 async function saveTraining() {
-  if (saving.value || !form.name.trim() || !form.emoji.trim()) return
+  if (saving.value || !form.name.trim()) return
   saving.value = true
   try {
-    const body = { name: form.name, emoji: form.emoji, category: form.category, permissions: form.permissions }
+    const body = { name: form.name, emoji: form.emoji.trim() || null, category: form.category, permissions: form.permissions }
     if (editingId.value) {
       await $fetch<Training>(`/api/trainings/${editingId.value}`, { method: 'PATCH', body, credentials: 'include' })
     } else {
@@ -293,9 +302,11 @@ const deleteMessage = computed(() => {
   const training = deleting.value
   if (!training) return ''
   const count = validatedFor(training).length
-  return count
-    ? `L’emoji ${training.emoji} sera retiré des compétences de ${count} employé${count > 1 ? 's' : ''}.`
-    : 'Aucun employé ne l’a validée.'
+  if (!count) return 'Aucun employé ne l’a validée.'
+  const employeesLabel = `${count} employé${count > 1 ? 's' : ''}`
+  return training.emoji
+    ? `L’emoji ${training.emoji} sera retiré des compétences de ${employeesLabel}.`
+    : `${employeesLabel} perdr${count > 1 ? 'ont' : 'a'} cette validation et ses droits.`
 })
 
 function askDelete(training: Training) {
@@ -365,7 +376,7 @@ onBeforeUnmount(() => {
         <span class="training-bar__icon"><Icon name="lucide:badge-check" size="20" /></span>
         <div>
           <h1>Pôles &amp; Spé</h1>
-          <p>Valider une formation ajoute son emoji aux compétences de l’employé (Ressources humaines).</p>
+          <p>Valider une formation ajoute son emoji, si elle en a un, aux compétences de l’employé (Ressources humaines).</p>
         </div>
       </div>
       <div class="training-bar__counts">
@@ -407,7 +418,8 @@ onBeforeUnmount(() => {
       <div v-else class="training-cards">
         <article v-for="training in section.trainings" :key="training.id" class="training-card">
           <header class="training-card__head">
-            <span class="training-card__emoji">{{ training.emoji }}</span>
+            <span v-if="training.emoji" class="training-card__emoji">{{ training.emoji }}</span>
+            <span v-else class="training-card__emoji is-empty" title="Sans emoji"><Icon name="lucide:badge-check" size="16" /></span>
             <div>
               <div class="training-card__title">
                 <h3>{{ training.name }}</h3>
@@ -486,7 +498,7 @@ onBeforeUnmount(() => {
           </button>
         </header>
         <div class="training-form">
-          <EmojiField v-model="form.emoji" label="Emoji" :maxlength="16" />
+          <EmojiField v-model="form.emoji" label="Emoji (facultatif)" :maxlength="16" clearable />
           <label>
             <span>Nom de la formation</span>
             <input v-model="form.name" name="name" required maxlength="64" placeholder="Ex. Pilote Medicopter">
@@ -505,13 +517,13 @@ onBeforeUnmount(() => {
                 <small v-if="PERMISSION_HINTS[option.key]">{{ PERMISSION_HINTS[option.key] }}</small>
               </span>
             </label>
-            <p class="training-muted">Le compte lié à la tuile de l’employé reçoit ces droits tant qu’il a l’emoji de la formation.</p>
+            <p class="training-muted">Le compte lié à la tuile de l’employé reçoit ces droits tant qu’il a validé la formation.</p>
           </fieldset>
-          <p v-if="editingId" class="training-muted">Un nouvel emoji remplace l’ancien chez les employés qui ont validé la formation.</p>
+          <p v-if="editingId" class="training-muted">Changer, retirer ou ajouter l’emoji ne fait perdre la validation à personne : il suit les employés qui ont validé la formation.</p>
         </div>
         <footer class="training-dialog__foot">
           <button type="button" class="training-button" :disabled="saving" @click="closeDialog">Annuler</button>
-          <button type="submit" class="training-button training-button--primary" :disabled="saving || !form.name.trim() || !form.emoji.trim()">
+          <button type="submit" class="training-button training-button--primary" :disabled="saving || !form.name.trim()">
             <Icon :name="saving ? 'lucide:loader-circle' : 'lucide:save'" size="14" :class="{ 'training-spin': saving }" />
             {{ saving ? 'Enregistrement…' : editingId ? 'Enregistrer' : 'Créer la formation' }}
           </button>
@@ -521,7 +533,7 @@ onBeforeUnmount(() => {
 
     <ConfirmDialog
       v-model:visible="deleteVisible"
-      :title="deleting ? `Supprimer « ${deleting.emoji} ${deleting.name} » ?` : 'Supprimer la formation ?'"
+      :title="deleting ? `Supprimer « ${[deleting.emoji, deleting.name].filter(Boolean).join(' ')} » ?` : 'Supprimer la formation ?'"
       :message="deleteMessage"
       confirm-label="Supprimer"
       danger
@@ -574,6 +586,7 @@ onBeforeUnmount(() => {
 .training-card { display: grid; align-content: start; gap: 10px; padding: 12px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); }
 .training-card__head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .training-card__emoji { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--dp-line); border-radius: 10px; background: var(--dp-bg); font-size: 19px; }
+.training-card__emoji.is-empty { color: var(--dp-text-dim); }
 /* Nom de la formation et, à côté, les droits qu'elle donne. */
 .training-card__title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .training-card h3 { min-width: 0; margin: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }

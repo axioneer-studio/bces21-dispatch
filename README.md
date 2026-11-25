@@ -141,13 +141,15 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Valider une formation pour un employé ajoute l'emoji de la formation à ses
   compétences (Ressources humaines) ; la retirer enlève l'emoji. L'emoji est la
   trace de la validation : un emoji ajouté à la main dans Ressources humaines
-  compte aussi.
+  compte aussi. L'emoji d'un pôle ou d'une spécialité est facultatif, comme
+  celui d'un module : sans emoji, la validation ne se voit que dans l'équipe de
+  la formation.
 - **Pôles & Spé**, ouverte à tout compte validé : les **formations générales**,
   en deux sections, **Spécialités** (ex. Médecin légiste) puis **Pôles** (ex.
   Pilote Medicopter, Stock, Formateur). Le bouton « Ajouter » de chaque section
   fixe la catégorie. Une carte par formation, avec son équipe et le numéro de
-  chacun. Rôles : Responsable, Second, Validé (ils ont l'emoji) et En cours (pas
-  encore). Un employé d'un grade « Période d'essai » ou « En formation » ne
+  chacun. Rôles : Responsable, Second, Validé (ils ont l'emoji, si la formation
+  en a un) et En cours (pas encore). Un employé d'un grade « Période d'essai » ou « En formation » ne
   rejoint ni pôle ni spécialité (`409`) ; il peut seulement en être retiré.
 - **Formation**, réservée aux formateurs (droit « Formateur ») : une fiche par
   employé en formation, comme l'ancienne feuille de suivi. Deux onglets, nommés
@@ -221,7 +223,7 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
     formations et le questionnaire de la feuille de suivi
     (`backend/app/services/intern_defaults.py`).
 - Une formation générale peut donner des droits à ceux qui l'ont validée (qui
-  ont son emoji) : **Formateur**, **Médecin légiste**, **Ressources humaines**
+  ont son emoji ; sans emoji, ses Responsables, Seconds et Validés) : **Formateur**, **Médecin légiste**, **Ressources humaines**
   et **Stock** (gestion des stocks, pour la future page Stock). Le compte lié à
   la tuile de l'employé reçoit ces droits ; ils ne se donnent plus par les
   rôles d'Administration ni par les grades. La Direction a le droit Ressources
@@ -234,9 +236,11 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   ou retire un Responsable ; par son Responsable (Second, Validé, En cours) ; et
   par ses Seconds, qui ajoutent, changent ou retirent des Validés et des En
   cours, sans toucher aux Seconds ni au Responsable.
-- Changer l'emoji d'une formation le remplace chez les employés qui l'ont ; la
-  supprimer le retire de leurs compétences, et avec lui les droits qu'elle
-  donnait.
+- Changer l'emoji d'une formation le remplace chez les employés qui l'ont ; le
+  retirer l'enlève de leurs compétences sans leur faire perdre la validation,
+  qui passe dans l'équipe ; en ajouter un le donne à ses Responsables, Seconds
+  et Validés. Supprimer la formation retire son emoji des compétences, et avec
+  lui les droits qu'elle donnait.
 
 ### Ressources humaines (`/ressources-humaines`)
 
@@ -744,8 +748,8 @@ donner le rôle (`403` sinon). Les super-admins ont tous les droits.
 | Méthode | Chemin | Description |
 |---|---|---|
 | `GET` | `/api/trainings` | Formations générales, employés actifs (compétences, grade, téléphone), rôles des équipes, droits qu'une formation peut donner, `can_manage` et `can_assign_lead` |
-| `POST` | `/api/trainings` | Crée une formation générale : `name`, `emoji` (unique parmi les pôles et spécialités ; un module de la page Formation peut avoir le même), `category` (`pole` par défaut \| `specialty`), `permissions` (droits donnés : `training.validate`, `hospital.forensic`, `human_resources.manage`, `stock.manage`) |
-| `PATCH` | `/api/trainings/{id}` | Modifie une formation ; un nouvel emoji remplace l'ancien chez les employés |
+| `POST` | `/api/trainings` | Crée une formation générale : `name`, `emoji` facultatif (unique parmi les pôles et spécialités ; un module de la page Formation peut avoir le même), `category` (`pole` par défaut \| `specialty`), `permissions` (droits donnés : `training.validate`, `hospital.forensic`, `human_resources.manage`, `stock.manage`) |
+| `PATCH` | `/api/trainings/{id}` | Modifie une formation ; un nouvel emoji remplace l'ancien chez les employés, un emoji retiré ou ajouté garde leur validation |
 | `DELETE` | `/api/trainings/{id}` | Supprime la formation et retire son emoji des compétences |
 | `PUT` | `/api/trainings/{id}/employees/{employee_id}` | Donne un rôle dans la formation : `status` facultatif (`validated` par défaut, `lead`, `second`, `in_progress`) |
 | `DELETE` | `/api/trainings/{id}/employees/{employee_id}` | Retire l'employé de la formation et l'emoji de ses compétences |
@@ -846,8 +850,8 @@ d'employés.
 | `user_roles` | Rôles de chaque compte : `user_id` → `users`, `role_id` → `roles` (cascade des deux côtés) |
 | `employees` | Employés indépendants des comptes, compétences, grade et lien facultatif vers un compte |
 | `grades` | Hiérarchie de service et permissions opérationnelles par grade ; `is_trial` (Période d'essai, formation initiale) et `is_training` (En formation, formation complémentaire), exclusifs sur un même grade |
-| `trainings` | Formations de Pôles & Spé : `name`, `emoji` (unique, ajouté aux compétences de l'employé validé), `kind` (`general`), `category` (`pole` \| `specialty`), `permissions` (JSON, droits donnés à ceux qui l'ont validée) |
-| `training_members` | Rôles dans une formation générale autres que « Validé » : `training_id` → `trainings`, `employee_id` → `employees`, `status` (`lead` \| `second` \| `in_progress`) |
+| `trainings` | Formations de Pôles & Spé : `name`, `emoji` facultatif (unique, ajouté aux compétences de l'employé validé), `kind` (`general`), `category` (`pole` \| `specialty`), `permissions` (JSON, droits donnés à ceux qui l'ont validée) |
+| `training_members` | Rôles dans une formation générale autres que « Validé » (sauf sans emoji, où le Validé a sa ligne) : `training_id` → `trainings`, `employee_id` → `employees`, `status` (`lead` \| `second` \| `in_progress`, et `validated` sans emoji) |
 | `intern_modules` | Modules de la page Formation : `category` (`basics` \| `tools` \| `interventions` \| `injuries` pour la période d'essai, `mandatory` \| `optional` pour la formation), `name`, `emoji` facultatif (unique) |
 | `intern_questions` | Questionnaire de passage Résident : `question`, `answer` |
 | `intern_records` | Fiche de formation : `employee_id` → `employees`, `notes`, `simulation` et `resident_simulation` (JSON, 1 à 5 par critère), `resident_at` et `previous_grade_id` (passage au grade « En formation » et grade d'avant), `completed_at` et `completed_from_grade_id` (fin de formation et grade d'avant) |
