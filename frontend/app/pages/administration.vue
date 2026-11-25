@@ -48,6 +48,14 @@ interface AppSettings {
   registration_open: boolean
 }
 
+/** Tempête automatique du Dispatch : `time` (HH:MM) dans le fuseau `timezone`. */
+interface StormSettings {
+  enabled: boolean
+  time: string
+  timezone: string
+  next_storm_at: string | null
+}
+
 interface GoogleSheetsConfig {
   configured: boolean
   enabled: boolean
@@ -124,7 +132,8 @@ const [
   { data: initialVehicles },
   { data: initialParkingSpots },
   { data: initialGroups },
-  { data: initialStatuses }
+  { data: initialStatuses },
+  { data: initialStorm }
 ] =
   await Promise.all([
     useAsyncData('admin-users', () =>
@@ -156,6 +165,9 @@ const [
     ),
     useAsyncData('admin-intervention-statuses', () =>
       $fetch<AdminInterventionStatus[]>('/api/admin/intervention-statuses', { credentials: 'include', headers: requestHeaders })
+    ),
+    useAsyncData('admin-storm', () =>
+      $fetch<StormSettings>('/api/admin/settings/storm', { credentials: 'include', headers: requestHeaders })
     )
   ])
 
@@ -164,6 +176,44 @@ const roles = ref<AppRole[]>(initialRoles.value ?? [])
 const registrations = ref<Registration[]>(initialRequests.value?.users ?? [])
 const settings = reactive<AppSettings>(initialSettings.value ?? { registration_open: true })
 const persistedRegistrationOpen = ref(settings.registration_open)
+
+// --- Tempête automatique ---
+const storm = reactive<StormSettings>(
+  initialStorm.value ?? { enabled: true, time: '03:00', timezone: 'Europe/Paris', next_storm_at: null }
+)
+const savedStorm = ref({ enabled: storm.enabled, time: storm.time })
+const stormSaving = ref(false)
+const stormDirty = computed(() => storm.enabled !== savedStorm.value.enabled || storm.time !== savedStorm.value.time)
+const nextStormLabel = computed(() => {
+  if (!storm.next_storm_at) return ''
+  return new Intl.DateTimeFormat('fr-FR', {
+    timeZone: storm.timezone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(storm.next_storm_at))
+})
+
+async function saveStorm() {
+  if (stormSaving.value || !stormDirty.value || !storm.time) return
+  stormSaving.value = true
+  adminError.value = ''
+  try {
+    const saved = await $fetch<StormSettings>('/api/admin/settings/storm', {
+      method: 'PUT',
+      body: { enabled: storm.enabled, time: storm.time },
+      credentials: 'include'
+    })
+    Object.assign(storm, saved)
+    savedStorm.value = { enabled: saved.enabled, time: saved.time }
+  } catch (cause) {
+    adminError.value = messageFromError(cause, 'Enregistrement de la Tempête automatique impossible.')
+  } finally {
+    stormSaving.value = false
+  }
+}
 
   // Load Google Sheets config after component is mounted to ensure proper initialization
   onMounted(() => {
@@ -1363,6 +1413,39 @@ function statusLabel(status: string) {
             <div class="admin-section__intro"><span class="admin-section__icon"><Icon name="lucide:settings-2" size="18" /></span><div><h2>Paramètres généraux</h2></div></div>
       </div>
 
+          <form class="admin-storm" @submit.prevent="saveStorm">
+            <div class="admin-storm__head">
+              <Icon name="lucide:tornado" size="16" />
+              <h3>Tempête automatique</h3>
+            </div>
+            <div class="admin-storm__body">
+              <p class="admin-storm__hint">
+                Chaque jour à l’heure choisie ({{ storm.timezone }}, heure d’été comprise), le Dispatch est réinitialisé comme avec le bouton « Tempête » : affectations retirées, radios éteintes et hôpital fermé. Les interventions sont gardées.
+              </p>
+              <div class="admin-storm__fields">
+                <label class="admin-storm__toggle">
+                  <input v-model="storm.enabled" type="checkbox" class="admin-checkbox">
+                  Activer la Tempête automatique
+                </label>
+                <label class="admin-storm__time">
+                  Heure
+                  <input v-model="storm.time" type="time" required>
+                </label>
+              </div>
+              <div class="admin-storm__footer">
+                <p class="admin-storm__next">
+                  <template v-if="stormDirty">Modifications non enregistrées.</template>
+                  <template v-else-if="storm.next_storm_at">Prochaine Tempête : {{ nextStormLabel }}.</template>
+                  <template v-else>Tempête automatique désactivée.</template>
+                </p>
+                <button type="submit" class="admin-button admin-button--primary" :disabled="stormSaving || !stormDirty || !storm.time">
+                  <Icon :name="stormSaving ? 'lucide:loader-circle' : 'lucide:save'" size="14" :class="{ 'admin-spin': stormSaving }" />
+                  {{ stormSaving ? 'Enregistrement…' : 'Enregistrer' }}
+                </button>
+              </div>
+            </div>
+          </form>
+
           <div v-if="googleSheetsError" class="admin-error" role="alert">
             <Icon name="lucide:circle-alert" size="17" /><span>{{ googleSheetsError }}</span>
             <button type="button" aria-label="Fermer" @click="googleSheetsError = ''"><Icon name="lucide:x" size="15" /></button>
@@ -1760,4 +1843,15 @@ function statusLabel(status: string) {
   accent-color: var(--dp-accent);
   cursor: pointer;
 }
+
+.admin-storm { margin-bottom: 24px; overflow: hidden; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel-2); }
+.admin-storm__head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--dp-line); color: var(--dp-accent); background: var(--dp-panel-3); }
+.admin-storm__head h3 { margin: 0; color: var(--dp-text); font-size: 15px; }
+.admin-storm__body { display: grid; gap: 16px; padding: 20px; }
+.admin-storm__hint, .admin-storm__next { margin: 0; color: var(--dp-text-dim); font-size: 12px; }
+.admin-storm__fields { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
+.admin-storm__toggle { display: flex; align-items: center; gap: 10px; color: var(--dp-text-2); font-size: 12px; cursor: pointer; }
+.admin-storm__time { display: flex; align-items: center; gap: 10px; color: var(--dp-text-2); font-size: 12px; }
+.admin-storm__time input { min-height: 40px; padding: 0 10px; border: 1px solid var(--dp-line); border-radius: 9px; color: var(--dp-text); background: var(--dp-bg); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; }
+.admin-storm__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 </style>
