@@ -168,19 +168,19 @@ function validatedFor(training: Training) {
 
 const CATEGORY_LABELS: Record<TrainingCategory, string> = { pole: 'Pôle', specialty: 'Spécialité' }
 
-/** Une section par catégorie : les pôles, puis les spécialités. */
+/** Une section par catégorie : les spécialités, puis les pôles. */
 const sections = computed(() => [
-  {
-    category: 'pole' as const,
-    title: 'Pôles',
-    detail: 'Ex. Pilote Medicopter, Stock, Formateur.',
-    trainings: trainings.value.filter((training) => training.category === 'pole')
-  },
   {
     category: 'specialty' as const,
     title: 'Spécialités',
     detail: 'Ex. Médecin légiste.',
     trainings: trainings.value.filter((training) => training.category === 'specialty')
+  },
+  {
+    category: 'pole' as const,
+    title: 'Pôles',
+    detail: 'Ex. Pilote Medicopter, Stock, Formateur.',
+    trainings: trainings.value.filter((training) => training.category === 'pole')
   }
 ])
 

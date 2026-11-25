@@ -426,7 +426,13 @@ async def reset_assignments(
             status_code=403,
             detail="Votre grade ne vous autorise pas à supprimer les interventions.",
         )
+    return await reset_dispatch(db, payload.delete_interventions)
 
+
+async def reset_dispatch(db: AsyncSession, delete_interventions: bool = False) -> DispatchSnapshot:
+    """Tempête : retire les affectations, éteint les radios, ferme l'hôpital et,
+    sur demande, supprime les interventions. Lancée par le bouton « Tempête »
+    ou chaque nuit par `services/storm.py`."""
     linked_id = await cl.linked_slot_id(db)
     if linked_id is not None:
         await cl.slot_emptied(db, linked_id)
@@ -436,7 +442,7 @@ async def reset_assignments(
         .where((DispatchRadio.is_on.is_(True)) | (DispatchRadio.is_loading.is_(True)))
         .values(is_on=False, is_loading=False)
     )
-    if payload.delete_interventions:
+    if delete_interventions:
         await db.execute(
             delete(DispatchSlot).where(
                 DispatchSlot.kind.in_(("intervention", "consultation"))

@@ -34,6 +34,10 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   **Congés**, **IPT**, **Astreinte fin de service**, **Pause**, plus les
   **interventions / consultations** créées à la volée.
 - Glisser-déposer des agents entre les créneaux et la réserve « hors service ».
+- Bouton **Tempête** : retire les affectations, éteint les radios, ferme
+  l'hôpital et, si la case est cochée, supprime les interventions. Une Tempête
+  automatique, qui garde les interventions, a lieu chaque nuit à 3 h, heure de
+  Paris (heure d'été comprise).
 - Statut d'intervention, choisi dans la liste gérée dans Administration, avec
   emoji, et code postal par carte. La liste a deux parties, toujours dans cet
   ordre : les statuts (Patrouille, Inter, Renfort, Enterrement…), puis les lieux
@@ -138,8 +142,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   trace de la validation : un emoji ajouté à la main dans Ressources humaines
   compte aussi.
 - **Pôles & Spé**, ouverte à tout compte validé : les **formations générales**,
-  en deux sections, **Pôles** (ex. Pilote Medicopter, Stock, Formateur) et
-  **Spécialités** (ex. Médecin légiste). Le bouton « Ajouter » de chaque section
+  en deux sections, **Spécialités** (ex. Médecin légiste) puis **Pôles** (ex.
+  Pilote Medicopter, Stock, Formateur). Le bouton « Ajouter » de chaque section
   fixe la catégorie. Une carte par formation, avec son équipe et le numéro de
   chacun. Rôles : Responsable, Second, Validé (ils ont l'emoji) et En cours (pas
   encore). Un employé d'un grade « Période d'essai » ou « En formation » ne
@@ -321,6 +325,7 @@ bces21-dispatch/
 │   ├── s3_service.py
 │   ├── sheets_sync.py
 │   ├── status_sync.py  # synchronisation Google Sheet (LSES / SAFD)
+│   ├── storm.py        # Tempête automatique de 3 h
 │   ├── Dockerfile
 │   ├── auth/
 │   │   ├── __init__.py
@@ -796,13 +801,14 @@ un pôle et un module peuvent avoir le même.
 
 ## Tâches de fond
 
-Deux tâches `asyncio` sont lancées au démarrage de l'API (lifespan FastAPI) et
+Trois tâches `asyncio` sont lancées au démarrage de l'API (lifespan FastAPI) et
 arrêtées proprement à l'extinction.
 
 | Tâche | Fichier | Rôle |
 |---|---|---|
 | Purge des comptes | `cleanup.py` | Supprime les comptes dont `prenom_rp` / `nom_rp` sont restés vides au-delà du délai. Intervalle : `CLEANUP_INTERVAL_SECONDS` (min 30 s). |
 | Sync Google Sheet | `status_sync.py` | Lit l'export CSV du Sheet *Disponibilités LSES/BCES/SAFD* et met à jour `lses_status` / `safd_status`. |
+| Tempête automatique | `storm.py` | Chaque nuit à 3 h dans le fuseau `APP_TIMEZONE` (`Europe/Paris`, heure d'été comprise), fait la même chose que le bouton « Tempête » du Dispatch, sans supprimer les interventions. Si l'API est arrêtée à 3 h, la Tempête de cette nuit-là n'a pas lieu. |
 
 ### Mapping des statuts du Sheet
 
