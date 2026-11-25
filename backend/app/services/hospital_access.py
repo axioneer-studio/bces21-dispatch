@@ -9,10 +9,10 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.app_permissions import user_has_app_permission
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import Employee, User
+from app.services.app_permissions import user_has_app_permission
 
 MANAGE_PERMISSION = "hospital.manage"
 

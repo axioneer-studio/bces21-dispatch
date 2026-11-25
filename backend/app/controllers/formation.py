@@ -36,10 +36,9 @@ donne le droit Formateur (`user_manages_formation`). Le forçage d'un passage se
 vérifie ici (`user_can_force_passage`).
 """
 
-import math
-
 import json
-from datetime import date, datetime, timezone
+import math
+from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
@@ -69,10 +68,10 @@ from app.models import (
 )
 from app.schemas import (
     InternAnswerRequest,
-    InternPassageRequest,
     InternLevelRequest,
     InternModuleOut,
     InternModuleRequest,
+    InternPassageRequest,
     InternPersonOut,
     InternProgressOut,
     InternQuestionOut,
@@ -96,7 +95,11 @@ from app.services.formation_stages import (
     module_stage,
 )
 from app.services.formation_thresholds import read_thresholds, write_thresholds
-from app.services.hospital_access import is_direction, linked_employee, user_can_manage_hospital
+from app.services.hospital_access import (
+    is_direction,
+    linked_employee,
+    user_can_manage_hospital,
+)
 from app.services.training_rights import (
     TRAINER_PERMISSION,
     emoji_key,
@@ -796,7 +799,7 @@ async def pass_training_grade(
     target = await _next_grade(db, employee)
     record = await _record(db, employee.id)
     record.previous_grade_id = employee.grade_id
-    record.resident_at = datetime.now(timezone.utc)
+    record.resident_at = datetime.now(UTC)
     await _change_grade(db, employee, target, leaving=TRIAL, entering=TRAINING)
     return await _fiche(db, employee)
 
@@ -836,7 +839,7 @@ async def complete_formation(
     target = await _next_grade(db, employee)
     record = await _record(db, employee.id)
     record.completed_from_grade_id = employee.grade_id
-    record.completed_at = datetime.now(timezone.utc)
+    record.completed_at = datetime.now(UTC)
     await _change_grade(db, employee, target, leaving=TRAINING, entering=None)
     await db.refresh(employee)
     return _record_out(employee, await _load(db, [employee.id]), TRAINING, None)

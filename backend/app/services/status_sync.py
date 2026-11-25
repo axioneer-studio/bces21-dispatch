@@ -14,13 +14,13 @@ import asyncio
 import logging
 
 from app.database import SessionLocal
+from app.models import DispatchState
 from app.services.google_sheets_service import (
     DEFAULT_S3_KEY,
     GoogleSheetsError,
     GoogleSheetsService,
     load_settings_from_db,
 )
-from app.models import DispatchState
 
 logger = logging.getLogger("bces.status_sync")
 
@@ -115,7 +115,9 @@ async def sync_statuses() -> tuple[bool, float]:
 
     Retourne (modifié, délai_avant_prochain_appel).
     """
-    from app.controllers.dispatch import push_snapshot  # import local pour éviter une référence circulaire
+    from app.controllers.dispatch import (
+        push_snapshot,  # import local pour éviter une référence circulaire
+    )
 
     statuses, delay = await fetch_statuses()
     if not statuses:
@@ -152,5 +154,5 @@ async def status_sync_loop(stop_event: asyncio.Event) -> None:
             logger.exception("Échec de l'itération de synchronisation.")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=delay)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue

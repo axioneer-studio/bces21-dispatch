@@ -2,7 +2,7 @@
 
 import re
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,9 @@ from app.schemas import (
     HospitalRoomsOut,
     MessageResponse,
 )
-from app.services.hospital_access import require_hospital_manage, user_can_manage_hospital
+from app.services.hospital_access import (
+    user_can_manage_hospital,
+)
 
 _BED_LABEL = re.compile(r"^lit (\d+)$", re.IGNORECASE)
 

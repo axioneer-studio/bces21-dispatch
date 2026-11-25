@@ -5,7 +5,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.dispatch import push_snapshot
-from app.models import FleetEntry, ParkingSpot, User, Vehicle
+from app.models import FleetEntry, ParkingSpot, Vehicle
 from app.schemas import (
     FleetEntryOut,
     FleetEntryUpdateRequest,
@@ -18,7 +18,6 @@ from app.schemas import (
     VehicleOut,
     VehicleUpdateRequest,
 )
-
 
 # --- Lignes de la flotte (tout compte ayant accès au Dispatch) ---
 

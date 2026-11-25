@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.session import decode_token, get_session_cookie_name
 from app.controllers import dispatch as cd
 from app.database import SessionLocal
-from app.deps import get_current_user, get_db, require_page_access, user_has_page_access
+from app.deps import get_db, require_page_access, user_has_page_access
 from app.models import User
 from app.schemas import (
     AssignRequest,

@@ -1,7 +1,8 @@
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import (
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
+
+logger = logging.getLogger("bces.database")
 
 
 class Base(DeclarativeBase):
@@ -311,7 +314,11 @@ async def _seed_intervention_statuses(conn) -> None:
 
     Une base où la colonne `kind` vient d'être ajoutée range ses lieux d'origine
     (BCES, Zombie, salles de l'hôpital…) dans les lieux, une seule fois."""
-    from app.services.intervention_status_defaults import DEFAULT_INTERVENTION_STATUSES, DEFAULT_PLACES, PLACE_KIND
+    from app.services.intervention_status_defaults import (
+        DEFAULT_INTERVENTION_STATUSES,
+        DEFAULT_PLACES,
+        PLACE_KIND,
+    )
 
     try:
         async with conn.begin_nested():
@@ -342,7 +349,7 @@ async def _seed_intervention_statuses(conn) -> None:
                 "is_primo": is_primo,
                 "kind": kind,
                 "order": orders[kind],
-                "created_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(UTC),
             }
         )
     await conn.execute(
@@ -366,7 +373,7 @@ async def _seed_once(conn, key: str, statement: str, rows: list[dict] | None = N
         await conn.execute(text(statement), rows)
     await conn.execute(
         text("INSERT INTO application_settings (key, value, updated_at) VALUES (:key, 'true', :now)"),
-        {"key": key, "now": datetime.now(timezone.utc)},
+        {"key": key, "now": datetime.now(UTC)},
     )
 
 
@@ -379,7 +386,7 @@ async def _seed_intern_defaults(conn) -> None:
         REQUIRED_CATEGORIES,
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     module_statement = (
         "INSERT INTO intern_modules (category, name, emoji, is_required, created_at) "
         "VALUES (:category, :name, NULL, :is_required, :now)"
@@ -445,7 +452,7 @@ async def _backfill_employees() -> None:
                             created_at.replace("Z", "+00:00")
                         )
                     if created_at is None:
-                        created_at = datetime.now(timezone.utc)
+                        created_at = datetime.now(UTC)
                     session.add(
                         DispatchAssignment(
                             slot_id=row["slot_id"],
@@ -464,17 +471,9 @@ async def _backfill_employees() -> None:
 
 async def init_db() -> None:
     from app.models import (
-        DispatchAssignment,
-        AgendaEvent,
-        DispatchRadio,
+        DispatchNote,
         DispatchSlot,
         DispatchState,
-        DispatchNote,
-        Employee,
-        Grade,
-        ApplicationSetting,
-        Role,
-        User,
     )
 
     async with engine.begin() as conn:

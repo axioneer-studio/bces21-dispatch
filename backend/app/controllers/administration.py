@@ -4,15 +4,14 @@ import asyncio
 import json
 import logging
 
-from fastapi import File, HTTPException, UploadFile, status
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.controllers.dispatch import push_employees_changed
-from app.database import get_db
-from app.deps import PAGE_KEYS, require_admin, require_super_admin, user_has_page_access
+from app.deps import PAGE_KEYS, user_has_page_access
 from app.models import ApplicationSetting, Employee, Role, User, user_roles
 from app.schemas import (
     AdminUserOut,
@@ -32,7 +31,6 @@ from app.schemas import (
 from app.services.app_permissions import APP_PERMISSION_CATALOG
 from app.services.google_sheets_service import (
     GoogleSheetsError,
-    GoogleSheetsService,
     build_from_db,
     load_settings_from_db,
 )
@@ -433,7 +431,7 @@ async def get_google_sheets_config(db: AsyncSession) -> GoogleSheetsConfigOut:
             if not test["connected"]:
                 connection_status = "erreur"
                 connection_error = test.get("error") or "Erreur de connexion inconnue."
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Test de connexion Google Sheets dépassé (timeout 5s).")
             connection_status = "erreur"
             connection_error = "Connexion Google Sheets dépassée (timeout)."

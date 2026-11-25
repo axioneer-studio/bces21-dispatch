@@ -1,6 +1,6 @@
-﻿from app.models.models import (  # noqa: F401
-    AgendaEvent,
+﻿from app.models.models import (
     AffiliationGroup,
+    AgendaEvent,
     ApplicationSetting,
     Base,
     CrisisMember,
@@ -31,15 +31,14 @@
     TrainingMember,
     User,
     Vehicle,
-    utcnow,
+    intervention_status_order,
     user_roles,
-    intervention_status_order,
-    intervention_status_order,
+    utcnow,
 )
 
 __all__ = [
-    "AgendaEvent",
     "AffiliationGroup",
+    "AgendaEvent",
     "ApplicationSetting",
     "Base",
     "CrisisMember",
@@ -70,7 +69,7 @@ __all__ = [
     "TrainingMember",
     "User",
     "Vehicle",
-    "utcnow",
-    "user_roles",
     "intervention_status_order",
+    "user_roles",
+    "utcnow",
 ]

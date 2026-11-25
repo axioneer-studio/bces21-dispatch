@@ -1,12 +1,16 @@
 """Contrôleur de l'agenda : événements."""
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AgendaEvent
-from app.schemas import AgendaEventCreate, AgendaEventOut, AgendaEventUpdate, MessageResponse
-from app.services.grade_permissions import require_grade_permission
+from app.schemas import (
+    AgendaEventCreate,
+    AgendaEventOut,
+    AgendaEventUpdate,
+    MessageResponse,
+)
 
 
 async def list_events(

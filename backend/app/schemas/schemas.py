@@ -1,9 +1,15 @@
 import re
-from datetime import date, datetime, timezone
-from typing import Literal, Optional
+from datetime import UTC, date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
-
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 _NAME_PATTERN = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' \-]+$")
 _PHONE_PATTERN = re.compile(r"^[\d\-\+\(\) ]{6,20}$")
@@ -45,13 +51,13 @@ class UserResponse(BaseModel):
     id: int
     discord_id: str
     discord_username: str
-    discord_avatar: Optional[str]
-    prenom_rp: Optional[str]
-    nom_rp: Optional[str]
-    phone: Optional[str]
-    status: Optional[str] = "active"
+    discord_avatar: str | None
+    prenom_rp: str | None
+    nom_rp: str | None
+    phone: str | None
+    status: str | None = "active"
     competencies: list[str]
-    rp_name_deadline: Optional[datetime]
+    rp_name_deadline: datetime | None
     created_at: datetime
     role_names: list[str] = Field(default_factory=list)
     # Droits super-admin actifs : faux quand le super-admin les a désactivés.
@@ -76,7 +82,7 @@ class UserResponse(BaseModel):
     @classmethod
     def _ensure_utc(cls, value):
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
     @field_validator("competencies", mode="before")
@@ -101,11 +107,11 @@ class AgentSummary(BaseModel):
     id: int
     discord_id: str
     discord_username: str
-    discord_avatar: Optional[str]
-    prenom_rp: Optional[str]
-    nom_rp: Optional[str]
-    phone: Optional[str]
-    status: Optional[str] = "active"
+    discord_avatar: str | None
+    prenom_rp: str | None
+    nom_rp: str | None
+    phone: str | None
+    status: str | None = "active"
     competencies: list[str]
 
     @field_validator("status", mode="before")
@@ -139,17 +145,17 @@ class EmployeeOut(BaseModel):
     id: int
     first_name: str
     last_name: str
-    phone: Optional[str]
-    email: Optional[str] = None
-    arrival_date: Optional[date] = None
+    phone: str | None
+    email: str | None = None
+    arrival_date: date | None = None
     competencies: list[str]
     is_active: bool
-    account_user_id: Optional[int]
-    account_username: Optional[str] = None
-    grade_id: Optional[int] = None
-    grade_name: Optional[str] = None
-    grade_level: Optional[int] = None
-    grade_color: Optional[str] = None
+    account_user_id: int | None
+    account_username: str | None = None
+    grade_id: int | None = None
+    grade_name: str | None = None
+    grade_level: int | None = None
+    grade_color: str | None = None
     grade_is_direction: bool = False
     grade_permissions: list[str] = Field(default_factory=list)
     created_at: datetime
@@ -174,12 +180,12 @@ class EmployeeCreateRequest(BaseModel):
 
     first_name: str = Field(max_length=64)
     last_name: str = Field(default="", max_length=64)
-    phone: Optional[str] = Field(default=None, max_length=20)
-    email: Optional[str] = Field(default=None, max_length=254)
-    arrival_date: Optional[date] = None
+    phone: str | None = Field(default=None, max_length=20)
+    email: str | None = Field(default=None, max_length=254)
+    arrival_date: date | None = None
     competencies: list[str] = Field(default_factory=list, max_length=20)
-    grade_id: Optional[int] = None
-    account_user_id: Optional[int] = None
+    grade_id: int | None = None
+    account_user_id: int | None = None
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -219,15 +225,15 @@ class EmployeeCreateRequest(BaseModel):
 class EmployeeUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    first_name: Optional[str] = Field(default=None, max_length=64)
-    last_name: Optional[str] = Field(default=None, max_length=64)
-    phone: Optional[str] = Field(default=None, max_length=20)
-    email: Optional[str] = Field(default=None, max_length=254)
-    arrival_date: Optional[date] = None
-    competencies: Optional[list[str]] = Field(default=None, max_length=20)
-    is_active: Optional[bool] = None
-    grade_id: Optional[int] = None
-    account_user_id: Optional[int] = None
+    first_name: str | None = Field(default=None, max_length=64)
+    last_name: str | None = Field(default=None, max_length=64)
+    phone: str | None = Field(default=None, max_length=20)
+    email: str | None = Field(default=None, max_length=254)
+    arrival_date: date | None = None
+    competencies: list[str] | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+    grade_id: int | None = None
+    account_user_id: int | None = None
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -273,7 +279,7 @@ class EmployeeUpdateRequest(BaseModel):
 class EmployeeAccountLinkRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    account_user_id: Optional[int]
+    account_user_id: int | None
 
 
 class RoleOut(BaseModel):
@@ -299,9 +305,9 @@ class RoleCreateRequest(BaseModel):
 
 
 class RoleUpdateRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
-    pages: Optional[list[str]] = None
-    permissions: Optional[list[str]] = None
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    pages: list[str] | None = None
+    permissions: list[str] | None = None
 
     @field_validator("name")
     @classmethod
@@ -352,13 +358,13 @@ class GradeCreateRequest(BaseModel):
 
 
 class GradeUpdateRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
-    level: Optional[int] = Field(default=None, ge=1)
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    level: int | None = Field(default=None, ge=1)
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
-    permissions: Optional[list[str]] = Field(default=None, max_length=32)
-    is_direction: Optional[bool] = None
-    is_trial: Optional[bool] = None
-    is_training: Optional[bool] = None
+    permissions: list[str] | None = Field(default=None, max_length=32)
+    is_direction: bool | None = None
+    is_trial: bool | None = None
+    is_training: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -372,7 +378,7 @@ class GradeUpdateRequest(BaseModel):
 
 
 class UserRoleUpdateRequest(BaseModel):
-    role_id: Optional[int] = None
+    role_id: int | None = None
 
 
 class SuperAdminUpdateRequest(BaseModel):
@@ -386,8 +392,8 @@ class SuperAdminToggleRequest(BaseModel):
 class AdminUserOut(BaseModel):
     id: int
     discord_username: str
-    first_name: Optional[str]
-    last_name: Optional[str]
+    first_name: str | None
+    last_name: str | None
     status: str
     role_ids: list[int]
     role_names: list[str]
@@ -482,22 +488,22 @@ FrequencyKind = Literal["radio", "shared"]
 class FrequencyBounds(BaseModel):
     """Bornes incluses ; `None` tant qu'elles n'ont pas été réglées dans Paramètres."""
 
-    min: Optional[int] = None
-    max: Optional[int] = None
+    min: int | None = None
+    max: int | None = None
 
 
 class FrequencySettingOut(FrequencyBounds):
     kind: FrequencyKind
     # `None` tant qu'aucune fréquence n'a été réglée ou tirée.
-    current: Optional[str] = None
+    current: str | None = None
 
 
 class FrequencySettingUpdateRequest(BaseModel):
     # Facultatives : si absentes, les bornes existantes sont conservées.
-    min: Optional[int] = Field(default=None, ge=0, le=99999)
+    min: int | None = Field(default=None, ge=0, le=99999)
     # Facultative : vide, la fréquence reste « Aucune » jusqu'au premier tirage.
-    current: Optional[int] = Field(default=None, ge=0, le=99999)
-    max: Optional[int] = Field(default=None, ge=0, le=99999)
+    current: int | None = Field(default=None, ge=0, le=99999)
+    max: int | None = Field(default=None, ge=0, le=99999)
 
     @model_validator(mode="after")
     def _ordered(self) -> "FrequencySettingUpdateRequest":
@@ -519,17 +525,17 @@ class PendingUserItem(BaseModel):
     id: int
     discord_id: str
     discord_username: str
-    discord_avatar: Optional[str]
-    prenom_rp: Optional[str]
-    nom_rp: Optional[str]
-    phone: Optional[str]
+    discord_avatar: str | None
+    prenom_rp: str | None
+    nom_rp: str | None
+    phone: str | None
     created_at: datetime
 
     @field_validator("created_at", mode="before")
     @classmethod
     def _ensure_utc(cls, value):
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
@@ -553,7 +559,7 @@ class AssignmentOut(BaseModel):
     @classmethod
     def _ensure_utc(cls, value):
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
@@ -562,11 +568,11 @@ class SlotOut(BaseModel):
 
     id: int
     kind: str
-    title: Optional[str]
-    status: Optional[str]
-    zip_code: Optional[str]
-    location: Optional[str]
-    type_label: Optional[str]
+    title: str | None
+    status: str | None
+    zip_code: str | None
+    location: str | None
+    type_label: str | None
     order: int
     assignments: list[AssignmentOut] = []
     created_at: datetime
@@ -576,7 +582,7 @@ class SlotOut(BaseModel):
     @classmethod
     def _ensure_utc(cls, value):
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
@@ -585,11 +591,11 @@ class SlotCreateRequest(BaseModel):
 
 
 class SlotUpdateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, max_length=64)
-    status: Optional[str] = Field(default=None, max_length=32)
-    zip_code: Optional[str] = Field(default=None, max_length=16)
-    location: Optional[str] = Field(default=None, max_length=64)
-    type_label: Optional[str] = Field(default=None, max_length=32)
+    title: str | None = Field(default=None, max_length=64)
+    status: str | None = Field(default=None, max_length=32)
+    zip_code: str | None = Field(default=None, max_length=16)
+    location: str | None = Field(default=None, max_length=64)
+    type_label: str | None = Field(default=None, max_length=32)
 
 
 class AssignRequest(BaseModel):
@@ -601,7 +607,7 @@ class RadioOut(BaseModel):
 
     id: int
     serial: str
-    employee_id: Optional[int]
+    employee_id: int | None
     is_on: bool
     is_loading: bool
     is_direction: bool
@@ -612,11 +618,11 @@ class RadioOut(BaseModel):
     @classmethod
     def _ensure_utc(cls, value):
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
-def _clean_serial(value: Optional[str]) -> Optional[str]:
+def _clean_serial(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip()
@@ -637,16 +643,16 @@ class RadioUpdateRequest(BaseModel):
     indisponible à la radio) ou OFF (ni l'un ni l'autre).
     """
 
-    employee_id: Optional[int] = None
-    is_on: Optional[bool] = None
-    is_loading: Optional[bool] = None
+    employee_id: int | None = None
+    is_on: bool | None = None
+    is_loading: bool | None = None
 
 
 class DirectionRadioOut(BaseModel):
     id: int
     serial: str
-    employee_id: Optional[int]
-    employee_name: Optional[str]
+    employee_id: int | None
+    employee_name: str | None
     is_on: bool
     is_loading: bool
     # Porteur membre de la Direction (selon son grade) : radio Direction.
@@ -663,11 +669,11 @@ class DirectionRadioCreateRequest(BaseModel):
 
 
 class DirectionRadioUpdateRequest(BaseModel):
-    serial: Optional[str] = Field(default=None, max_length=16)
+    serial: str | None = Field(default=None, max_length=16)
 
     @field_validator("serial")
     @classmethod
-    def _serial(cls, value: Optional[str]) -> Optional[str]:
+    def _serial(cls, value: str | None) -> str | None:
         return _clean_serial(value)
 
 
@@ -676,8 +682,8 @@ class StateOut(BaseModel):
     lses_status: str
     safd_status: str
     # `None` tant qu'aucune fréquence n'a été réglée ou tirée (« Aucune » sur le Dispatch).
-    freq_bces: Optional[str] = None
-    freq_shared: Optional[str] = None
+    freq_bces: str | None = None
+    freq_shared: str | None = None
     radio_codes: str
     updated_at: datetime
 
@@ -687,14 +693,14 @@ class StateOut(BaseModel):
     @classmethod
     def _ensure_utc(cls, value):
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
 class StateUpdateRequest(BaseModel):
-    hospital_status: Optional[str] = Field(default=None, pattern=r"^(ouvert|ferme|nuit)$")
+    hospital_status: str | None = Field(default=None, pattern=r"^(ouvert|ferme|nuit)$")
     # lses_status / safd_status : pilotés par le Google Sheet (status_sync.py)
-    radio_codes: Optional[str] = Field(default=None, max_length=2000)
+    radio_codes: str | None = Field(default=None, max_length=2000)
 
 
 class DispatchNoteUpdateRequest(BaseModel):
@@ -703,7 +709,7 @@ class DispatchNoteUpdateRequest(BaseModel):
 
 # --- Flotte de véhicules ---
 
-def _clean_required(value: Optional[str], label: str) -> Optional[str]:
+def _clean_required(value: str | None, label: str) -> str | None:
     if value is None:
         return None
     value = value.strip()
@@ -712,14 +718,14 @@ def _clean_required(value: Optional[str], label: str) -> Optional[str]:
     return value
 
 
-def _clean_plate(value: Optional[str]) -> Optional[str]:
+def _clean_plate(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip().upper()
     return value or None
 
 
-def _clean_optional(value: Optional[str]) -> Optional[str]:
+def _clean_optional(value: str | None) -> str | None:
     if value is None:
         return None
     return value.strip() or None
@@ -730,14 +736,14 @@ class VehicleOut(BaseModel):
 
     id: int
     name: str
-    plate: Optional[str]
-    model: Optional[str] = None
+    plate: str | None
+    model: str | None = None
 
 
 class VehicleCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
-    plate: Optional[str] = Field(default=None, max_length=16)
-    model: Optional[str] = Field(default=None, max_length=64)
+    plate: str | None = Field(default=None, max_length=16)
+    model: str | None = Field(default=None, max_length=64)
 
     @field_validator("name")
     @classmethod
@@ -746,33 +752,33 @@ class VehicleCreateRequest(BaseModel):
 
     @field_validator("plate")
     @classmethod
-    def _plate(cls, value: Optional[str]) -> Optional[str]:
+    def _plate(cls, value: str | None) -> str | None:
         return _clean_plate(value)
 
     @field_validator("model")
     @classmethod
-    def _model(cls, value: Optional[str]) -> Optional[str]:
+    def _model(cls, value: str | None) -> str | None:
         return _clean_optional(value)
 
 
 class VehicleUpdateRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
-    plate: Optional[str] = Field(default=None, max_length=16)
-    model: Optional[str] = Field(default=None, max_length=64)
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    plate: str | None = Field(default=None, max_length=16)
+    model: str | None = Field(default=None, max_length=64)
 
     @field_validator("name")
     @classmethod
-    def _name(cls, value: Optional[str]) -> Optional[str]:
+    def _name(cls, value: str | None) -> str | None:
         return _clean_required(value, "Le nom du véhicule")
 
     @field_validator("plate")
     @classmethod
-    def _plate(cls, value: Optional[str]) -> Optional[str]:
+    def _plate(cls, value: str | None) -> str | None:
         return _clean_plate(value)
 
     @field_validator("model")
     @classmethod
-    def _model(cls, value: Optional[str]) -> Optional[str]:
+    def _model(cls, value: str | None) -> str | None:
         return _clean_optional(value)
 
 
@@ -809,20 +815,20 @@ class FleetEntryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    vehicle_id: Optional[int]
+    vehicle_id: int | None
     location: str
     note: str
     order: int
 
 
 class FleetEntryUpdateRequest(BaseModel):
-    vehicle_id: Optional[int] = None
-    location: Optional[str] = Field(default=None, max_length=64)
-    note: Optional[str] = Field(default=None, max_length=500)
+    vehicle_id: int | None = None
+    location: str | None = Field(default=None, max_length=64)
+    note: str | None = Field(default=None, max_length=500)
 
     @field_validator("location", "note")
     @classmethod
-    def _strip(cls, value: Optional[str]) -> Optional[str]:
+    def _strip(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
 
 
@@ -851,15 +857,15 @@ class MessageResponse(BaseModel):
 class AgendaEventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     starts_at: datetime
-    ends_at: Optional[datetime] = None
-    description: Optional[str] = Field(default=None, max_length=2000)
+    ends_at: datetime | None = None
+    description: str | None = Field(default=None, max_length=2000)
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class AgendaEventUpdate(AgendaEventCreate):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=120)
-    starts_at: Optional[datetime] = None
-    color: Optional[str] = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    starts_at: datetime | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class AgendaEventOut(BaseModel):
@@ -867,8 +873,8 @@ class AgendaEventOut(BaseModel):
     id: int
     title: str
     starts_at: datetime
-    ends_at: Optional[datetime]
-    description: Optional[str]
+    ends_at: datetime | None
+    description: str | None
     color: str
     created_at: datetime
     updated_at: datetime
@@ -893,16 +899,16 @@ class MorgueEntryUpdate(MorgueEntryCreate):
     """La récupération se renseigne après l'ajout, depuis la case. L'autopsie et le
     légiste passent par `MorgueAutopsyRequest`, réservé aux légistes et à la Direction."""
 
-    death_date: Optional[date] = None
-    identity: Optional[str] = Field(default=None, max_length=120)
-    affiliation: Optional[str] = Field(default=None, max_length=64)
-    info_shareable: Optional[bool] = None
-    emergency_contacts: Optional[str] = Field(default=None, max_length=500)
-    recoverable: Optional[bool] = None
+    death_date: date | None = None
+    identity: str | None = Field(default=None, max_length=120)
+    affiliation: str | None = Field(default=None, max_length=64)
+    info_shareable: bool | None = None
+    emergency_contacts: str | None = Field(default=None, max_length=500)
+    recoverable: bool | None = None
 
     @field_validator("identity", "affiliation", "emergency_contacts")
     @classmethod
-    def _trim_morgue_text(cls, value: Optional[str]) -> Optional[str]:
+    def _trim_morgue_text(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
 
     @field_validator("death_date", "info_shareable", "recoverable")
@@ -922,7 +928,7 @@ class MorgueAutopsyRequest(BaseModel):
 class MorgueExaminerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    examiner_id: Optional[int] = None
+    examiner_id: int | None = None
 
 
 class MorgueExaminerOut(BaseModel):
@@ -939,12 +945,12 @@ class MorgueEntryOut(BaseModel):
     affiliation: str
     info_shareable: bool
     autopsy_done: bool
-    examiner_id: Optional[int]
-    examiner_name: Optional[str] = None
+    examiner_id: int | None
+    examiner_name: str | None = None
     emergency_contacts: str
     recoverable: bool
-    incinerated_at: Optional[datetime]
-    coffined_at: Optional[datetime]
+    incinerated_at: datetime | None
+    coffined_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -1022,8 +1028,8 @@ class HospitalBedFlagsRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    care_done: Optional[bool] = None
-    police_status: Optional[PoliceStatus] = None
+    care_done: bool | None = None
+    police_status: PoliceStatus | None = None
 
     @field_validator("care_done", "police_status")
     @classmethod
@@ -1039,9 +1045,9 @@ class HospitalBedOut(BaseModel):
     id: int
     room_id: int
     label: str
-    patient_name: Optional[str]
+    patient_name: str | None
     accident: str
-    arrival_date: Optional[date]
+    arrival_date: date | None
     care_done: bool
     police_status: PoliceStatus
     reason: str
@@ -1074,7 +1080,7 @@ class HospitalRoomsOut(BaseModel):
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
-def _optional_color(value: Optional[str]) -> Optional[str]:
+def _optional_color(value: str | None) -> str | None:
     """Couleur facultative « #rrggbb » (statut, groupe) : vide = aucune couleur."""
     if value is None or not value.strip():
         return None
@@ -1094,7 +1100,7 @@ class InterventionStatusOut(BaseModel):
     key: str
     label: str
     emoji: str
-    color: Optional[str]
+    color: str | None
     is_primo: bool
     kind: InterventionStatusKind
 
@@ -1104,7 +1110,7 @@ class InterventionStatusRequest(BaseModel):
 
     label: str = Field(min_length=1, max_length=64)
     emoji: str = Field(default="", max_length=16)
-    color: Optional[str] = None
+    color: str | None = None
     is_primo: bool = False
     kind: InterventionStatusKind = "status"
 
@@ -1120,7 +1126,7 @@ class InterventionStatusRequest(BaseModel):
 
     @field_validator("color")
     @classmethod
-    def _status_color(cls, value: Optional[str]) -> Optional[str]:
+    def _status_color(cls, value: str | None) -> str | None:
         return _optional_color(value)
 
 
@@ -1132,7 +1138,7 @@ class AffiliationGroupOut(BaseModel):
 
     id: int
     name: str
-    color: Optional[str]
+    color: str | None
 
 
 MorgueOut.model_rebuild()
@@ -1142,7 +1148,7 @@ class AffiliationGroupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
-    color: Optional[str] = None
+    color: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -1151,7 +1157,7 @@ class AffiliationGroupRequest(BaseModel):
 
     @field_validator("color")
     @classmethod
-    def _group_color(cls, value: Optional[str]) -> Optional[str]:
+    def _group_color(cls, value: str | None) -> str | None:
         return _optional_color(value)
 
 
@@ -1163,18 +1169,18 @@ class CrisisTeamRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    primo_id: Optional[int] = None
+    primo_id: int | None = None
     helper_ids: list[int] = Field(default_factory=list)
 
 
 class CrisisZipRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    zip_code: Optional[str] = Field(default=None, max_length=16)
+    zip_code: str | None = Field(default=None, max_length=16)
 
     @field_validator("zip_code")
     @classmethod
-    def _zip(cls, value: Optional[str]) -> Optional[str]:
+    def _zip(cls, value: str | None) -> str | None:
         return (value or "").strip() or None
 
 
@@ -1203,29 +1209,29 @@ class CrisisVictimUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    full_name: Optional[str] = Field(default=None, max_length=120)
-    affiliation: Optional[str] = Field(default=None, max_length=64)
-    coma: Optional[bool] = None
-    severe: Optional[bool] = None
-    unconscious: Optional[bool] = None
-    injuries: Optional[str] = Field(default=None, max_length=500)
-    repatriating_doctor: Optional[str] = Field(default=None, max_length=120)
-    treating_doctor: Optional[str] = Field(default=None, max_length=120)
-    arrived: Optional[bool] = None
-    care_done: Optional[bool] = None
-    channel_added: Optional[bool] = None
-    bed_id: Optional[int] = None
+    full_name: str | None = Field(default=None, max_length=120)
+    affiliation: str | None = Field(default=None, max_length=64)
+    coma: bool | None = None
+    severe: bool | None = None
+    unconscious: bool | None = None
+    injuries: str | None = Field(default=None, max_length=500)
+    repatriating_doctor: str | None = Field(default=None, max_length=120)
+    treating_doctor: str | None = Field(default=None, max_length=120)
+    arrived: bool | None = None
+    care_done: bool | None = None
+    channel_added: bool | None = None
+    bed_id: int | None = None
 
     @field_validator(*_CRISIS_TEXT_FIELDS)
     @classmethod
-    def _trim_crisis_text(cls, value: Optional[str]) -> Optional[str]:
+    def _trim_crisis_text(cls, value: str | None) -> str | None:
         if value is None:
             raise ValueError("Ce champ ne peut pas être vide ; envoyez une chaîne vide.")
         return value.strip()
 
     @field_validator("coma", "severe", "unconscious", "arrived", "care_done", "channel_added")
     @classmethod
-    def _crisis_flag_required(cls, value: Optional[bool], info: ValidationInfo):
+    def _crisis_flag_required(cls, value: bool | None, info: ValidationInfo):
         if value is None:
             raise ValueError(f"Le champ {info.field_name} ne peut pas être vide.")
         return value
@@ -1243,18 +1249,18 @@ class CrisisVictimOut(BaseModel):
     injuries: str
     repatriating_doctor: str
     treating_doctor: str
-    arrived_at: Optional[datetime]
+    arrived_at: datetime | None
     care_done: bool
     channel_added: bool
-    bed_id: Optional[int]
+    bed_id: int | None
     created_at: datetime
 
     @field_validator("arrived_at", "created_at")
     @classmethod
-    def _as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+    def _as_utc(cls, value: datetime | None) -> datetime | None:
         """SQLite rend les dates sans fuseau : elles sont en UTC."""
         if value is not None and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
@@ -1266,13 +1272,13 @@ class CrisisEmployeeOut(BaseModel):
 class CrisisBedOut(BaseModel):
     id: int
     label: str
-    patient_name: Optional[str]
+    patient_name: str | None
 
 
 class CrisisOut(BaseModel):
     # Code postal de la crise : celui de l'intervention « Primo » du Dispatch quand elle existe.
-    zip_code: Optional[str]
-    primo: Optional[CrisisEmployeeOut]
+    zip_code: str | None
+    primo: CrisisEmployeeOut | None
     helpers: list[CrisisEmployeeOut]
     victims: list[CrisisVictimOut]
     # Choix proposés : employés actifs (Primo, assistants, médecins), lits de
@@ -1358,11 +1364,11 @@ class TrainingMemberOut(BaseModel):
 class TrainingEmployeeOut(BaseModel):
     id: int
     name: str
-    phone: Optional[str]
-    grade_id: Optional[int]
-    grade_name: Optional[str]
-    grade_level: Optional[int]
-    grade_color: Optional[str]
+    phone: str | None
+    grade_id: int | None
+    grade_name: str | None
+    grade_level: int | None
+    grade_color: str | None
     # Grade « Période d'essai » ou « En formation » : ne rejoint ni pôle ni spécialité.
     in_formation: bool = False
     competencies: list[str]
@@ -1390,7 +1396,7 @@ class InternModuleOut(BaseModel):
     id: int
     category: InternModuleCategory
     name: str
-    emoji: Optional[str]
+    emoji: str | None
     is_required: bool
 
 
@@ -1400,7 +1406,7 @@ class InternModuleRequest(BaseModel):
     category: InternModuleCategory
     name: str = Field(min_length=1, max_length=64)
     # Facultatif : rejoint les compétences de l'employé au niveau le plus haut.
-    emoji: Optional[str] = Field(default=None, max_length=16)
+    emoji: str | None = Field(default=None, max_length=16)
     # Obligatoire : à valider au plus haut pour le passage, même forcé.
     is_required: bool = False
 
@@ -1411,7 +1417,7 @@ class InternModuleRequest(BaseModel):
 
     @field_validator("emoji")
     @classmethod
-    def _module_emoji(cls, value: Optional[str]) -> Optional[str]:
+    def _module_emoji(cls, value: str | None) -> str | None:
         value = (value or "").strip()
         if "," in value:
             raise ValueError("L’emoji ne peut pas contenir de virgule.")
@@ -1489,15 +1495,15 @@ class InternThresholdsUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    basics: Optional[int] = Field(default=None, ge=0, le=100)
-    tools: Optional[int] = Field(default=None, ge=0, le=100)
-    interventions: Optional[int] = Field(default=None, ge=0, le=100)
-    injuries: Optional[int] = Field(default=None, ge=0, le=100)
-    overall: Optional[int] = Field(default=None, ge=0, le=100)
-    average: Optional[float] = Field(default=None, ge=0, le=20)
-    mandatory: Optional[int] = Field(default=None, ge=0, le=100)
-    optional: Optional[int] = Field(default=None, ge=0, le=100)
-    resident_simulation: Optional[float] = Field(default=None, ge=0, le=20)
+    basics: int | None = Field(default=None, ge=0, le=100)
+    tools: int | None = Field(default=None, ge=0, le=100)
+    interventions: int | None = Field(default=None, ge=0, le=100)
+    injuries: int | None = Field(default=None, ge=0, le=100)
+    overall: int | None = Field(default=None, ge=0, le=100)
+    average: float | None = Field(default=None, ge=0, le=20)
+    mandatory: int | None = Field(default=None, ge=0, le=100)
+    optional: int | None = Field(default=None, ge=0, le=100)
+    resident_simulation: float | None = Field(default=None, ge=0, le=20)
 
 
 class InternStatusOut(BaseModel):
@@ -1510,11 +1516,11 @@ class InternRecordOut(BaseModel):
     employee_id: int
     name: str
     stage: InternStage
-    grade_name: Optional[str]
-    grade_color: Optional[str]
-    arrival_date: Optional[date]
+    grade_name: str | None
+    grade_color: str | None
+    arrival_date: date | None
     # Jours depuis l'arrivée au BCES.
-    days: Optional[int]
+    days: int | None
     mentors: list[InternPersonOut]
     # Niveau par module (identifiant du module → 1 à 3) ; absent : Non observé.
     levels: dict[int, int]
@@ -1528,12 +1534,12 @@ class InternRecordOut(BaseModel):
     # Notes sur 20 : questionnaire (bonnes réponses ramenées sur 20),
     # simulations (critères de 0 à 4 points, ramenés sur 20) et moyenne des
     # deux notes de la période d'essai.
-    questionnaire_score: Optional[float]
-    simulation_score: Optional[float]
-    average: Optional[float]
-    resident_simulation_score: Optional[float]
+    questionnaire_score: float | None
+    simulation_score: float | None
+    average: float | None
+    resident_simulation_score: float | None
     # Statut de progression de la période d'essai.
-    status: Optional[InternStatusOut]
+    status: InternStatusOut | None
     # Ce qui manque pour le passage de l'étape sans le forcer : modules
     # obligatoires, seuils des barres et de la note (InternThresholdsOut),
     # grade au-dessus. Vide : le passage est possible.
@@ -1544,11 +1550,11 @@ class InternRecordOut(BaseModel):
     # Passage au grade « En formation » (période d'essai), puis fin de
     # formation (période de formation) : rien ne manque.
     can_pass_resident: bool
-    resident_at: Optional[datetime]
+    resident_at: datetime | None
     can_complete: bool
     # Grade donné en fin de formation (celui juste au-dessus).
-    next_grade_name: Optional[str]
-    completed_at: Optional[datetime]
+    next_grade_name: str | None
+    completed_at: datetime | None
 
 
 class InternsPageOut(BaseModel):
@@ -1580,11 +1586,11 @@ class InternsPageOut(BaseModel):
 class InternRecordUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    arrival_date: Optional[date] = None
-    notes: Optional[str] = Field(default=None, max_length=4000)
-    mentor_ids: Optional[list[int]] = Field(default=None, max_length=10)
-    simulation: Optional[dict[str, int]] = None
-    resident_simulation: Optional[dict[str, int]] = None
+    arrival_date: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+    mentor_ids: list[int] | None = Field(default=None, max_length=10)
+    simulation: dict[str, int] | None = None
+    resident_simulation: dict[str, int] | None = None
 
 
 class InternLevelRequest(BaseModel):
@@ -1626,4 +1632,4 @@ class TrainingPageOut(BaseModel):
     # son Responsable.
     can_assign_lead: bool
     # Tuile liée au compte connecté : son Responsable gère l'équipe d'une formation.
-    employee_id: Optional[int]
+    employee_id: int | None
