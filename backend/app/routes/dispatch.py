@@ -1,6 +1,6 @@
 ﻿"""Routes Dispatch (couche transport mince)."""
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.session import decode_token, get_session_cookie_name
@@ -68,11 +68,11 @@ async def dispatch_ws(
         async with cd.snapshot_lock:
             async with SessionLocal() as db:
                 snap = await cd.build_snapshot(db)
-            await ws.send_json({"type": "snapshot", "data": snap})
+            await cd.manager.send(ws, {"type": "snapshot", "data": snap})
         while True:
             msg = await ws.receive_text()
             if msg == "ping":
-                await ws.send_json({"type": "pong"})
+                await cd.manager.send(ws, {"type": "pong"})
     except WebSocketDisconnect:
         pass
     except Exception as exc:  # pylint: disable=broad-except
