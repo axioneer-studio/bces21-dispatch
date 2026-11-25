@@ -73,13 +73,13 @@ const [{ data: initialGrades }, { data: permissionOptions }, { data: initialRadi
 ])
 
 const directionSections = ['grades', 'radios', 'frequencies'] as const
-const activeSection = ref<(typeof directionSections)[number]>('grades')
+const { active: activeSection, select: selectSection } = useHashTab(directionSections, 'grades')
 
 function moveSectionTab(step: -1 | 1) {
   const index = directionSections.indexOf(activeSection.value)
   const next = directionSections[(index + step + directionSections.length) % directionSections.length]
   if (!next) return
-  activeSection.value = next
+  selectSection(next)
   nextTick(() => document.querySelector<HTMLElement>(`#direction-tab-${next}`)?.focus())
 }
 
@@ -396,13 +396,13 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
     </header>
 
     <nav class="direction-nav" role="tablist" aria-label="Sections de la Direction" @keydown.left.prevent="moveSectionTab(-1)" @keydown.right.prevent="moveSectionTab(1)">
-      <button id="direction-tab-grades" type="button" role="tab" :aria-selected="activeSection === 'grades'" aria-controls="direction-grades" :tabindex="activeSection === 'grades' ? 0 : -1" :class="{ 'is-active': activeSection === 'grades' }" @click="activeSection = 'grades'">
+      <button id="direction-tab-grades" type="button" role="tab" :aria-selected="activeSection === 'grades'" aria-controls="direction-grades" :tabindex="activeSection === 'grades' ? 0 : -1" :class="{ 'is-active': activeSection === 'grades' }" @click="selectSection('grades')">
         <Icon name="lucide:shield" size="16" /> Grades <span>{{ grades.length }}</span>
       </button>
-      <button id="direction-tab-radios" type="button" role="tab" :aria-selected="activeSection === 'radios'" aria-controls="direction-radios" :tabindex="activeSection === 'radios' ? 0 : -1" :class="{ 'is-active': activeSection === 'radios' }" @click="activeSection = 'radios'">
+      <button id="direction-tab-radios" type="button" role="tab" :aria-selected="activeSection === 'radios'" aria-controls="direction-radios" :tabindex="activeSection === 'radios' ? 0 : -1" :class="{ 'is-active': activeSection === 'radios' }" @click="selectSection('radios')">
         <Icon name="lucide:mic" size="16" /> Radios <span>{{ radios.length }}</span>
       </button>
-      <button id="direction-tab-frequencies" type="button" role="tab" :aria-selected="activeSection === 'frequencies'" aria-controls="direction-frequencies" :tabindex="activeSection === 'frequencies' ? 0 : -1" :class="{ 'is-active': activeSection === 'frequencies' }" @click="activeSection = 'frequencies'">
+      <button id="direction-tab-frequencies" type="button" role="tab" :aria-selected="activeSection === 'frequencies'" aria-controls="direction-frequencies" :tabindex="activeSection === 'frequencies' ? 0 : -1" :class="{ 'is-active': activeSection === 'frequencies' }" @click="selectSection('frequencies')">
         <Icon name="lucide:radio" size="16" /> Fréquences <span>{{ frequencySettings.length }}</span>
       </button>
     </nav>

@@ -274,22 +274,42 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.active: set = set()
         self._lock = asyncio.Lock()
+        self._send_locks: dict[Any, asyncio.Lock] = {}
 
     async def connect(self, ws) -> None:
         await ws.accept()
         async with self._lock:
             self.active.add(ws)
+            self._send_locks[ws] = asyncio.Lock()
 
     async def disconnect(self, ws) -> None:
         async with self._lock:
             self.active.discard(ws)
+            self._send_locks.pop(ws, None)
+
+    async def send(self, ws, message: dict[str, Any]) -> None:
+        async with self._lock:
+            send_lock = self._send_locks.get(ws)
+        if send_lock is None:
+            return
+
+        try:
+            async with send_lock:
+                await ws.send_json(message)
+        except Exception:
+            await self.disconnect(ws)
+            try:
+                await ws.close(code=1011, reason="Envoi WebSocket impossible")
+            except Exception:
+                pass
+            raise
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         async with self._lock:
             clients = list(self.active)
         for ws in clients:
             try:
-                await ws.send_json(message)
+                await self.send(ws, message)
             except Exception:
                 pass
 
@@ -315,6 +335,10 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
         select(DispatchSlot)
         .options(selectinload(DispatchSlot.assignments))
         .order_by(DispatchSlot.order.asc(), DispatchSlot.id.asc())
+        # Mutation handlers may already have loaded these slots before commit.
+        # With expire_on_commit=False, refresh their relationships so the
+        # first broadcast reflects the committed assignments immediately.
+        .execution_options(populate_existing=True)
     )
     slots = (await db.execute(slots_q)).scalars().all()
 

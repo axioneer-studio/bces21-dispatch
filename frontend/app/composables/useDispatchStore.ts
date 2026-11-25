@@ -203,7 +203,16 @@ export const useDispatchStore = () => {
   function completeEmployeeMove(employeeId: number, slot: DispatchSlot) {
     const pending = { ...pendingMoves.value }
     const move = pending[employeeId]
-    if (move?.slotId !== null && move?.slotId !== undefined) {
+    // A WebSocket snapshot may confirm the move before the REST response
+    // returns. In that case the full, newer snapshot already won; don't let
+    // this one-slot response overwrite it.
+    if (!move) return
+
+    if (move?.slotId === null) {
+      // The unassign API response confirms the employee is in the pool.
+      // Clear this optimistic filter now, even if the WS acknowledgement is late.
+      delete pending[employeeId]
+    } else if (move?.slotId !== undefined) {
       const serverAssignment = slot.assignments.find(
         (assignment) => assignment.employee_id === employeeId
       )

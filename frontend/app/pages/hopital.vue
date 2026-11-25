@@ -9,13 +9,16 @@ const hospitalSections = [
 
 type HospitalSection = (typeof hospitalSections)[number]['key']
 
-const activeSection = ref<HospitalSection>('rooms')
+const { active: activeSection, select: selectSection } = useHashTab(
+  hospitalSections.map((section) => section.key),
+  'rooms'
+)
 
 function moveSectionTab(step: -1 | 1) {
   const index = hospitalSections.findIndex((section) => section.key === activeSection.value)
   const next = hospitalSections[(index + step + hospitalSections.length) % hospitalSections.length]
   if (!next) return
-  activeSection.value = next.key
+  selectSection(next.key)
   nextTick(() => document.querySelector<HTMLElement>(`#hospital-tab-${next.key}`)?.focus())
 }
 </script>
@@ -33,7 +36,7 @@ function moveSectionTab(step: -1 | 1) {
         :aria-controls="`hospital-${section.key}`"
         :tabindex="activeSection === section.key ? 0 : -1"
         :class="{ 'is-active': activeSection === section.key }"
-        @click="activeSection = section.key"
+        @click="selectSection(section.key)"
       >
         <Icon :name="section.icon" size="16" /> {{ section.label }}
       </button>
