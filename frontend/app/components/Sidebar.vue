@@ -10,7 +10,8 @@ let hoverTimer: ReturnType<typeof setTimeout> | null = null
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 const { data: currentUser } = await useAsyncData('sidebar-current-user', async () => {
   try {
-    return await $fetch<{
+    const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+    return await requestFetch<{
       is_super_admin: boolean
       super_admin_available: boolean
       super_admin_enabled: boolean

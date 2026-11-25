@@ -211,13 +211,14 @@ async function finishNoteEdit() {
 
   <main class="dp">
     <div class="dp__board">
-      <section v-if="centrale" class="z z--centrale">
+      <section class="z z--centrale">
         <header class="z__head">
           <Icon name="lucide:phone" size="12" />
           <span>Centrale</span>
         </header>
         <div class="z__rail z__rail--one">
           <InterventionCard
+            v-if="centrale"
             :slot="centrale"
             :agents="agents"
             :fixed="true"
@@ -226,6 +227,7 @@ async function finishNoteEdit() {
             @employee-drop="onEmployeeDrop"
             @employee-remove="onEmployeeDrop"
           />
+          <EmptySlotState v-else message="Chargement…" />
         </div>
       </section>
 
@@ -290,7 +292,7 @@ async function finishNoteEdit() {
         />
       </aside>
 
-      <section v-if="hopital" class="z z--hopital">
+      <section class="z z--hopital">
         <header class="z__head z__head--alt">
           <Icon name="lucide:heart-pulse" size="12" />
           <span>Hôpital</span>
@@ -298,6 +300,7 @@ async function finishNoteEdit() {
         </header>
         <SlotPanel
           :slot="hopital"
+          :loading="!hopital"
           :agents="agents"
           accent="#ec8a86"
           @employee-drop="onEmployeeDrop"
@@ -306,20 +309,22 @@ async function finishNoteEdit() {
       </section>
 
       <div class="dp__lower">
-        <section v-if="astreinte" class="z z--astreinte">
+        <section class="z z--astreinte">
           <header class="z__head"><Icon name="lucide:shield-alert" size="12" /><span>Astreinte</span></header>
           <SlotPanel
             :slot="astreinte"
+            :loading="!astreinte"
             :agents="agents"
             @employee-drop="onEmployeeDrop"
             @employee-remove="onEmployeeDrop"
           />
         </section>
 
-        <section v-if="conges" class="z z--conges">
+        <section class="z z--conges">
           <header class="z__head"><Icon name="lucide:parasol" size="12" /><span>Congés</span></header>
           <SlotPanel
             :slot="conges"
+            :loading="!conges"
             :agents="agents"
             @employee-drop="onEmployeeDrop"
             @employee-remove="onEmployeeDrop"
@@ -327,30 +332,33 @@ async function finishNoteEdit() {
         </section>
 
         <div class="dp__lower-bottom">
-          <section v-if="ipt" class="z z--ipt">
+          <section class="z z--ipt">
             <header class="z__head"><Icon name="lucide:accessibility" size="12" /><span>IPT</span></header>
             <SlotPanel
               :slot="ipt"
+              :loading="!ipt"
               :agents="agents"
               @employee-drop="onEmployeeDrop"
               @employee-remove="onEmployeeDrop"
             />
           </section>
 
-          <section v-if="astreinteFin" class="z z--fin">
+          <section class="z z--fin">
             <header class="z__head"><Icon name="lucide:moon-star" size="12" /><span>Astreinte fin de service</span></header>
             <SlotPanel
               :slot="astreinteFin"
+              :loading="!astreinteFin"
               :agents="agents"
               @employee-drop="onEmployeeDrop"
               @employee-remove="onEmployeeDrop"
             />
           </section>
 
-          <section v-if="pause" class="z z--pause">
+          <section class="z z--pause">
             <header class="z__head"><Icon name="lucide:coffee" size="12" /><span>Pause</span></header>
             <SlotPanel
               :slot="pause"
+              :loading="!pause"
               :agents="agents"
               @employee-drop="onEmployeeDrop"
               @employee-remove="onEmployeeDrop"
