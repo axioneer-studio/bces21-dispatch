@@ -19,6 +19,8 @@ from app.schemas import (
     RoleCreateRequest,
     RoleOut,
     RoleUpdateRequest,
+    StormSettingsOut,
+    StormSettingsUpdateRequest,
     SuperAdminUpdateRequest,
 )
 
@@ -139,6 +141,23 @@ async def update_application_settings(
     _: User = Depends(require_admin),
 ) -> ApplicationSettingsOut:
     return await cad.update_application_settings(payload, db)
+
+
+@router.get("/settings/storm", response_model=StormSettingsOut)
+async def get_storm_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> StormSettingsOut:
+    return await cad.get_storm_settings(db)
+
+
+@router.put("/settings/storm", response_model=StormSettingsOut)
+async def update_storm_settings(
+    payload: StormSettingsUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> StormSettingsOut:
+    return await cad.update_storm_settings(payload, db)
 
 
 # --- Google Sheets ---

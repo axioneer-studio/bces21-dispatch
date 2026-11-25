@@ -34,6 +34,11 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   **Congés**, **IPT**, **Astreinte fin de service**, **Pause**, plus les
   **interventions / consultations** créées à la volée.
 - Glisser-déposer des agents entre les créneaux et la réserve « hors service ».
+- Bouton **Tempête** : retire les affectations, éteint les radios, ferme
+  l'hôpital et, si la case est cochée, supprime les interventions. Une Tempête
+  automatique, qui garde les interventions, a lieu chaque jour à 3 h, heure de
+  Paris (heure d'été comprise). Elle se désactive et son heure se change dans
+  Administration, Paramètres généraux.
 - Statut d'intervention, choisi dans la liste gérée dans Administration, avec
   emoji, et code postal par carte. La liste a deux parties, toujours dans cet
   ordre : les statuts (Patrouille, Inter, Renfort, Enterrement…), puis les lieux
@@ -138,8 +143,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
   trace de la validation : un emoji ajouté à la main dans Ressources humaines
   compte aussi.
 - **Pôles & Spé**, ouverte à tout compte validé : les **formations générales**,
-  en deux sections, **Pôles** (ex. Pilote Medicopter, Stock, Formateur) et
-  **Spécialités** (ex. Médecin légiste). Le bouton « Ajouter » de chaque section
+  en deux sections, **Spécialités** (ex. Médecin légiste) puis **Pôles** (ex.
+  Pilote Medicopter, Stock, Formateur). Le bouton « Ajouter » de chaque section
   fixe la catégorie. Une carte par formation, avec son équipe et le numéro de
   chacun. Rôles : Responsable, Second, Validé (ils ont l'emoji) et En cours (pas
   encore). Un employé d'un grade « Période d'essai » ou « En formation » ne
@@ -260,7 +265,8 @@ Application de dispatch du BCES : tableau de bord temps réel des agents, des in
 - Création des rôles applicatifs, attribution des rôles et configuration de
   l’accès aux pages et des permissions applicatives, dont la liaison d’un
   compte à une tuile employé.
-- Paramètres généraux, dont l’ouverture des inscriptions.
+- Paramètres généraux, dont l’ouverture des inscriptions et la Tempête
+  automatique du Dispatch (activée ou non, heure ; 3 h par défaut).
 - Le premier compte de l'application est le super-admin initial.
 
 ### Comptes
@@ -321,6 +327,7 @@ bces21-dispatch/
 │   ├── s3_service.py
 │   ├── sheets_sync.py
 │   ├── status_sync.py  # synchronisation Google Sheet (LSES / SAFD)
+│   ├── storm.py        # Tempête automatique quotidienne
 │   ├── Dockerfile
 │   ├── auth/
 │   │   ├── __init__.py
@@ -650,6 +657,7 @@ vérifient en plus la page cochée dans le rôle.
 | `PATCH` / `DELETE` | `/api/admin/groups/{id}` | Renomme un groupe et change sa couleur, ou le supprime ; les blessés et défunts gardent leur appartenance |
 | `GET` | `/api/admin/permissions` | Liste les permissions applicatives configurables |
 | `GET` / `PUT` | `/api/admin/settings` | Lit ou modifie les paramètres généraux |
+| `GET` / `PUT` | `/api/admin/settings/storm` | Lit ou modifie la Tempête automatique : `enabled`, `time` (`HH:MM`) ; renvoie aussi `timezone` et `next_storm_at` |
 | `GET` | `/api/direction/grades` | Liste les grades et leurs permissions |
 | `GET` | `/api/direction/permissions` | Liste les capacités opérationnelles configurables |
 | `POST` / `PATCH` / `DELETE` | `/api/direction/grades[/{id}]` | Gère les grades (Direction) |
@@ -796,13 +804,14 @@ un pôle et un module peuvent avoir le même.
 
 ## Tâches de fond
 
-Deux tâches `asyncio` sont lancées au démarrage de l'API (lifespan FastAPI) et
+Trois tâches `asyncio` sont lancées au démarrage de l'API (lifespan FastAPI) et
 arrêtées proprement à l'extinction.
 
 | Tâche | Fichier | Rôle |
 |---|---|---|
 | Purge des comptes | `cleanup.py` | Supprime les comptes dont `prenom_rp` / `nom_rp` sont restés vides au-delà du délai. Intervalle : `CLEANUP_INTERVAL_SECONDS` (min 30 s). |
 | Sync Google Sheet | `status_sync.py` | Lit l'export CSV du Sheet *Disponibilités LSES/BCES/SAFD* et met à jour `lses_status` / `safd_status`. |
+| Tempête automatique | `storm.py` | Chaque jour à l'heure réglée dans Administration (3 h par défaut, `storm_time` dans `application_settings`), dans le fuseau `APP_TIMEZONE` (`Europe/Paris`, heure d'été comprise), fait la même chose que le bouton « Tempête » du Dispatch, sans supprimer les interventions. Se désactive dans Administration (`storm_enabled`) ; un changement de réglage est pris en compte tout de suite. Si l'API est arrêtée à l'heure prévue, la Tempête de ce jour-là n'a pas lieu. Une heure qui n'existe pas la nuit du passage à l'heure d'été (entre 2 h et 3 h) tombe une heure plus tard ce jour-là. |
 
 ### Mapping des statuts du Sheet
 

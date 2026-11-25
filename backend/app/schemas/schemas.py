@@ -420,6 +420,22 @@ class ApplicationSettingsUpdateRequest(BaseModel):
     registration_open: bool
 
 
+class StormSettingsOut(BaseModel):
+    """Tempête automatique du Dispatch : `time` (HH:MM) dans le fuseau `timezone`."""
+
+    enabled: bool
+    time: str
+    timezone: str
+    next_storm_at: datetime | None
+
+
+class StormSettingsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
 # --- Google Sheets configuration ---
 
 

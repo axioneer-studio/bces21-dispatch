@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, time
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import delete, func, select
@@ -26,8 +27,11 @@ from app.schemas import (
     RoleCreateRequest,
     RoleOut,
     RoleUpdateRequest,
+    StormSettingsOut,
+    StormSettingsUpdateRequest,
     SuperAdminUpdateRequest,
 )
+from app.services import storm
 from app.services.app_permissions import APP_PERMISSION_CATALOG
 from app.services.google_sheets_service import (
     GoogleSheetsError,
@@ -388,6 +392,26 @@ async def update_application_settings(
         setting.value = "true" if payload.registration_open else "false"
     await db.commit()
     return ApplicationSettingsOut(registration_open=payload.registration_open)
+
+
+def _storm_settings_out(schedule: storm.StormSchedule) -> StormSettingsOut:
+    zone = storm.storm_zone()
+    return StormSettingsOut(
+        enabled=schedule.enabled,
+        time=schedule.at.strftime("%H:%M"),
+        timezone=zone.key,
+        next_storm_at=storm.next_storm(datetime.now(zone), schedule.at) if schedule.enabled else None,
+    )
+
+
+async def get_storm_settings(db: AsyncSession) -> StormSettingsOut:
+    return _storm_settings_out(await storm.read_schedule(db))
+
+
+async def update_storm_settings(payload: StormSettingsUpdateRequest, db: AsyncSession) -> StormSettingsOut:
+    schedule = storm.StormSchedule(enabled=payload.enabled, at=time.fromisoformat(payload.time))
+    await storm.write_schedule(db, schedule)
+    return _storm_settings_out(schedule)
 
 
 async def get_google_sheets_config(db: AsyncSession) -> GoogleSheetsConfigOut:

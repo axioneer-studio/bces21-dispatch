@@ -32,6 +32,7 @@ from app.services.app_permissions import user_role_permissions
 from app.services.cleanup import cleanup_loop
 from app.services.grade_permissions import parse_grade_permissions
 from app.services.status_sync import status_sync_loop
+from app.services.storm import storm_loop
 from app.services.training_rights import user_has_hr_access, user_training_permissions
 
 logging.basicConfig(
@@ -48,8 +49,11 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     stop_event = asyncio.Event()
-    cleanup_task = asyncio.create_task(cleanup_loop(stop_event), name="cleanup")
-    sync_task = asyncio.create_task(status_sync_loop(stop_event), name="status-sync")
+    tasks = [
+        asyncio.create_task(cleanup_loop(stop_event), name="cleanup"),
+        asyncio.create_task(status_sync_loop(stop_event), name="status-sync"),
+        asyncio.create_task(storm_loop(stop_event), name="storm"),
+    ]
     logger.info(
         "Démarrage de l'API %s v%s (debug=%s)",
         settings.app_name,
@@ -61,14 +65,11 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_event.set()
-        try:
-            await asyncio.wait_for(cleanup_task, timeout=5)
-        except TimeoutError:
-            cleanup_task.cancel()
-        try:
-            await asyncio.wait_for(sync_task, timeout=5)
-        except TimeoutError:
-            sync_task.cancel()
+        for task in tasks:
+            try:
+                await asyncio.wait_for(task, timeout=5)
+            except TimeoutError:
+                task.cancel()
 
 
 settings = get_settings()
