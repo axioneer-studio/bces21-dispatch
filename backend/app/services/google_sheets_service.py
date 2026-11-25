@@ -224,7 +224,7 @@ class GoogleSheetsService:
                 ),
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Délai dépassé lors de la lecture de la cellule %s.", cell_ref)
             raise GoogleSheetsError(f"Délai dépassé lors de la lecture de la cellule {cell_ref}.")
         except HttpError as exc:
@@ -270,7 +270,7 @@ class GoogleSheetsService:
                 ),
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Délai dépassé lors de l'écriture Google Sheets (%s).", range_name)
             raise GoogleSheetsError(f"Délai dépassé lors de l'écriture Google Sheets ({range_name}).")
         except HttpError as exc:
@@ -319,7 +319,7 @@ class GoogleSheetsService:
                 ),
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Délai dépassé lors de l'écriture batch Google Sheets.")
             raise GoogleSheetsError("Délai dépassé lors de l'écriture batch Google Sheets.")
         except HttpError as exc:
@@ -363,7 +363,7 @@ class GoogleSheetsService:
                 ),
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Délai dépassé lors de l'ajout Google Sheets (%s).", range_name)
             raise GoogleSheetsError(f"Délai dépassé lors de l'ajout Google Sheets ({range_name}).")
         except HttpError as exc:

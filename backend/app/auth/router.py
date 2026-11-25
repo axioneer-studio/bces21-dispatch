@@ -1,9 +1,9 @@
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -229,7 +229,7 @@ async def discord_exchange(
         select(User).where(User.discord_id == discord_id)
     )
     user = existing.scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if user is None:
         registration_setting = await db.get(ApplicationSetting, "registration_open")
@@ -354,7 +354,7 @@ async def _handle_callback(
     )
     user = existing.scalar_one_or_none()
     is_new_user = user is None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if user is None:
         registration_setting = await db.get(ApplicationSetting, "registration_open")

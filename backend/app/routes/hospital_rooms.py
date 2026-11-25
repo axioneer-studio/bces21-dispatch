@@ -18,7 +18,6 @@ from app.schemas import (
     HospitalRoomsOut,
     MessageResponse,
 )
-from app.services.app_permissions import require_app_permission
 from app.services.hospital_access import require_hospital_manage
 
 router = APIRouter(

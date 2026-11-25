@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import Cookie, HTTPException, status
@@ -8,12 +8,12 @@ from app.config import get_settings
 
 def issue_token(user_id: int) -> tuple[str, datetime]:
     settings = get_settings()
-    expires = datetime.now(timezone.utc) + timedelta(
+    expires = datetime.now(UTC) + timedelta(
         seconds=settings.session_ttl_seconds
     )
     payload = {
         "sub": str(user_id),
-        "iat": int(datetime.now(timezone.utc).timestamp()),
+        "iat": int(datetime.now(UTC).timestamp()),
         "exp": int(expires.timestamp()),
         "type": "session",
     }

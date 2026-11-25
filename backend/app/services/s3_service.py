@@ -14,9 +14,10 @@ Sécurité :
 
 import logging
 
-from cryptography.fernet import Fernet
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from cryptography.fernet import Fernet
+
 from app.config import get_settings
 
 logger = logging.getLogger("bces.s3")

@@ -9,13 +9,11 @@ from app.controllers.dispatch import push_snapshot
 from app.models import DispatchState
 from app.schemas import FrequencyKind, FrequencySettingOut
 from app.services.frequency_settings import (
-    FREQUENCY_KINDS,
     LABELS,
     current_frequency,
     read_bounds,
     set_current_frequency,
 )
-from app.services.grade_permissions import require_grade_permission
 
 
 async def _state(db: AsyncSession) -> DispatchState:

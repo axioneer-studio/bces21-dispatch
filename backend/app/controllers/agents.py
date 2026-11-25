@@ -1,6 +1,6 @@
 """Contrôleur des agents (utilisateurs disponibles pour le Dispatch)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,5 +21,5 @@ async def list_users(db: AsyncSession) -> AgentListResponse:
     return AgentListResponse(
         agents=agents,
         count=len(agents),
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
     )

@@ -8,25 +8,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.router import router as auth_router
+from app.config import get_settings
+from app.database import get_db, init_db
+from app.deps import get_current_user, user_role_pages
+from app.models import Employee, Grade, User
 from app.routes.administration import router as administration_router
 from app.routes.affiliation_groups import router as affiliation_groups_router
-from app.routes.agents import router as agents_router
 from app.routes.agenda import router as agenda_router
+from app.routes.agents import router as agents_router
 from app.routes.crisis import router as crisis_router
 from app.routes.direction import router as direction_router
 from app.routes.dispatch import router as dispatch_router
 from app.routes.fleet import router as fleet_router
+from app.routes.formation import router as formation_router
 from app.routes.frequencies import router as frequencies_router
 from app.routes.hospital_rooms import router as hospital_rooms_router
 from app.routes.human_resources import router as human_resources_router
 from app.routes.intervention_statuses import router as intervention_statuses_router
 from app.routes.morgue import router as morgue_router
 from app.routes.trainings import router as trainings_router
-from app.routes.formation import router as formation_router
-from app.config import get_settings
-from app.database import get_db, init_db
-from app.deps import get_current_user, user_role_pages
-from app.models import Employee, Grade, User
 from app.schemas import HealthResponse, SuperAdminToggleRequest, UserResponse
 from app.services.app_permissions import user_role_permissions
 from app.services.cleanup import cleanup_loop
@@ -63,11 +63,11 @@ async def lifespan(app: FastAPI):
         stop_event.set()
         try:
             await asyncio.wait_for(cleanup_task, timeout=5)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             cleanup_task.cancel()
         try:
             await asyncio.wait_for(sync_task, timeout=5)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             sync_task.cancel()
 
 

@@ -45,7 +45,11 @@ from app.schemas import (
     TrainingRequest,
 )
 from app.services.formation_stages import module_emojis_by_stage
-from app.services.hospital_access import is_direction, linked_employee, user_can_manage_hospital
+from app.services.hospital_access import (
+    is_direction,
+    linked_employee,
+    user_can_manage_hospital,
+)
 from app.services.training_rights import (
     TRAINING_PERMISSION_CATALOG,
     emoji_key,

@@ -3,13 +3,17 @@
 import re
 import unicodedata
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.dispatch import push_snapshot
 from app.models import DispatchSlot, InterventionStatus, intervention_status_order
-from app.schemas import InterventionStatusOut, InterventionStatusRequest, MessageResponse
+from app.schemas import (
+    InterventionStatusOut,
+    InterventionStatusRequest,
+    MessageResponse,
+)
 
 
 def _slug(label: str) -> str:

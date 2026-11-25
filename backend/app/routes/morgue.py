@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.controllers import morgue as cg
 from app.deps import get_current_user, get_db, require_page_access
 from app.models import User
-from app.services.training_rights import FORENSIC_PERMISSION, require_training_permission
+from app.services.training_rights import (
+    FORENSIC_PERMISSION,
+    require_training_permission,
+)
 
 router = APIRouter(
     prefix="/api/hospital/morgue",

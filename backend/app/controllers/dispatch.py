@@ -5,14 +5,12 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.services import crisis_link as cl
 from app.database import SessionLocal
-from app.deps import require_page_access, user_has_page_access
 from app.models import (
     DispatchAssignment,
     DispatchNote,
@@ -47,9 +45,16 @@ from app.schemas import (
     VehicleOut,
     mask_serial,
 )
+from app.services import crisis_link as cl
 from app.services.frequency_settings import read_all_bounds
-from app.services.grade_permissions import require_grade_permission, user_has_grade_permission
-from app.services.google_sheets_service import GoogleSheetsError, GoogleSheetsService, load_settings_from_db
+from app.services.google_sheets_service import (
+    GoogleSheetsError,
+    GoogleSheetsService,
+    load_settings_from_db,
+)
+from app.services.grade_permissions import (
+    user_has_grade_permission,
+)
 
 logger = logging.getLogger("bces.dispatch")
 

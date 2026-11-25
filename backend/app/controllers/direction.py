@@ -7,8 +7,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.controllers.dispatch import push_employees_changed, push_snapshot, sorted_radios
-from app.models import DispatchRadio, DispatchState, Employee, Grade, User
+from app.controllers.dispatch import (
+    push_employees_changed,
+    push_snapshot,
+    sorted_radios,
+)
+from app.models import DispatchRadio, DispatchState, Employee, Grade
 from app.schemas import (
     DirectionRadioCreateRequest,
     DirectionRadioOut,
@@ -23,13 +27,15 @@ from app.schemas import (
 )
 from app.services.frequency_settings import (
     FREQUENCY_KINDS,
-    LABELS,
     current_frequency,
     read_bounds,
     set_current_frequency,
     write_bounds,
 )
-from app.services.grade_permissions import GRADE_PERMISSION_CATALOG, parse_grade_permissions
+from app.services.grade_permissions import (
+    GRADE_PERMISSION_CATALOG,
+    parse_grade_permissions,
+)
 
 
 def _validated_permissions(permissions: list[str] | None) -> list[str]:

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete
 
@@ -12,7 +12,7 @@ logger = logging.getLogger("bces.cleanup")
 
 
 async def purge_uncompleted_accounts() -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     async with SessionLocal() as session:
         result = await session.execute(
             delete(User).where(
@@ -44,5 +44,5 @@ async def cleanup_loop(stop_event: asyncio.Event) -> None:
             logger.exception("Cleanup iteration failed.")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue

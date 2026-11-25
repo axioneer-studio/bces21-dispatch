@@ -1,6 +1,6 @@
 """Contrôleur des groupes d'appartenance (Administration, Crise, Morgue)."""
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

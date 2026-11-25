@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.controllers import agenda as cag
 from app.deps import get_current_user, get_db, require_page_access
 from app.models import User
-from app.schemas import AgendaEventCreate, AgendaEventOut, AgendaEventUpdate, MessageResponse
+from app.schemas import (
+    AgendaEventCreate,
+    AgendaEventOut,
+    AgendaEventUpdate,
+    MessageResponse,
+)
 from app.services.grade_permissions import require_grade_permission
 
 router = APIRouter(

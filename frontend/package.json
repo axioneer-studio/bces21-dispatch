@@ -10,30 +10,30 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@nuxt/icon": "^2.5.1",
-    "@nuxt/ui": "^4.12.0",
+    "@nuxt/icon": "^2.6.3",
+    "@nuxt/ui": "^4.13.1",
     "@pinia/nuxt": "^1.0.3",
-    "@tailwindcss/vite": "^4.3.3",
-    "@vueuse/core": "^15.0.0",
-    "@vueuse/nuxt": "^15.0.0",
-    "nuxt": "^4.6.2",
+    "@tailwindcss/vite": "^4.3.5",
+    "@vueuse/core": "^15.1.0",
+    "@vueuse/nuxt": "^15.1.0",
+    "nuxt": "^4.6.4",
     "pinia": "^4.1.0",
-    "tailwindcss": "^4.3.3",
-    "vue": "^3.5.44",
-    "vue-router": "^5.4.0"
+    "tailwindcss": "^4.3.5",
+    "vue": "^3.5.46",
+    "vue-router": "^5.5.1"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.146"
   },
   "overrides": {
-    "minimatch": "^11.0.1",
-    "brace-expansion": "^5.0.13",
-    "glob": "^14.0.2",
-    "ip-address": "^10.7.4",
-    "picomatch": "^4.0.4",
-    "pacote": "^21.5.1",
-    "sigstore": "^4.1.1",
-    "postcss-selector-parser": "^7.1.6",
-    "@sigstore/core": "^3.2.1"
+    "minimatch": "^11.0.9",
+    "brace-expansion": "^5.1.0",
+    "glob": "^14.0.6",
+    "ip-address": "^10.7.6",
+    "picomatch": "^4.0.7",
+    "pacote": "^22.0.1",
+    "sigstore": "^5.0.1",
+    "postcss-selector-parser": "^7.2.1",
+    "@sigstore/core": "^4.0.2"
   }
 }

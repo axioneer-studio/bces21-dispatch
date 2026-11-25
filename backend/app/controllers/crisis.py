@@ -4,10 +4,11 @@ import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.controllers import affiliation_groups as cg_affiliation
 from app.controllers import hospital_rooms as chr_
 from app.controllers.dispatch import (
@@ -15,7 +16,6 @@ from app.controllers.dispatch import (
     _sync_employee_to_google_sheets,
     push_snapshot,
 )
-from app.config import get_settings
 from app.models import (
     CrisisMember,
     CrisisState,
