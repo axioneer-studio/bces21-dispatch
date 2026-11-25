@@ -1,7 +1,4 @@
-import { $fetch } from 'ofetch'
 import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState, FleetEntry, FrequencyKind } from './useDispatchStore'
-
-const config = () => useRuntimeConfig()
 
 function base(): string {
   // Retourne une chaîne vide pour que les appels utilisent des URLs relatives
@@ -18,7 +15,10 @@ async function req<T>(
   } = {}
 ): Promise<T> {
   const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-  return await $fetch<T>(`${base()}${path}`, {
+  // Nuxt's request fetch resolves relative URLs against the incoming request
+  // during SSR and forwards the session cookie to the API proxy.
+  const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+  return await requestFetch<T>(`${base()}${path}`, {
     method: options.method ?? 'GET',
     body: options.body,
     credentials: 'include',

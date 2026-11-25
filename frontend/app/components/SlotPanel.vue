@@ -8,6 +8,7 @@ const props = defineProps<{
   pool?: Agent[]
   agents: Agent[]
   accent?: string
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -117,7 +118,7 @@ function unassign(agentId: number) {
     />
     <EmptySlotState
       v-if="!displayedAgents.length"
-      :message="isPool ? 'Tout le monde est en service.' : emptyMessage"
+      :message="loading ? 'Chargement…' : isPool ? 'Tout le monde est en service.' : emptyMessage"
     />
   </div>
 </template>
