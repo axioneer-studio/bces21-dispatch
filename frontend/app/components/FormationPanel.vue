@@ -80,6 +80,14 @@ interface Fiche {
   completed_at: string | null
 }
 
+function sortFichesByArrival(fiches: Fiche[]) {
+  return [...fiches].sort((a, b) => {
+    if (!a.arrival_date) return b.arrival_date ? 1 : 0
+    if (!b.arrival_date) return -1
+    return a.arrival_date.localeCompare(b.arrival_date)
+  })
+}
+
 interface FormationPage {
   modules: FormationModule[]
   questions: Question[]
@@ -150,7 +158,7 @@ const page = ref<FormationPage | null>(null)
 const loaded = ref(false)
 const loadError = ref('')
 const busy = ref(false)
-const stage = ref<Stage>('trial')
+const { active: stage, select: selectStage } = useHashTab(['trial', 'training'] as const, 'trial', 0, 'stage')
 const selected = reactive<Record<Stage, number | null>>({ trial: null, training: null })
 const notesDraft = ref('')
 const completedOpen = ref(false)
@@ -160,7 +168,12 @@ const completedOpen = ref(false)
  * son questionnaire, en lecture seule).
  */
 type FicheTab = 'fiche' | 'trial-archive' | 'questionnaire'
-const ficheTab = ref<FicheTab>('fiche')
+const { active: ficheTab, select: selectFicheTab } = useHashTab(
+  ['fiche', 'trial-archive', 'questionnaire'] as const,
+  'fiche',
+  1,
+  'fiche'
+)
 const ficheView = computed<FicheTab>(() =>
   stage.value === 'trial' && ficheTab.value === 'trial-archive' ? 'fiche' : ficheTab.value
 )
@@ -182,8 +195,15 @@ const tabs = computed(() => [
   { key: 'training' as const, label: trainingLabel.value, icon: 'lucide:graduation-cap', count: page.value?.residents.length ?? 0 }
 ])
 
-const fiches = computed(() => (stage.value === 'trial' ? page.value?.interns : page.value?.residents) ?? [])
+const fiches = computed(() => {
+  const source = (stage.value === 'trial' ? page.value?.interns : page.value?.residents) ?? []
+  return sortFichesByArrival(source)
+})
 const current = computed(() => fiches.value.find((fiche) => fiche.employee_id === selected[stage.value]) ?? null)
+
+watch(stage, () => {
+  notesDraft.value = current.value?.notes ?? ''
+})
 
 function messageFromError(cause: unknown, fallback: string) {
   if (typeof cause === 'object' && cause !== null && 'data' in cause) {
@@ -290,7 +310,9 @@ async function load() {
     const data = await $fetch<FormationPage>(API, { credentials: 'include' })
     page.value = data
     for (const [key, list] of [['trial', data.interns], ['training', data.residents]] as const) {
-      if (!list.some((fiche) => fiche.employee_id === selected[key])) selected[key] = list[0]?.employee_id ?? null
+      if (!list.some((fiche) => fiche.employee_id === selected[key])) {
+        selected[key] = sortFichesByArrival(list)[0]?.employee_id ?? null
+      }
     }
     notesDraft.value = current.value?.notes ?? ''
     loadError.value = ''
@@ -304,7 +326,7 @@ async function load() {
 const TAB_KEY = 'bces.formation.tab'
 
 function setStage(key: Stage) {
-  stage.value = key
+  selectStage(key)
   notesDraft.value = current.value?.notes ?? ''
   try {
     localStorage.setItem(TAB_KEY, key)
@@ -611,7 +633,13 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   try {
     const saved = localStorage.getItem(TAB_KEY)
-    if (saved === 'trial' || saved === 'training') stage.value = saved
+    const fragment = window.location.hash.slice(1)
+    const pathStage = fragment.split('/')[0]
+    const hasStageHash = pathStage === 'trial' || pathStage === 'training'
+      || new URLSearchParams(fragment).has('stage')
+    if ((saved === 'trial' || saved === 'training') && !hasStageHash) {
+      selectStage(saved)
+    }
   } catch {
     // Stockage indisponible : premier onglet.
   }
@@ -721,7 +749,7 @@ onBeforeUnmount(() => {
             role="tab"
             :aria-selected="ficheView === tab.key"
             :class="{ 'is-active': ficheView === tab.key }"
-            @click="ficheTab = tab.key"
+            @click="selectFicheTab(tab.key)"
           >
             <Icon :name="tab.icon" size="14" /> {{ tab.label }}
             <span v-if="tab.badge" class="formation-count">{{ tab.badge }}</span>
@@ -859,17 +887,23 @@ onBeforeUnmount(() => {
                     <button type="button" class="is-danger" :aria-label="`Supprimer ${module.name}`" title="Supprimer" @click="askDeleteModule(module)"><Icon name="lucide:trash-2" size="11" /></button>
                   </span>
                 </span>
-                <select
-                  class="fiche-level"
+                <span
+                  class="fiche-level-control"
                   :class="`is-${toneOf(levelOf(current, module))}`"
-                  :value="levelOf(current, module)"
-                  :disabled="busy || archived"
-                  :title="levelLabel(levelOf(current, module))"
-                  :aria-label="`Niveau de ${current.name} sur ${module.name}`"
-                  @change="setLevel(module, $event)"
+                  :data-icon="LEVELS[viewStage].find((level) => level.value === levelOf(current, module))?.icon ?? '—'"
                 >
-                  <option v-for="level in LEVELS[viewStage]" :key="level.value" :value="level.value" :title="level.label">{{ level.icon }} {{ level.short }}</option>
-                </select>
+                  <Icon class="fiche-level-chevron" name="lucide:chevron-down" size="11" aria-hidden="true" />
+                  <select
+                    class="fiche-level"
+                    :value="levelOf(current, module)"
+                    :disabled="busy || archived"
+                    :title="levelLabel(levelOf(current, module))"
+                    :aria-label="`Niveau de ${current.name} sur ${module.name}`"
+                    @change="setLevel(module, $event)"
+                  >
+                    <option v-for="level in LEVELS[viewStage]" :key="level.value" :value="level.value" :title="level.label">{{ level.icon }} {{ level.short }}</option>
+                  </select>
+                </span>
               </li>
             </ul>
           </article>
@@ -1123,11 +1157,16 @@ onBeforeUnmount(() => {
 .fiche-rows__name .fiche-actions { position: absolute; top: 50%; right: 0; padding: 1px; border-radius: 6px; background: var(--dp-panel-2); transform: translateY(-50%); }
 .fiche-rows__emoji { flex-shrink: 0; font-size: 13px; }
 .fiche-required { position: relative; flex-shrink: 0; color: var(--dp-danger); font-weight: 700; }
-.fiche-level { width: 132px; font-weight: 600; }
-.fiche-level.is-none { border-color: var(--dp-danger-line); background: var(--dp-danger-soft); }
-.fiche-level.is-seen { border-color: color-mix(in srgb, var(--dp-info) 45%, transparent); background: var(--dp-info-soft); }
-.fiche-level.is-practiced { border-color: color-mix(in srgb, var(--dp-warn) 55%, transparent); background: var(--dp-warn-soft); }
-.fiche-level.is-done { border-color: var(--dp-accent-line); background: var(--dp-accent-soft); }
+.fiche-level-control { position: relative; display: inline-flex; width: 42px; height: 28px; flex: 0 0 42px; }
+.fiche-level-control::before { position: absolute; z-index: 1; top: 50%; left: 5px; content: attr(data-icon); pointer-events: none; transform: translateY(-50%); }
+.fiche-level-chevron { position: absolute; z-index: 1; top: 50%; right: 4px; color: var(--dp-text-2); pointer-events: none; transform: translateY(-50%); }
+.fiche-level { width: 100%; padding: 0 15px 0 3px; color: transparent; appearance: none; font-weight: 600; }
+.fiche-level-control.is-none .fiche-level { border: 1px solid #ff8585; background: rgba(217, 83, 79, .18); }
+.fiche-level-control.is-seen .fiche-level { border: 1px solid #83c7ff; background: rgba(61, 127, 184, .2); }
+.fiche-level-control.is-practiced .fiche-level { border: 1px solid #ffd166; background: rgba(201, 138, 46, .2); }
+.fiche-level-control.is-done .fiche-level { border: 1px solid #79e3a5; background: rgba(70, 153, 109, .2); }
+.fiche-level:focus-visible { outline: 2px solid var(--dp-text); outline-offset: 2px; }
+.fiche-modules.is-archived .fiche-level-control .fiche-level:disabled { color: transparent; }
 .fiche-level option, .fiche-score option { color: var(--dp-text); background: var(--dp-bg); }
 .fiche-score { width: 64px; text-align: center; }
 /* Modifier / supprimer un module ou une question : au survol de la ligne. */

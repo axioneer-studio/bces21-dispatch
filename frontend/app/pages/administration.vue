@@ -219,7 +219,8 @@ const savingRole = ref(false)
 const savingRoleIds = ref<number[]>([])
 const deletingRoleIds = ref<number[]>([])
 const adminSections = ['registrations', 'users', 'roles', 'vehicles', 'parking', 'statuses', 'groups', 'settings'] as const
-const activeAdminSection = ref<(typeof adminSections)[number]>(
+const { active: activeAdminSection, select: selectAdminSection } = useHashTab(
+  adminSections,
   registrations.value.length ? 'registrations' : 'users'
 )
 
@@ -274,7 +275,7 @@ function moveAdminTab(direction: -1 | 1) {
   const nextIndex = (currentIndex + direction + adminSections.length) % adminSections.length
   const nextSection = adminSections[nextIndex]
   if (!nextSection) return
-  activeAdminSection.value = nextSection
+  selectAdminSection(nextSection)
   nextTick(() => document.querySelector<HTMLElement>(`#admin-tab-${activeAdminSection.value}`)?.focus())
 }
 
@@ -1019,28 +1020,28 @@ function statusLabel(status: string) {
     </div>
 
     <nav class="admin-nav" role="tablist" aria-label="Sections d’administration" @keydown.left.prevent="moveAdminTab(-1)" @keydown.right.prevent="moveAdminTab(1)">
-      <button id="admin-tab-registrations" type="button" role="tab" :aria-selected="activeAdminSection === 'registrations'" aria-controls="admin-registrations" :class="{ 'is-active': activeAdminSection === 'registrations' }" @click="activeAdminSection = 'registrations'">
+      <button id="admin-tab-registrations" type="button" role="tab" :aria-selected="activeAdminSection === 'registrations'" aria-controls="admin-registrations" :class="{ 'is-active': activeAdminSection === 'registrations' }" @click="selectAdminSection('registrations')">
         <Icon name="lucide:user-round-plus" size="16" /> Inscriptions <span>{{ registrations.length }}</span>
       </button>
-      <button id="admin-tab-users" type="button" role="tab" :aria-selected="activeAdminSection === 'users'" aria-controls="admin-users" :class="{ 'is-active': activeAdminSection === 'users' }" @click="activeAdminSection = 'users'">
+      <button id="admin-tab-users" type="button" role="tab" :aria-selected="activeAdminSection === 'users'" aria-controls="admin-users" :class="{ 'is-active': activeAdminSection === 'users' }" @click="selectAdminSection('users')">
         <Icon name="lucide:users-round" size="16" /> Comptes <span>{{ users.length }}</span>
       </button>
-      <button id="admin-tab-roles" type="button" role="tab" :aria-selected="activeAdminSection === 'roles'" aria-controls="admin-roles" :class="{ 'is-active': activeAdminSection === 'roles' }" @click="activeAdminSection = 'roles'">
+      <button id="admin-tab-roles" type="button" role="tab" :aria-selected="activeAdminSection === 'roles'" aria-controls="admin-roles" :class="{ 'is-active': activeAdminSection === 'roles' }" @click="selectAdminSection('roles')">
         <Icon name="lucide:user-round-shield" size="16" /> Rôles <span>{{ roles.length }}</span>
       </button>
-      <button id="admin-tab-vehicles" type="button" role="tab" :aria-selected="activeAdminSection === 'vehicles'" aria-controls="admin-vehicles" :class="{ 'is-active': activeAdminSection === 'vehicles' }" @click="activeAdminSection = 'vehicles'">
+      <button id="admin-tab-vehicles" type="button" role="tab" :aria-selected="activeAdminSection === 'vehicles'" aria-controls="admin-vehicles" :class="{ 'is-active': activeAdminSection === 'vehicles' }" @click="selectAdminSection('vehicles')">
         <Icon name="lucide:ambulance" size="16" /> Véhicules <span>{{ vehicles.length }}</span>
       </button>
-      <button id="admin-tab-parking" type="button" role="tab" :aria-selected="activeAdminSection === 'parking'" aria-controls="admin-parking" :class="{ 'is-active': activeAdminSection === 'parking' }" @click="activeAdminSection = 'parking'">
+      <button id="admin-tab-parking" type="button" role="tab" :aria-selected="activeAdminSection === 'parking'" aria-controls="admin-parking" :class="{ 'is-active': activeAdminSection === 'parking' }" @click="selectAdminSection('parking')">
         <Icon name="lucide:map-pin" size="16" /> Stationnement <span>{{ parkingSpots.length }}</span>
       </button>
-      <button id="admin-tab-statuses" type="button" role="tab" :aria-selected="activeAdminSection === 'statuses'" aria-controls="admin-statuses" :class="{ 'is-active': activeAdminSection === 'statuses' }" @click="activeAdminSection = 'statuses'">
+      <button id="admin-tab-statuses" type="button" role="tab" :aria-selected="activeAdminSection === 'statuses'" aria-controls="admin-statuses" :class="{ 'is-active': activeAdminSection === 'statuses' }" @click="selectAdminSection('statuses')">
         <Icon name="lucide:list-checks" size="16" /> Statuts d’inter <span>{{ interventionStatuses.length }}</span>
       </button>
-      <button id="admin-tab-groups" type="button" role="tab" :aria-selected="activeAdminSection === 'groups'" aria-controls="admin-groups" :class="{ 'is-active': activeAdminSection === 'groups' }" @click="activeAdminSection = 'groups'">
+      <button id="admin-tab-groups" type="button" role="tab" :aria-selected="activeAdminSection === 'groups'" aria-controls="admin-groups" :class="{ 'is-active': activeAdminSection === 'groups' }" @click="selectAdminSection('groups')">
         <Icon name="lucide:flag" size="16" /> Groupes <span>{{ groups.length }}</span>
       </button>
-      <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="activeAdminSection = 'settings'">
+      <button id="admin-tab-settings" type="button" role="tab" :aria-selected="activeAdminSection === 'settings'" aria-controls="admin-settings" :class="{ 'is-active': activeAdminSection === 'settings' }" @click="selectAdminSection('settings')">
         <Icon name="lucide:settings-2" size="16" /> Paramètres
       </button>
     </nav>
