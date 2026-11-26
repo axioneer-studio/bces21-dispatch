@@ -29,7 +29,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: "BCES Dispatch",
+      title: "Dispatch • BCES",
       htmlAttrs: { lang: "fr", class: "dark" },
       bodyAttrs: { class: "dark-body" },
       meta: [
@@ -40,14 +40,14 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "Plateforme de dispatch BCES — gestion des interventions et des équipes",
+            "Dispatch BCES - Plateforme web tout-en-un dédiée à la gestion opérationnelle des services de secours, centralisant les interventions, les équipes, les effectifs, les véhicules, les ressources et l'ensemble des opérations quotidiennes au sein d'une interface unique.",
         },
         // Open Graph
-        { property: "og:title", content: "BCES Dispatch" },
+        { property: "og:title", content: "Dispatch • BCES" },
         {
           property: "og:description",
           content:
-            "Plateforme de dispatch BCES — gestion des interventions et des équipes",
+            "Dispatch BCES - Plateforme web tout-en-un dédiée à la gestion opérationnelle des services de secours, centralisant les interventions, les équipes, les effectifs, les véhicules, les ressources et l'ensemble des opérations quotidiennes au sein d'une interface unique.",
         },
         { property: "og:type", content: "website" },
         { property: "og:url", content: "https://bces21-dispatch.axioneer.com" },
@@ -56,14 +56,14 @@ export default defineNuxtConfig({
           content:
             "https://s3.axioneer.com/bces21-dispatch/images/background.webp",
         },
-        { property: "og:site_name", content: "BCES Dispatch" },
+        { property: "og:site_name", content: "Dispatch • BCES" },
         // Twitter
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: "BCES Dispatch" },
+        { name: "twitter:title", content: "Dispatch • BCES" },
         {
           name: "twitter:description",
           content:
-            "Plateforme de dispatch BCES — gestion des interventions et des équipes",
+            "Dispatch BCES - Plateforme web tout-en-un dédiée à la gestion opérationnelle des services de secours, centralisant les interventions, les équipes, les effectifs, les véhicules, les ressources et l'ensemble des opérations quotidiennes au sein d'une interface unique.",
         },
         {
           name: "twitter:image",
