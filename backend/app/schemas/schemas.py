@@ -1,6 +1,6 @@
 import re
 from datetime import UTC, date, datetime
-from typing import Literal
+from typing import Literal, overload
 
 from pydantic import (
     BaseModel,
@@ -524,7 +524,9 @@ class FrequencySettingUpdateRequest(BaseModel):
     @model_validator(mode="after")
     def _ordered(self) -> "FrequencySettingUpdateRequest":
         if self.min is not None and self.max is not None and self.min > self.max:
-            raise ValueError("La borne basse doit être inférieure ou égale à la borne haute.")
+            raise ValueError(
+                "La borne basse doit être inférieure ou égale à la borne haute."
+            )
         if (
             self.current is not None
             and self.min is not None
@@ -561,6 +563,7 @@ class PendingListResponse(BaseModel):
 
 
 # --- Dispatch schemas ---
+
 
 class AssignmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -636,6 +639,18 @@ class RadioOut(BaseModel):
         if isinstance(value, datetime) and value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value
+
+
+@overload
+def _clean_serial(value: str) -> str: ...
+
+
+@overload
+def _clean_serial(value: None) -> None: ...
+
+
+@overload
+def _clean_serial(value: str | None) -> str | None: ...
 
 
 def _clean_serial(value: str | None) -> str | None:
@@ -724,6 +739,19 @@ class DispatchNoteUpdateRequest(BaseModel):
 
 
 # --- Flotte de véhicules ---
+
+
+@overload
+def _clean_required(value: str, label: str) -> str: ...
+
+
+@overload
+def _clean_required(value: None, label: str) -> None: ...
+
+
+@overload
+def _clean_required(value: str | None, label: str) -> str | None: ...
+
 
 def _clean_required(value: str | None, label: str) -> str | None:
     if value is None:
@@ -878,9 +906,11 @@ class AgendaEventCreate(BaseModel):
     color: str = Field(default="#46996d", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
-class AgendaEventUpdate(AgendaEventCreate):
+class AgendaEventUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
     starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    description: str | None = Field(default=None, max_length=2000)
     color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
@@ -911,9 +941,12 @@ class MorgueEntryCreate(BaseModel):
         return value.strip()
 
 
-class MorgueEntryUpdate(MorgueEntryCreate):
+class MorgueEntryUpdate(BaseModel):
     """La récupération se renseigne après l'ajout, depuis la case. L'autopsie et le
-    légiste passent par `MorgueAutopsyRequest`, réservé aux légistes et à la Direction."""
+    légiste passent par `MorgueAutopsyRequest`, réservé aux légistes et à la Direction.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     death_date: date | None = None
     identity: str | None = Field(default=None, max_length=120)
@@ -1200,7 +1233,13 @@ class CrisisZipRequest(BaseModel):
         return (value or "").strip() or None
 
 
-_CRISIS_TEXT_FIELDS = ("full_name", "affiliation", "injuries", "repatriating_doctor", "treating_doctor")
+_CRISIS_TEXT_FIELDS = (
+    "full_name",
+    "affiliation",
+    "injuries",
+    "repatriating_doctor",
+    "treating_doctor",
+)
 
 
 class CrisisVictimCreate(BaseModel):
@@ -1242,10 +1281,14 @@ class CrisisVictimUpdate(BaseModel):
     @classmethod
     def _trim_crisis_text(cls, value: str | None) -> str | None:
         if value is None:
-            raise ValueError("Ce champ ne peut pas être vide ; envoyez une chaîne vide.")
+            raise ValueError(
+                "Ce champ ne peut pas être vide ; envoyez une chaîne vide."
+            )
         return value.strip()
 
-    @field_validator("coma", "severe", "unconscious", "arrived", "care_done", "channel_added")
+    @field_validator(
+        "coma", "severe", "unconscious", "arrived", "care_done", "channel_added"
+    )
     @classmethod
     def _crisis_flag_required(cls, value: bool | None, info: ValidationInfo):
         if value is None:
@@ -1402,7 +1445,9 @@ class TrainingGradeOut(BaseModel):
 # Période d'essai : Validations basiques, Gestion des outils, Type
 # d'intervention, Blessures. En formation : formations obligatoires et
 # facultatives.
-InternModuleCategory = Literal["basics", "tools", "interventions", "injuries", "mandatory", "optional"]
+InternModuleCategory = Literal[
+    "basics", "tools", "interventions", "injuries", "mandatory", "optional"
+]
 # « trial » : grade « Période d'essai » ; « training » : grade « En formation ».
 InternStage = Literal["trial", "training"]
 

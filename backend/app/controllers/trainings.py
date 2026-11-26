@@ -4,10 +4,9 @@
 Valider une formation pour un employé ajoute l'emoji de la formation à ses
 compétences (la ligne « Compétences » des Ressources humaines) ; l'emoji est la
 seule trace de la validation, si bien qu'un emoji ajouté à la main dans les
-Ressources humaines compte aussi comme une validation. L'emoji est facultatif :
-sans emoji, un Validé a sa ligne « validated » dans l'équipe (TrainingMember).
-Les fonctions qui donnent, remplacent ou retirent l'emoji servent aussi à la
-page Formation (controllers/formation.py).
+Ressources humaines compte aussi comme une validation. Les fonctions qui
+donnent, remplacent ou retirent l'emoji servent aussi à la page Formation
+(controllers/formation.py).
 
 Deux pôles ou spécialités n'ont jamais le même emoji, mais un module de la page
 Formation peut avoir celui d'un pôle : chez un employé à l'étape du module,
@@ -68,11 +67,15 @@ MAX_COMPETENCIES = 20
 
 
 def _set_competencies(employee: Employee, competencies: list[str]) -> None:
-    employee.competencies = json.dumps(list(dict.fromkeys(competencies)), ensure_ascii=False)
+    employee.competencies = json.dumps(
+        list(dict.fromkeys(competencies)), ensure_ascii=False
+    )
 
 
 def has_emoji(employee: Employee, emoji: str) -> bool:
-    return any(emoji_key(item) == emoji_key(emoji) for item in employee_competencies(employee))
+    return any(
+        emoji_key(item) == emoji_key(emoji) for item in employee_competencies(employee)
+    )
 
 
 def add_emoji(employee: Employee, emoji: str) -> bool:
@@ -94,7 +97,12 @@ def remove_emoji(employee: Employee, emoji: str) -> bool:
     if not has_emoji(employee, emoji):
         return False
     _set_competencies(
-        employee, [item for item in employee_competencies(employee) if emoji_key(item) != emoji_key(emoji)]
+        employee,
+        [
+            item
+            for item in employee_competencies(employee)
+            if emoji_key(item) != emoji_key(emoji)
+        ],
     )
     return True
 
@@ -112,7 +120,13 @@ async def replace_emoji_everywhere(
             continue
         competencies = employee_competencies(employee)
         if any(emoji_key(item) == emoji_key(old) for item in competencies):
-            _set_competencies(employee, [new if emoji_key(item) == emoji_key(old) else item for item in competencies])
+            _set_competencies(
+                employee,
+                [
+                    new if emoji_key(item) == emoji_key(old) else item
+                    for item in competencies
+                ],
+            )
             changed = True
     return changed
 
@@ -128,12 +142,20 @@ async def remove_emoji_everywhere(
     return changed
 
 
-async def ensure_training_emoji_available(db: AsyncSession, emoji: str, training_id: int | None = None) -> None:
+async def ensure_training_emoji_available(
+    db: AsyncSession, emoji: str | None, training_id: int | None = None
+) -> None:
     """L'emoji est unique parmi les pôles et spécialités : c'est lui qui fait la
     validation. Un module de la page Formation peut avoir le même."""
-    trainings = (await db.execute(select(Training).where(Training.emoji.is_not(None)))).scalars().all()
+    if emoji is None:
+        return
+    trainings = (await db.execute(select(Training))).scalars().all()
     for training in trainings:
-        if training.id != training_id and emoji_key(training.emoji) == emoji_key(emoji):
+        if (
+            training.id != training_id
+            and training.emoji is not None
+            and emoji_key(training.emoji) == emoji_key(emoji)
+        ):
             raise HTTPException(
                 status_code=409,
                 detail=f"L’emoji {emoji} est déjà celui de la formation « {training.name} ».",
@@ -151,62 +173,36 @@ async def _all_employees(db: AsyncSession) -> list[Employee]:
     return list((await db.execute(select(Employee))).scalars().all())
 
 
-async def _change_training_emoji(db: AsyncSession, training: Training, new: str | None) -> bool:
-    """Garde les validations quand l'emoji de la formation change ; `True` si
-    des compétences ont changé.
-    - Nouvel emoji : il remplace l'ancien chez ceux qui l'avaient validée.
-    - Emoji retiré : il quitte leurs compétences et les Validés passent dans
-      l'équipe (ligne « validated »).
-    - Emoji ajouté : il rejoint les compétences des Responsables, Seconds et
-      Validés, dont la ligne « validated » n'a plus lieu d'être.
-    Jamais chez ceux qui ont l'emoji d'un module de leur étape de formation."""
-    old = training.emoji
-    if old and new:
-        return await replace_emoji_everywhere(db, old, new, only=await _pole_holders(db, old))
-    members = list(
-        (await db.execute(select(TrainingMember).where(TrainingMember.training_id == training.id))).scalars().all()
-    )
-    changed = False
-    if old:
-        holders = await _pole_holders(db, old)
-        in_roster = {member.employee_id for member in members}
-        for employee in await _all_employees(db):
-            if holders(employee) and remove_emoji(employee, old):
-                changed = True
-                if employee.id not in in_roster:
-                    db.add(TrainingMember(training_id=training.id, employee_id=employee.id, status="validated"))
-    elif new:
-        for member in members:
-            if member.status == "in_progress":
-                continue
-            employee = await db.get(Employee, member.employee_id)
-            if employee is not None:
-                changed = add_emoji(employee, new) or changed
-            if member.status == "validated":
-                await db.delete(member)
-    return changed
-
-
 # --- Lectures partagées ---
 
 
 def training_out(training: Training) -> TrainingOut:
+    kind = training.kind
+    category = training.category
+    if kind != "general":
+        raise ValueError(f"Type de formation inconnu : {kind}")
+    if category not in ("pole", "specialty"):
+        raise ValueError(f"Catégorie de formation inconnue : {category}")
     return TrainingOut(
         id=training.id,
         name=training.name,
         emoji=training.emoji,
-        kind=training.kind,
-        category=training.category,
+        kind=kind,
+        category=category,
         permissions=parse_training_permissions(training.permissions),
     )
 
 
 def in_formation(employee: Employee) -> bool:
     """Grade « Période d'essai » ou « En formation » : pas de pôle ni de spécialité."""
-    return bool(employee.grade and (employee.grade.is_trial or employee.grade.is_training))
+    return bool(
+        employee.grade and (employee.grade.is_trial or employee.grade.is_training)
+    )
 
 
-def employee_out(employee: Employee, module_emojis: dict[str, list[str]]) -> TrainingEmployeeOut:
+def employee_out(
+    employee: Employee, module_emojis: dict[str, list[str]]
+) -> TrainingEmployeeOut:
     """`module_emojis` : `formation_stages.module_emojis_by_stage`, pour ne garder
     que les compétences qui comptent pour les pôles et spécialités."""
     return TrainingEmployeeOut(
@@ -230,9 +226,16 @@ async def active_employees(db: AsyncSession, *filters) -> list[Employee]:
                 select(Employee)
                 .outerjoin(Grade, Employee.grade_id == Grade.id)
                 .where(Employee.is_active.is_(True), *filters)
-                .order_by(Grade.level.is_(None), Grade.level.asc(), func.lower(Employee.first_name), Employee.id)
+                .order_by(
+                    Grade.level.is_(None),
+                    Grade.level.asc(),
+                    func.lower(Employee.first_name),
+                    Employee.id,
+                )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -245,7 +248,9 @@ async def get_active_employee(db: AsyncSession, employee_id: int) -> Employee:
     return employee
 
 
-async def get_training_of_kind(db: AsyncSession, training_id: int, kinds: set[str]) -> Training:
+async def get_training_of_kind(
+    db: AsyncSession, training_id: int, kinds: set[str]
+) -> Training:
     """Chaque page ne voit que ses formations : les autres sont introuvables."""
     training = await db.get(Training, training_id)
     if training is None or training.kind not in kinds:
@@ -319,7 +324,9 @@ async def _ensure_can_edit_roster(
 def _granted_permissions(payload: TrainingRequest) -> list[str]:
     unknown = set(payload.permissions) - TRAINING_PERMISSION_CATALOG.keys()
     if unknown:
-        raise HTTPException(status_code=422, detail=f"Droits inconnus : {', '.join(sorted(unknown))}.")
+        raise HTTPException(
+            status_code=422, detail=f"Droits inconnus : {', '.join(sorted(unknown))}."
+        )
     return list(dict.fromkeys(payload.permissions))
 
 
@@ -328,17 +335,30 @@ def _granted_permissions(payload: TrainingRequest) -> list[str]:
 
 async def training_page(user: User, db: AsyncSession) -> TrainingPageOut:
     trainings = (
-        await db.execute(select(Training).where(Training.kind == "general"))
-    ).scalars().all()
-    members = (await db.execute(select(TrainingMember).order_by(TrainingMember.created_at))).scalars().all()
+        (await db.execute(select(Training).where(Training.kind == "general")))
+        .scalars()
+        .all()
+    )
+    members = (
+        (await db.execute(select(TrainingMember).order_by(TrainingMember.created_at)))
+        .scalars()
+        .all()
+    )
     own_employee = await linked_employee(db, user)
     module_emojis = await module_emojis_by_stage(db)
     return TrainingPageOut(
-        trainings=[training_out(item) for item in sorted(trainings, key=lambda item: (item.name.lower(), item.id))],
-        employees=[employee_out(employee, module_emojis) for employee in await active_employees(db)],
+        trainings=[
+            training_out(item)
+            for item in sorted(trainings, key=lambda item: (item.name.lower(), item.id))
+        ],
+        employees=[
+            employee_out(employee, module_emojis)
+            for employee in await active_employees(db)
+        ],
         members=[TrainingMemberOut.model_validate(member) for member in members],
         permission_options=[
-            TrainingPermissionOption(key=key, label=label) for key, label in TRAINING_PERMISSION_CATALOG.items()
+            TrainingPermissionOption(key=key, label=label)
+            for key, label in TRAINING_PERMISSION_CATALOG.items()
         ],
         can_manage=await user_can_manage_hospital(db, user),
         can_assign_lead=await _is_direction_user(db, user),
@@ -347,8 +367,7 @@ async def training_page(user: User, db: AsyncSession) -> TrainingPageOut:
 
 
 async def create_training(payload: TrainingRequest, db: AsyncSession) -> TrainingOut:
-    if payload.emoji:
-        await ensure_training_emoji_available(db, payload.emoji)
+    await ensure_training_emoji_available(db, payload.emoji)
     training = Training(
         name=payload.name,
         emoji=payload.emoji,
@@ -362,13 +381,27 @@ async def create_training(payload: TrainingRequest, db: AsyncSession) -> Trainin
     return training_out(training)
 
 
-async def update_training(training_id: int, payload: TrainingRequest, db: AsyncSession) -> TrainingOut:
-    """Modifie la formation. Ceux qui l'avaient validée la gardent, même si son
-    emoji change, est retiré ou ajouté : voir `_change_training_emoji`."""
+async def update_training(
+    training_id: int, payload: TrainingRequest, db: AsyncSession
+) -> TrainingOut:
+    """Modifie la formation. Un nouvel emoji remplace l'ancien chez les employés
+    qui l'avaient validée (pas chez ceux qui l'ont d'un module de leur étape)."""
     training = await get_training_of_kind(db, training_id, _GENERAL)
-    if payload.emoji:
-        await ensure_training_emoji_available(db, payload.emoji, training.id)
-    emoji_changed = await _change_training_emoji(db, training, payload.emoji)
+    await ensure_training_emoji_available(db, payload.emoji, training.id)
+    emoji_changed = False
+    if training.emoji is not None and payload.emoji is not None:
+        emoji_changed = await replace_emoji_everywhere(
+            db,
+            training.emoji,
+            payload.emoji,
+            only=await _pole_holders(db, training.emoji),
+        )
+    elif training.emoji is not None:
+        emoji_changed = await remove_emoji_everywhere(
+            db,
+            training.emoji,
+            only=await _pole_holders(db, training.emoji),
+        )
     training.name = payload.name
     training.emoji = payload.emoji
     training.category = payload.category
@@ -384,10 +417,14 @@ async def delete_training(training_id: int, db: AsyncSession) -> MessageResponse
     """Supprime la formation et retire son emoji des compétences des employés
     (pas de ceux qui l'ont d'un module de leur étape)."""
     training = await get_training_of_kind(db, training_id, _GENERAL)
-    changed = bool(training.emoji) and await remove_emoji_everywhere(
-        db, training.emoji, only=await _pole_holders(db, training.emoji)
+    changed = False
+    if training.emoji is not None:
+        changed = await remove_emoji_everywhere(
+            db, training.emoji, only=await _pole_holders(db, training.emoji)
+        )
+    await db.execute(
+        delete(TrainingMember).where(TrainingMember.training_id == training.id)
     )
-    await db.execute(delete(TrainingMember).where(TrainingMember.training_id == training.id))
     await db.delete(training)
     await db.commit()
     if changed:
@@ -405,33 +442,40 @@ async def validate_training(
     """Donne à l'employé son rôle dans la formation : Responsable (« lead »),
     Second (« second ») et Validé (« validated ») ont l'emoji dans leurs
     compétences, avec les droits que la formation donne ; En cours
-    (« in_progress ») ne l'a pas encore. Sans emoji, seul le rôle est gardé, et
-    le Validé a sa ligne comme les autres."""
+    (« in_progress ») ne l'a pas encore."""
     member_status = payload.status if payload else "validated"
     training = await get_training_of_kind(db, training_id, _GENERAL)
     await _ensure_can_edit_roster(db, user, training, employee_id, member_status)
     employee = await get_active_employee(db, employee_id)
-    if in_formation(employee):
+    grade = employee.grade
+    if grade is not None and (grade.is_trial or grade.is_training):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"{employee.grade.name} : un employé en période d’essai ou en formation ne rejoint ni pôle ni spécialité.",
+            detail=(
+                f"{grade.name} : un employé en période d’essai "
+                "ou en formation ne rejoint ni pôle ni spécialité."
+            ),
         )
 
     member = await db.get(TrainingMember, (training.id, employee.id))
-    if member_status == "validated" and training.emoji:
+    if member_status == "validated":
         if member is not None:
             await db.delete(member)
     elif member is None:
-        db.add(TrainingMember(training_id=training.id, employee_id=employee.id, status=member_status))
+        db.add(
+            TrainingMember(
+                training_id=training.id, employee_id=employee.id, status=member_status
+            )
+        )
     else:
         member.status = member_status
 
-    if not training.emoji:
-        competencies_changed = False
-    elif member_status == "in_progress":
-        competencies_changed = remove_emoji(employee, training.emoji)
-    else:
-        competencies_changed = add_emoji(employee, training.emoji)
+    competencies_changed = False
+    if training.emoji is not None:
+        if member_status == "in_progress":
+            competencies_changed = remove_emoji(employee, training.emoji)
+        else:
+            competencies_changed = add_emoji(employee, training.emoji)
 
     await db.commit()
     await db.refresh(employee)
@@ -451,12 +495,13 @@ async def unvalidate_training(
     employee = await get_active_employee(db, employee_id)
     await db.execute(
         delete(TrainingMember).where(
-            TrainingMember.training_id == training.id, TrainingMember.employee_id == employee.id
+            TrainingMember.training_id == training.id,
+            TrainingMember.employee_id == employee.id,
         )
     )
     module_emojis = await module_emojis_by_stage(db)
     had_emoji = (
-        bool(training.emoji)
+        training.emoji is not None
         and not from_stage_module(employee, training.emoji, module_emojis)
         and remove_emoji(employee, training.emoji)
     )

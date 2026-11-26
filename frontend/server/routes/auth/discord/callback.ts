@@ -72,11 +72,12 @@ export default defineEventHandler(async (event) => {
     const redirectWithToken = `${redirectUrl}${
       redirectUrl.includes('?') ? '&' : '?'
     }token=${encodeURIComponent(data.token)}`
+    const sessionCookie =
+      `bces_session=${data.token}; Path=/; HttpOnly; ` +
+      `SameSite=${sameSite}${secure}${domainAttr}; Max-Age=${14 * 24 * 60 * 60}`
     event.node.res.writeHead(302, {
       'Location': redirectWithToken,
-      'Set-Cookie': `bces_session=${data.token}; Path=/; HttpOnly; SameSite=${sameSite}${secure}${domainAttr}; Max-Age=${
-        14 * 24 * 60 * 60
-      }`,
+      'Set-Cookie': sessionCookie,
     })
     event.node.res.end()
     return

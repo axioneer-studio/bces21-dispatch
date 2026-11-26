@@ -87,7 +87,9 @@ async def _is_bootstrap_user(user: User, db: AsyncSession) -> bool:
     return founder_id is not None and user.id == founder_id
 
 
-async def _check_guild_membership(access_token: str, user_id: str | None = None) -> None:
+async def _check_guild_membership(
+    access_token: str, user_id: str | None = None
+) -> None:
     """Vérifie que l'utilisateur est membre du serveur Discord requis.
 
     Lève une HTTPException 403 s'il n'est pas membre.
@@ -199,7 +201,9 @@ async def discord_exchange(
     state_cookie = request.cookies.get(state_cookie_name)
 
     if not state_cookie or not secrets.compare_digest(payload.state, state_cookie):
-        logger.warning("Discord OAuth exchange rejected: state cookie is missing or invalid.")
+        logger.warning(
+            "Discord OAuth exchange rejected: state cookie is missing or invalid."
+        )
         raise HTTPException(
             status_code=400,
             detail="Session OAuth expirée ou invalide.",
@@ -225,9 +229,7 @@ async def discord_exchange(
             detail="Profil Discord indisponible.",
         )
 
-    existing = await db.execute(
-        select(User).where(User.discord_id == discord_id)
-    )
+    existing = await db.execute(select(User).where(User.discord_id == discord_id))
     user = existing.scalar_one_or_none()
     now = datetime.now(UTC)
 
@@ -245,9 +247,7 @@ async def discord_exchange(
         )
 
     if user is None:
-        deadline = now + timedelta(
-            seconds=get_settings().profile_deadline_seconds
-        )
+        deadline = now + timedelta(seconds=get_settings().profile_deadline_seconds)
         total_users = (
             await db.execute(select(func.count()).select_from(User))
         ).scalar_one()
@@ -263,7 +263,9 @@ async def discord_exchange(
         )
         db.add(user)
         if is_first_user:
-            logger.info("Bootstrap: premier compte (%s) validé automatiquement.", discord_id)
+            logger.info(
+                "Bootstrap: premier compte (%s) validé automatiquement.", discord_id
+            )
 
     user.discord_username = me.get("username") or user.discord_username
     avatar = me.get("avatar")
@@ -299,11 +301,7 @@ def _status_redirect_target_path(user: User) -> str:
         return "/?status=pending"
     if user.prenom_rp and user.nom_rp:
         return "/dispatch"
-    deadline_iso = (
-        user.rp_name_deadline.isoformat()
-        if user.rp_name_deadline
-        else None
-    )
+    deadline_iso = user.rp_name_deadline.isoformat() if user.rp_name_deadline else None
     if deadline_iso:
         return f"/complete-profile?deadline={deadline_iso}"
     return "/complete-profile"
@@ -316,10 +314,14 @@ async def _handle_callback(
     db: AsyncSession,
 ) -> RedirectResponse:
     if not state_cookie or not secrets.compare_digest(state_value, state_cookie):
-        logger.warning("Discord OAuth callback rejected: state cookie is missing or invalid.")
+        logger.warning(
+            "Discord OAuth callback rejected: state cookie is missing or invalid."
+        )
         return RedirectResponse(
             _frontend_redirect(
-                "/", error="invalid_state", error_description="Session OAuth expirée ou invalide."
+                "/",
+                error="invalid_state",
+                error_description="Session OAuth expirée ou invalide.",
             ),
             status_code=302,
         )
@@ -332,13 +334,19 @@ async def _handle_callback(
     except DiscordAPIError as exc:
         logger.warning("Discord OAuth error: %s", exc)
         return RedirectResponse(
-            _frontend_redirect("/", error="discord_failed", error_description="Connexion Discord refusée."),
+            _frontend_redirect(
+                "/",
+                error="discord_failed",
+                error_description="Connexion Discord refusée.",
+            ),
             status_code=302,
         )
     except HTTPException as exc:
         logger.warning("Discord guild check failed: %s", exc.detail)
         return RedirectResponse(
-            _frontend_redirect("/", error="guild_required", error_description=str(exc.detail)),
+            _frontend_redirect(
+                "/", error="guild_required", error_description=str(exc.detail)
+            ),
             status_code=302,
         )
 
@@ -349,9 +357,7 @@ async def _handle_callback(
             status_code=302,
         )
 
-    existing = await db.execute(
-        select(User).where(User.discord_id == discord_id)
-    )
+    existing = await db.execute(select(User).where(User.discord_id == discord_id))
     user = existing.scalar_one_or_none()
     is_new_user = user is None
     now = datetime.now(UTC)
@@ -370,9 +376,7 @@ async def _handle_callback(
         )
 
     if user is None:
-        deadline = now + timedelta(
-            seconds=get_settings().profile_deadline_seconds
-        )
+        deadline = now + timedelta(seconds=get_settings().profile_deadline_seconds)
         # Bootstrap : le tout premier compte de l'application est validé
         # automatiquement. Les suivants démarrent validés puis basculent en
         # "pending" une fois leur profil (nom / prénom / téléphone) complet.
@@ -391,7 +395,9 @@ async def _handle_callback(
         )
         db.add(user)
         if is_first_user:
-            logger.info("Bootstrap: premier compte (%s) validé automatiquement.", discord_id)
+            logger.info(
+                "Bootstrap: premier compte (%s) validé automatiquement.", discord_id
+            )
 
     user.discord_username = me.get("username") or user.discord_username
     avatar = me.get("avatar")
@@ -413,11 +419,7 @@ def _status_redirect_target(user: User) -> str:
         return _frontend_redirect("/?status=pending")
     if user.prenom_rp and user.nom_rp:
         return _frontend_redirect("/dispatch")
-    deadline_iso = (
-        user.rp_name_deadline.isoformat()
-        if user.rp_name_deadline
-        else None
-    )
+    deadline_iso = user.rp_name_deadline.isoformat() if user.rp_name_deadline else None
     return _frontend_redirect("/complete-profile", deadline=deadline_iso)
 
 
@@ -491,7 +493,13 @@ async def list_pending(
     _: User = Depends(require_admin),
 ) -> PendingListResponse:
     rows = (
-        (await db.execute(select(User).where(User.status == "pending").order_by(User.created_at.desc())))
+        (
+            await db.execute(
+                select(User)
+                .where(User.status == "pending")
+                .order_by(User.created_at.desc())
+            )
+        )
         .scalars()
         .all()
     )

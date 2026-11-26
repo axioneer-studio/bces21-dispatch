@@ -39,7 +39,10 @@ async def require_formation_manager(
         return user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Seuls la Direction, « Gérer l’hôpital » et le Responsable du pôle Formation modifient les modules, le questionnaire et les seuils.",
+        detail=(
+            "Seuls la Direction, « Gérer l’hôpital » et le Responsable du pôle "
+            "Formation modifient les modules, le questionnaire et les seuils."
+        ),
     )
 
 
@@ -66,7 +69,9 @@ async def formation_page(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_formation_manager)],
 )
-async def create_module(payload: InternModuleRequest, db: AsyncSession = Depends(get_db)) -> InternModuleOut:
+async def create_module(
+    payload: InternModuleRequest, db: AsyncSession = Depends(get_db)
+) -> InternModuleOut:
     return await cf.create_module(payload, db)
 
 
@@ -86,7 +91,9 @@ async def update_module(
     response_model=MessageResponse,
     dependencies=[Depends(require_formation_manager)],
 )
-async def delete_module(module_id: int, db: AsyncSession = Depends(get_db)) -> MessageResponse:
+async def delete_module(
+    module_id: int, db: AsyncSession = Depends(get_db)
+) -> MessageResponse:
     return await cf.delete_module(module_id, db)
 
 
@@ -96,7 +103,9 @@ async def delete_module(module_id: int, db: AsyncSession = Depends(get_db)) -> M
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_formation_manager)],
 )
-async def create_question(payload: InternQuestionRequest, db: AsyncSession = Depends(get_db)) -> InternQuestionOut:
+async def create_question(
+    payload: InternQuestionRequest, db: AsyncSession = Depends(get_db)
+) -> InternQuestionOut:
     return await cf.create_question(payload, db)
 
 
@@ -116,7 +125,9 @@ async def update_question(
     response_model=MessageResponse,
     dependencies=[Depends(require_formation_manager)],
 )
-async def delete_question(question_id: int, db: AsyncSession = Depends(get_db)) -> MessageResponse:
+async def delete_question(
+    question_id: int, db: AsyncSession = Depends(get_db)
+) -> MessageResponse:
     return await cf.delete_question(question_id, db)
 
 
@@ -143,14 +154,20 @@ async def update_record(
 
 @router.put("/{employee_id}/modules/{module_id}", response_model=InternRecordOut)
 async def set_module_level(
-    employee_id: int, module_id: int, payload: InternLevelRequest, db: AsyncSession = Depends(get_db)
+    employee_id: int,
+    module_id: int,
+    payload: InternLevelRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> InternRecordOut:
     return await cf.set_module_level(employee_id, module_id, payload, db)
 
 
 @router.put("/{employee_id}/questions/{question_id}", response_model=InternRecordOut)
 async def set_answer(
-    employee_id: int, question_id: int, payload: InternAnswerRequest, db: AsyncSession = Depends(get_db)
+    employee_id: int,
+    question_id: int,
+    payload: InternAnswerRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> InternRecordOut:
     return await cf.set_answer(employee_id, question_id, payload, db)
 
@@ -169,7 +186,9 @@ async def pass_training_grade(
 
 
 @router.delete("/{employee_id}/resident", response_model=InternRecordOut)
-async def cancel_training_grade(employee_id: int, db: AsyncSession = Depends(get_db)) -> InternRecordOut:
+async def cancel_training_grade(
+    employee_id: int, db: AsyncSession = Depends(get_db)
+) -> InternRecordOut:
     return await cf.cancel_training_grade(employee_id, db)
 
 
@@ -184,5 +203,7 @@ async def complete_formation(
 
 
 @router.delete("/{employee_id}/complete", response_model=InternRecordOut)
-async def cancel_completion(employee_id: int, db: AsyncSession = Depends(get_db)) -> InternRecordOut:
+async def cancel_completion(
+    employee_id: int, db: AsyncSession = Depends(get_db)
+) -> InternRecordOut:
     return await cf.cancel_completion(employee_id, db)

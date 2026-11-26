@@ -44,7 +44,9 @@ async def crisis_state(db: AsyncSession) -> CrisisState:
     return state
 
 
-async def primo_slot(db: AsyncSession, state: CrisisState | None) -> DispatchSlot | None:
+async def primo_slot(
+    db: AsyncSession, state: CrisisState | None
+) -> DispatchSlot | None:
     """Intervention « Primo » de la crise, si elle existe encore sur le Dispatch."""
     if state is None or state.slot_id is None:
         return None
@@ -69,7 +71,9 @@ async def _add_member(db: AsyncSession, employee_id: int) -> None:
     await db.flush()
     if await db.get(CrisisMember, employee_id) is not None:
         return
-    has_primo = await db.scalar(select(CrisisMember.employee_id).where(CrisisMember.is_primo.is_(True)))
+    has_primo = await db.scalar(
+        select(CrisisMember.employee_id).where(CrisisMember.is_primo.is_(True))
+    )
     db.add(CrisisMember(employee_id=employee_id, is_primo=has_primo is None))
 
 
@@ -78,7 +82,9 @@ async def linked_slot_id(db: AsyncSession) -> int | None:
     return slot.id if slot else None
 
 
-async def sync_crisis_from_slot(db: AsyncSession, slot: DispatchSlot, joined_id: int | None = None) -> None:
+async def sync_crisis_from_slot(
+    db: AsyncSession, slot: DispatchSlot, joined_id: int | None = None
+) -> None:
     """À appeler quand une intervention change de statut ou reçoit quelqu'un (`joined_id`).
 
     Une intervention « Primo » devient celle de la crise si la crise n'en a pas
@@ -89,7 +95,11 @@ async def sync_crisis_from_slot(db: AsyncSession, slot: DispatchSlot, joined_id:
     """
     state = await crisis_state(db)
     linked = await primo_slot(db, state)
-    newly_linked = linked is None and slot.status is not None and slot.status in await primo_status_keys(db)
+    newly_linked = (
+        linked is None
+        and slot.status is not None
+        and slot.status in await primo_status_keys(db)
+    )
     if newly_linked:
         state.slot_id = slot.id
         if slot.zip_code:
@@ -105,7 +115,9 @@ async def sync_crisis_from_slot(db: AsyncSession, slot: DispatchSlot, joined_id:
         await _add_member(db, joined_id)
 
 
-async def employee_left_slot(db: AsyncSession, slot_id: int | None, employee_id: int) -> None:
+async def employee_left_slot(
+    db: AsyncSession, slot_id: int | None, employee_id: int
+) -> None:
     """À appeler quand quelqu'un quitte une intervention (retiré ou déplacé).
 
     S'il quitte l'intervention « Primo » de la crise, il quitte aussi l'équipe ;
@@ -122,7 +134,9 @@ async def employee_left_slot(db: AsyncSession, slot_id: int | None, employee_id:
     await db.flush()
     if not was_primo:
         return
-    remaining = [other for other in await _slot_employee_ids(db, slot_id) if other != employee_id]
+    remaining = [
+        other for other in await _slot_employee_ids(db, slot_id) if other != employee_id
+    ]
     if not remaining:
         return
     successor = await db.get(CrisisMember, remaining[0])
@@ -139,4 +153,6 @@ async def slot_emptied(db: AsyncSession, slot_id: int) -> None:
         return
     employee_ids = await _slot_employee_ids(db, slot_id)
     if employee_ids:
-        await db.execute(delete(CrisisMember).where(CrisisMember.employee_id.in_(employee_ids)))
+        await db.execute(
+            delete(CrisisMember).where(CrisisMember.employee_id.in_(employee_ids))
+        )

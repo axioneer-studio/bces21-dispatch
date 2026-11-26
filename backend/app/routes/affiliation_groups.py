@@ -14,7 +14,9 @@ router = APIRouter(
 
 
 @router.get("", response_model=list[cg.AffiliationGroupOut])
-async def list_groups(db: AsyncSession = Depends(get_db)) -> list[cg.AffiliationGroupOut]:
+async def list_groups(
+    db: AsyncSession = Depends(get_db),
+) -> list[cg.AffiliationGroupOut]:
     return await cg.list_groups(db)
 
 
@@ -37,5 +39,7 @@ async def update_group(
 
 
 @router.delete("/{group_id}", response_model=cg.MessageResponse)
-async def delete_group(group_id: int, db: AsyncSession = Depends(get_db)) -> cg.MessageResponse:
+async def delete_group(
+    group_id: int, db: AsyncSession = Depends(get_db)
+) -> cg.MessageResponse:
     return await cg.delete_group(group_id, db)

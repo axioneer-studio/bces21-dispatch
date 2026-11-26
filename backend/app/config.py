@@ -56,7 +56,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.cors_allow_origins.split(",")
+            if origin.strip()
+        ]
 
     @property
     def effective_google_sa_encryption_key(self) -> str:
@@ -64,11 +68,17 @@ class Settings(BaseSettings):
 
     @property
     def discord_scope_list(self) -> list[str]:
-        return [scope.strip() for scope in self.discord_scopes.split(",") if scope.strip()]
+        return [
+            scope.strip() for scope in self.discord_scopes.split(",") if scope.strip()
+        ]
 
     @property
     def discord_bypass_user_id_list(self) -> list[str]:
-        return [uid.strip() for uid in self.discord_bypass_user_ids.split(",") if uid.strip()]
+        return [
+            uid.strip()
+            for uid in self.discord_bypass_user_ids.split(",")
+            if uid.strip()
+        ]
 
 
 @lru_cache

@@ -87,7 +87,10 @@ DEFAULT_INTERN_QUESTIONS: list[tuple[str, str]] = [
         "Traitement sur place, réanimation si besoin, faire boire et manger, constantes, perfusion glucose / vitamine C, "
         "IPT 30 min sans effort physique.",
     ),
-    ("Quel est le traitement d’un tassement vertébral ?", "Injection de gaz intervertébral."),
+    (
+        "Quel est le traitement d’un tassement vertébral ?",
+        "Injection de gaz intervertébral.",
+    ),
     (
         "Quels sont les IPT pour une blessure par arme blanche avec coma et que faut-il faire ?",
         "IPT 3 h. Appel FdO + message Discord « Blessure par arme ».",
@@ -126,7 +129,10 @@ DEFAULT_INTERN_QUESTIONS: list[tuple[str, str]] = [
         "Comment gère-t-on une blessure chimique ?",
         "Comme une brûlure normale, mais on analyse le sang de la personne pour vérifier si elle est contaminée.",
     ),
-    ("Quels IPT pour une personne percutée par une voiture et tombée dans le coma ?", "AVP coma : 2 h à 3 h."),
+    (
+        "Quels IPT pour une personne percutée par une voiture et tombée dans le coma ?",
+        "AVP coma : 2 h à 3 h.",
+    ),
     (
         "Quels IPT pour une luxation après une chute de moins de 15 m sans coma ?",
         "Entorse / luxation / fracture simple : 30 min à 1 h.",
@@ -140,5 +146,8 @@ DEFAULT_INTERN_QUESTIONS: list[tuple[str, str]] = [
         "fracture nette des côtes, brûlure au 3e degré du bras ?",
         "Hématome sous-dural → pneumothorax → fracture des côtes → fracture déplacée du tibia → brûlure au 3e degré du bras.",
     ),
-    ("Quels IPT pour une explosion sans coma ? Et avec coma ?", "Sans coma : entre 1 h et 4 h. Avec coma : 6 h."),
+    (
+        "Quels IPT pour une explosion sans coma ? Et avec coma ?",
+        "Sans coma : entre 1 h et 4 h. Avec coma : 6 h.",
+    ),
 ]

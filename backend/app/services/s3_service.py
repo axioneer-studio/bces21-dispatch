@@ -14,7 +14,7 @@ Sécurité :
 
 import logging
 
-import boto3
+from boto3.session import Session
 from botocore.exceptions import BotoCoreError, ClientError
 from cryptography.fernet import Fernet
 
@@ -38,7 +38,9 @@ class S3Service:
         self._access_key = settings.s3_access_key
         self._secret_key = settings.s3_secret_key
         self._encryption_key = settings.effective_google_sa_encryption_key
-        self._fernet = Fernet(self._encryption_key.encode()) if self._encryption_key else None
+        self._fernet = (
+            Fernet(self._encryption_key.encode()) if self._encryption_key else None
+        )
         self._client = None
         self._configured = bool(
             self._endpoint and self._bucket and self._access_key and self._secret_key
@@ -54,7 +56,7 @@ class S3Service:
                 raise S3ServiceError(
                     "Stockage S3 non configuré (variables d'environnement manquantes)."
                 )
-            session = boto3.session.Session()
+            session = Session()
             self._client = session.client(
                 "s3",
                 endpoint_url=self._endpoint or None,
@@ -79,7 +81,10 @@ class S3Service:
         return self._fernet.decrypt(data)
 
     def upload_service_account(
-        self, key: str, content: bytes, content_type: str = "application/json",
+        self,
+        key: str,
+        content: bytes,
+        content_type: str = "application/json",
         prefix: str = "",
     ) -> str:
         """Upload le JSON du compte de service sur S3.
@@ -101,7 +106,9 @@ class S3Service:
             logger.info("Service account JSON uploadé sur S3 (clé=%s).", full_key)
             return full_key
         except ClientError as exc:
-            logger.error("Échec S3 upload (clé=%s): %s", full_key, exc.response["Error"]["Code"])
+            logger.error(
+                "Échec S3 upload (clé=%s): %s", full_key, exc.response["Error"]["Code"]
+            )
             raise S3ServiceError(
                 f"Échec de l'upload vers S3 : {exc.response['Error']['Code']}"
             ) from exc
@@ -117,19 +124,23 @@ class S3Service:
             response = client.get_object(Bucket=self._bucket, Key=full_key)
             encrypted_body = response["Body"].read()
             decrypted_body = self._decrypt(encrypted_body)
-            logger.debug("Service account JSON téléchargé depuis S3 (clé=%s).", full_key)
+            logger.debug(
+                "Service account JSON téléchargé depuis S3 (clé=%s).", full_key
+            )
             return decrypted_body
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             if code == "NoSuchKey":
-                logger.warning("Service account JSON introuvable sur S3 (clé=%s).", full_key)
+                logger.warning(
+                    "Service account JSON introuvable sur S3 (clé=%s).", full_key
+                )
                 raise S3ServiceError("Aucun compte de service configuré.") from exc
             logger.error(
-                "Échec S3 download (clé=%s): %s", full_key, exc.response["Error"]["Code"]
+                "Échec S3 download (clé=%s): %s",
+                full_key,
+                exc.response["Error"]["Code"],
             )
-            raise S3ServiceError(
-                f"Échec du téléchargement depuis S3 : {code}"
-            ) from exc
+            raise S3ServiceError(f"Échec du téléchargement depuis S3 : {code}") from exc
         except BotoCoreError as exc:
             logger.error("Échec S3 download (clé=%s): %s", full_key, exc, exc_info=True)
             raise S3ServiceError(f"Échec du téléchargement depuis S3 : {exc}") from exc
@@ -164,13 +175,15 @@ class S3Service:
             if code in ("404", "NoSuchKey"):
                 return False
             logger.error(
-                "Échec S3 head_object (clé=%s): %s", full_key, exc.response["Error"]["Code"]
+                "Échec S3 head_object (clé=%s): %s",
+                full_key,
+                exc.response["Error"]["Code"],
             )
-            raise S3ServiceError(
-                f"Échec de la vérification S3 : {code}"
-            ) from exc
+            raise S3ServiceError(f"Échec de la vérification S3 : {code}") from exc
         except BotoCoreError as exc:
-            logger.error("Échec S3 head_object (clé=%s): %s", full_key, exc, exc_info=True)
+            logger.error(
+                "Échec S3 head_object (clé=%s): %s", full_key, exc, exc_info=True
+            )
             raise S3ServiceError(f"Échec de la vérification S3 : {exc}") from exc
 
 

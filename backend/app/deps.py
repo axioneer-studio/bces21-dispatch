@@ -8,7 +8,9 @@ from app.database import get_db
 from app.models import User
 
 # Pages ouvertes à tout compte validé par un admin, même sans rôle.
-OPEN_PAGES = frozenset({"dispatch", "crisis", "hospital", "agenda", "stock", "training"})
+OPEN_PAGES = frozenset(
+    {"dispatch", "crisis", "hospital", "agenda", "stock", "training"}
+)
 # Pages à cocher dans un rôle (« Pages accessibles »). Ressources humaines n'en
 # fait pas partie : elle est réservée aux droits RH et à la Direction (voir
 # training_rights).
@@ -63,12 +65,20 @@ def parse_role_pages(value: str | None) -> list[str]:
         pages = json.loads(value or "[]")
     except (TypeError, ValueError):
         return []
-    return [page for page in pages if isinstance(page, str)] if isinstance(pages, list) else []
+    return (
+        [page for page in pages if isinstance(page, str)]
+        if isinstance(pages, list)
+        else []
+    )
 
 
 def user_role_pages(user: User) -> list[str]:
     """Pages cochées dans l'ensemble des rôles du compte, sans doublon."""
-    return list(dict.fromkeys(page for role in user.roles for page in parse_role_pages(role.pages)))
+    return list(
+        dict.fromkeys(
+            page for role in user.roles for page in parse_role_pages(role.pages)
+        )
+    )
 
 
 def require_any_page_access(*pages: str):

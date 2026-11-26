@@ -18,9 +18,7 @@ def parse_app_permissions(value: str | None) -> list[str]:
     if not isinstance(permissions, list):
         return []
     return [
-        permission
-        for permission in permissions
-        if permission in APP_PERMISSION_CATALOG
+        permission for permission in permissions if permission in APP_PERMISSION_CATALOG
     ]
 
 
@@ -34,7 +32,9 @@ def user_role_permissions(user: User) -> list[str]:
     """Permissions de l'ensemble des rôles du compte, sans doublon."""
     return list(
         dict.fromkeys(
-            permission for role in user.roles for permission in parse_app_permissions(role.permissions)
+            permission
+            for role in user.roles
+            for permission in parse_app_permissions(role.permissions)
         )
     )
 

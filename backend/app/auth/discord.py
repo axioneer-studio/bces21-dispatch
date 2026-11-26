@@ -46,9 +46,7 @@ async def exchange_code(code: str) -> dict:
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(
-            DISCORD_TOKEN_URL, data=data, headers=headers
-        )
+        response = await client.post(DISCORD_TOKEN_URL, data=data, headers=headers)
 
     if response.status_code != 200:
         raise DiscordAPIError(

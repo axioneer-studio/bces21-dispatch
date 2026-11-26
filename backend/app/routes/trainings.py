@@ -42,7 +42,9 @@ async def training_page(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_hospital_manage)],
 )
-async def create_training(payload: TrainingRequest, db: AsyncSession = Depends(get_db)) -> TrainingOut:
+async def create_training(
+    payload: TrainingRequest, db: AsyncSession = Depends(get_db)
+) -> TrainingOut:
     return await ct.create_training(payload, db)
 
 
@@ -62,11 +64,15 @@ async def update_training(
     response_model=MessageResponse,
     dependencies=[Depends(require_hospital_manage)],
 )
-async def delete_training(training_id: int, db: AsyncSession = Depends(get_db)) -> MessageResponse:
+async def delete_training(
+    training_id: int, db: AsyncSession = Depends(get_db)
+) -> MessageResponse:
     return await ct.delete_training(training_id, db)
 
 
-@router.put("/{training_id}/employees/{employee_id}", response_model=TrainingEmployeeOut)
+@router.put(
+    "/{training_id}/employees/{employee_id}", response_model=TrainingEmployeeOut
+)
 async def validate_training(
     training_id: int,
     employee_id: int,
@@ -77,7 +83,9 @@ async def validate_training(
     return await ct.validate_training(training_id, employee_id, payload, user, db)
 
 
-@router.delete("/{training_id}/employees/{employee_id}", response_model=TrainingEmployeeOut)
+@router.delete(
+    "/{training_id}/employees/{employee_id}", response_model=TrainingEmployeeOut
+)
 async def unvalidate_training(
     training_id: int,
     employee_id: int,

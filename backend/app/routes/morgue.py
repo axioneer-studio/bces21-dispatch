@@ -25,9 +25,7 @@ async def get_morgue(
     return await cg.get_morgue(user, db)
 
 
-@router.post(
-    "", response_model=cg.MorgueEntryOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=cg.MorgueEntryOut, status_code=status.HTTP_201_CREATED)
 async def create_entry(
     payload: cg.MorgueEntryCreate,
     _: User = Depends(get_current_user),

@@ -91,7 +91,9 @@ class GoogleSheetsService:
         if cached is not None and now - cached[0] < SERVICE_ACCOUNT_CACHE_TTL:
             return cached[1]
         try:
-            content = s3_service.download_service_account(self._s3_key, prefix="credentials/")
+            content = s3_service.download_service_account(
+                self._s3_key, prefix="credentials/"
+            )
         except S3ServiceError as exc:
             raise GoogleSheetsError(
                 f"Impossible de récupérer les credentials depuis S3 (clé={self._s3_key})."
@@ -225,13 +227,19 @@ class GoogleSheetsService:
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
         except TimeoutError:
-            logger.warning("Délai dépassé lors de la lecture de la cellule %s.", cell_ref)
-            raise GoogleSheetsError(f"Délai dépassé lors de la lecture de la cellule {cell_ref}.")
+            logger.warning(
+                "Délai dépassé lors de la lecture de la cellule %s.", cell_ref
+            )
+            raise GoogleSheetsError(
+                f"Délai dépassé lors de la lecture de la cellule {cell_ref}."
+            )
         except HttpError as exc:
             raise self._http_error_to_gs_error(exc) from exc
         except Exception as exc:  # pylint: disable=broad-except
             logger.exception("Erreur lors de la lecture de la cellule Google Sheets.")
-            raise GoogleSheetsError(f"Erreur inattendue : {type(exc).__name__}") from exc
+            raise GoogleSheetsError(
+                f"Erreur inattendue : {type(exc).__name__}"
+            ) from exc
 
         values = result.get("values", [])
         if not values or not values[0]:
@@ -271,13 +279,19 @@ class GoogleSheetsService:
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
         except TimeoutError:
-            logger.warning("Délai dépassé lors de l'écriture Google Sheets (%s).", range_name)
-            raise GoogleSheetsError(f"Délai dépassé lors de l'écriture Google Sheets ({range_name}).")
+            logger.warning(
+                "Délai dépassé lors de l'écriture Google Sheets (%s).", range_name
+            )
+            raise GoogleSheetsError(
+                f"Délai dépassé lors de l'écriture Google Sheets ({range_name})."
+            )
         except HttpError as exc:
             raise self._http_error_to_gs_error(exc) from exc
         except Exception as exc:  # pylint: disable=broad-except
             logger.exception("Erreur lors de l'écriture Google Sheets.")
-            raise GoogleSheetsError(f"Erreur inattendue : {type(exc).__name__}") from exc
+            raise GoogleSheetsError(
+                f"Erreur inattendue : {type(exc).__name__}"
+            ) from exc
 
         return result
 
@@ -321,12 +335,16 @@ class GoogleSheetsService:
             )
         except TimeoutError:
             logger.warning("Délai dépassé lors de l'écriture batch Google Sheets.")
-            raise GoogleSheetsError("Délai dépassé lors de l'écriture batch Google Sheets.")
+            raise GoogleSheetsError(
+                "Délai dépassé lors de l'écriture batch Google Sheets."
+            )
         except HttpError as exc:
             raise self._http_error_to_gs_error(exc) from exc
         except Exception as exc:  # pylint: disable=broad-except
             logger.exception("Erreur lors de l'écriture batch Google Sheets.")
-            raise GoogleSheetsError(f"Erreur inattendue : {type(exc).__name__}") from exc
+            raise GoogleSheetsError(
+                f"Erreur inattendue : {type(exc).__name__}"
+            ) from exc
 
         return result
 
@@ -364,13 +382,19 @@ class GoogleSheetsService:
                 timeout=GOOGLE_SHEETS_TIMEOUT,
             )
         except TimeoutError:
-            logger.warning("Délai dépassé lors de l'ajout Google Sheets (%s).", range_name)
-            raise GoogleSheetsError(f"Délai dépassé lors de l'ajout Google Sheets ({range_name}).")
+            logger.warning(
+                "Délai dépassé lors de l'ajout Google Sheets (%s).", range_name
+            )
+            raise GoogleSheetsError(
+                f"Délai dépassé lors de l'ajout Google Sheets ({range_name})."
+            )
         except HttpError as exc:
             raise self._http_error_to_gs_error(exc) from exc
         except Exception as exc:  # pylint: disable=broad-except
             logger.exception("Erreur lors de l'ajout Google Sheets.")
-            raise GoogleSheetsError(f"Erreur inattendue : {type(exc).__name__}") from exc
+            raise GoogleSheetsError(
+                f"Erreur inattendue : {type(exc).__name__}"
+            ) from exc
 
         return result
 

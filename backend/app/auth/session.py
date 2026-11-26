@@ -8,18 +8,14 @@ from app.config import get_settings
 
 def issue_token(user_id: int) -> tuple[str, datetime]:
     settings = get_settings()
-    expires = datetime.now(UTC) + timedelta(
-        seconds=settings.session_ttl_seconds
-    )
+    expires = datetime.now(UTC) + timedelta(seconds=settings.session_ttl_seconds)
     payload = {
         "sub": str(user_id),
         "iat": int(datetime.now(UTC).timestamp()),
         "exp": int(expires.timestamp()),
         "type": "session",
     }
-    token = jwt.encode(
-        payload, settings.session_secret, algorithm="HS256"
-    )
+    token = jwt.encode(payload, settings.session_secret, algorithm="HS256")
     return token, expires
 
 
