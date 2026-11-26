@@ -1,114 +1,143 @@
 <script setup lang="ts">
-import { randomizeFrequency } from '~/composables/useDispatchApi'
-import type { FrequencyKind } from '~/composables/useDispatchStore'
+import { randomizeFrequency } from "~/composables/useDispatchApi";
+import type { FrequencyKind } from "~/composables/useDispatchStore";
 
 const props = defineProps<{
-  kind: FrequencyKind
-  label: string
-  current: string | null
-  min: number | null
-  max: number | null
-  canManageFrequencies?: boolean
-}>()
+  kind: FrequencyKind;
+  label: string;
+  current: string | null;
+  min: number | null;
+  max: number | null;
+  canManageFrequencies?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:current', value: string | null): void
-  (e: 'close'): void
-}>()
+  (e: "update:current", value: string | null): void;
+  (e: "close"): void;
+}>();
 
-const toast = useAppToast()
+const toast = useAppToast();
 
-const manualValue = ref('')
-const randomizing = ref(false)
-const error = ref('')
+const manualValue = ref("");
+const randomizing = ref(false);
+const error = ref("");
 
 /** Fréquence formatée pour l'affichage. */
 const formattedCurrent = computed(() => {
-  const digits = props.current?.replace(/\s*MHz$/i, '').trim()
-  return digits ? `${digits} MHz` : 'Aucune'
-})
+  const digits = props.current?.replace(/\s*MHz$/i, "").trim();
+  return digits ? `${digits} MHz` : "Aucune";
+});
 
 /** Valide la saisie manuelle : uniquement des chiffres, max 5. */
 function onManualInput(event: Event) {
-  const input = event.target as HTMLInputElement
-  input.value = input.value.replace(/\D/g, '').slice(0, 5)
-  manualValue.value = input.value
-  error.value = ''
+  const input = event.target as HTMLInputElement;
+  input.value = input.value.replace(/\D/g, "").slice(0, 5);
+  manualValue.value = input.value;
+  error.value = "";
 }
 
 /** Applique la fréquence saisie manuellement. */
 async function applyManual() {
-  const digits = manualValue.value.trim()
+  const digits = manualValue.value.trim();
   if (!digits) {
-    error.value = 'Saisissez une fréquence.'
-    return
+    error.value = "Saisissez une fréquence.";
+    return;
   }
-  const value = Number(digits)
-  if (props.min !== null && props.max !== null && (value < props.min || value > props.max)) {
-    error.value = `La fréquence doit être comprise entre ${props.min} et ${props.max} MHz.`
-    return
+  const value = Number(digits);
+  if (
+    props.min !== null &&
+    props.max !== null &&
+    (value < props.min || value > props.max)
+  ) {
+    error.value = `La fréquence doit être comprise entre ${props.min} et ${props.max} MHz.`;
+    return;
   }
   try {
-    const updated = await $fetch<{ kind: FrequencyKind; current: string | null; min: number | null; max: number | null }>(
-      `/api/direction/frequencies/${props.kind}`,
-      {
-        method: 'PUT',
-        body: { min: props.min, current: value, max: props.max },
-        credentials: 'include'
-      }
-    )
-    emit('update:current', updated.current)
-    error.value = ''
+    const updated = await $fetch<{
+      kind: FrequencyKind;
+      current: string | null;
+      min: number | null;
+      max: number | null;
+    }>(`/api/direction/frequencies/${props.kind}`, {
+      method: "PUT",
+      body: { min: props.min, current: value, max: props.max },
+      credentials: "include",
+    });
+    emit("update:current", updated.current);
+    error.value = "";
   } catch (cause) {
-    const detail = (cause as { data?: { detail?: unknown } } | null)?.data?.detail
-    error.value = typeof detail === 'string' && detail ? detail : 'Fréquence impossible à enregistrer.'
+    const detail = (cause as { data?: { detail?: unknown } } | null)?.data
+      ?.detail;
+    error.value =
+      typeof detail === "string" && detail
+        ? detail
+        : "Fréquence impossible à enregistrer.";
   }
 }
 
 /** Génère une fréquence aléatoire entre les bornes. */
 async function generateRandom() {
-  if (randomizing.value) return
+  if (randomizing.value) return;
   if (props.min == null || props.max == null) {
-    toast.warning(`Réglez d’abord les bornes de la fréquence « ${props.label} » dans Direction → Fréquences.`)
-    return
+    toast.warning(
+      `Réglez d’abord les bornes de la fréquence « ${props.label} » dans Direction → Fréquences.`,
+    );
+    return;
   }
-  randomizing.value = true
-  error.value = ''
+  randomizing.value = true;
+  error.value = "";
   try {
-    const result = await randomizeFrequency(props.kind)
-    emit('update:current', result.current)
+    const result = await randomizeFrequency(props.kind);
+    emit("update:current", result.current);
   } catch (cause) {
-    const detail = (cause as { data?: { detail?: unknown } } | null)?.data?.detail
-    toast.error(typeof detail === 'string' && detail ? detail : 'Tirage aléatoire impossible.')
+    const detail = (cause as { data?: { detail?: unknown } } | null)?.data
+      ?.detail;
+    toast.error(
+      typeof detail === "string" && detail
+        ? detail
+        : "Tirage aléatoire impossible.",
+    );
   } finally {
-    randomizing.value = false
+    randomizing.value = false;
   }
 }
 
 function close() {
-  emit('close')
+  emit("close");
 }
 
 async function goToFrequencySettings() {
-  if (!props.canManageFrequencies) return
-  close()
-  await navigateTo('/direction#frequencies')
+  if (!props.canManageFrequencies) return;
+  close();
+  await navigateTo("/direction#frequencies");
 }
 </script>
 
 <template>
   <Teleport to="body">
     <div class="fp-overlay" @click.self="close" @keydown.esc="close">
-      <section class="fp-panel" role="dialog" aria-modal="true" aria-labelledby="fp-title">
+      <section
+        class="fp-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fp-title"
+      >
         <header class="fp-header">
           <div class="fp-header__icon">
             <Icon name="lucide:radio" size="18" />
           </div>
           <div>
             <h2 id="fp-title">Fréquence « {{ label }} »</h2>
-            <p class="fp-header__subtitle">Choisissez une fréquence manuellement ou générez-en une au hasard.</p>
+            <p class="fp-header__subtitle">
+              Choisissez une fréquence manuellement ou générez-en une au hasard.
+            </p>
           </div>
-          <button type="button" class="fp-close" aria-label="Fermer" @click="close">
+          <button
+            type="button"
+            class="fp-close"
+            aria-label="Fermer"
+            @click="close"
+          >
             <Icon name="lucide:x" size="16" />
           </button>
         </header>
@@ -120,7 +149,9 @@ async function goToFrequencySettings() {
           </div>
 
           <div v-if="error" class="fp-error" role="alert">
-            <Icon name="lucide:circle-alert" size="14" /><span>{{ error }}</span>
+            <Icon name="lucide:circle-alert" size="14" /><span>{{
+              error
+            }}</span>
           </div>
 
           <div class="fp-section">
@@ -136,12 +167,21 @@ async function goToFrequencySettings() {
                 maxlength="5"
                 autocomplete="off"
                 v-model="manualValue"
-                :placeholder="props.min != null && props.max != null ? `${props.min}–${props.max}` : '?'"
+                :placeholder="
+                  props.min != null && props.max != null
+                    ? `${props.min}–${props.max}`
+                    : '?'
+                "
                 @input="onManualInput"
                 @keydown.enter.prevent="applyManual"
               />
               <span class="fp-unit">MHz</span>
-              <button type="button" class="fp-button fp-button--apply" :disabled="!manualValue.trim()" @click="applyManual">
+              <button
+                type="button"
+                class="fp-button fp-button--apply"
+                :disabled="!manualValue.trim()"
+                @click="applyManual"
+              >
                 Appliquer
               </button>
             </div>
@@ -163,16 +203,20 @@ async function goToFrequencySettings() {
                 size="14"
                 :class="{ 'fp-spin': randomizing }"
               />
-              {{ randomizing ? 'Tirage en cours…' : 'Générer une fréquence' }}
+              {{ randomizing ? "Tirage en cours…" : "Générer une fréquence" }}
             </button>
             <p class="fp-bounds">
-              <span v-if="props.min != null && props.max != null">Entre {{ props.min }} et {{ props.max }} MHz</span>
+              <span v-if="props.min != null && props.max != null"
+                >Entre {{ props.min }} et {{ props.max }} MHz</span
+              >
               <span
                 v-else
                 class="fp-bounds--missing"
                 :class="{ 'fp-bounds--link': props.canManageFrequencies }"
                 @click="goToFrequencySettings"
-                :style="{ cursor: props.canManageFrequencies ? 'pointer' : 'default' }"
+                :style="{
+                  cursor: props.canManageFrequencies ? 'pointer' : 'default',
+                }"
               >
                 Bornes non définies dans Direction → Fréquences
               </span>
@@ -181,7 +225,13 @@ async function goToFrequencySettings() {
         </div>
 
         <footer class="fp-footer">
-          <button type="button" class="fp-button fp-button--cancel" @click="close">Annuler</button>
+          <button
+            type="button"
+            class="fp-button fp-button--cancel"
+            @click="close"
+          >
+            Annuler
+          </button>
         </footer>
       </section>
     </div>
@@ -359,7 +409,7 @@ async function goToFrequencySettings() {
   background: var(--dp-bg);
   font: inherit;
   font-size: 14px;
-  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
 }
 
 .fp-input-group input:focus-visible {
@@ -477,16 +527,28 @@ async function goToFrequencySettings() {
 }
 
 @keyframes fp-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes fp-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fp-panel-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 </style>

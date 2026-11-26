@@ -1,57 +1,74 @@
 <script setup lang="ts">
-import { assignUser, createFleetEntry, createSlot, fetchSnapshot, saveDispatchNote, unassignUser } from '~/composables/useDispatchApi'
-import { useDispatchSocket } from '~/composables/useDispatchSocket'
-import type { Agent } from '~/utils/agent'
-import { sortAgentsByGradeAndArrival } from '~/utils/agent'
+import {
+  assignUser,
+  createFleetEntry,
+  createSlot,
+  fetchSnapshot,
+  saveDispatchNote,
+  unassignUser,
+} from "~/composables/useDispatchApi";
+import { useDispatchSocket } from "~/composables/useDispatchSocket";
+import type { Agent } from "~/utils/agent";
+import { sortAgentsByGradeAndArrival } from "~/utils/agent";
 
-definePageMeta({ layout: 'dispatch' })
-useHead({ title: 'Dispatch • BCES' })
+definePageMeta({ layout: "dispatch" });
+useHead({ title: "Dispatch • BCES" });
 
 interface DispatchUser {
-  is_super_admin: boolean
-  grade_permissions: string[]
+  is_super_admin: boolean;
+  grade_permissions: string[];
 }
 
-const { data: meData, pending: mePending } = await useAsyncData<DispatchUser | null>('me-dispatch', async () => {
-  try {
-    const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-    return await $fetch<DispatchUser>('/api/me', { credentials: 'include', headers })
-  } catch {
-    return null
-  }
-})
+const { data: meData, pending: mePending } =
+  await useAsyncData<DispatchUser | null>("me-dispatch", async () => {
+    try {
+      const headers = import.meta.server
+        ? useRequestHeaders(["cookie"])
+        : undefined;
+      return await $fetch<DispatchUser>("/api/me", {
+        credentials: "include",
+        headers,
+      });
+    } catch {
+      return null;
+    }
+  });
 
 if (!mePending && !meData.value) {
-  await navigateTo('/')
+  await navigateTo("/");
 }
 
 // Lit le token passé en paramètre d'URL par la route de callback Discord
 // pour l'authentification WebSocket cross-origin.
-const route = useRoute()
-const wsToken = route.query.token as string | undefined
+const route = useRoute();
+const wsToken = route.query.token as string | undefined;
 
-const { data: agentsData, pending: agentsPending } = await useAsyncData<Agent[]>('dispatch-employees', async () => {
+const { data: agentsData, pending: agentsPending } = await useAsyncData<
+  Agent[]
+>("dispatch-employees", async () => {
   try {
-    const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-    return await $fetch<Agent[]>('/api/employees', {
-      credentials: 'include',
-      headers
-    })
+    const headers = import.meta.server
+      ? useRequestHeaders(["cookie"])
+      : undefined;
+    return await $fetch<Agent[]>("/api/employees", {
+      credentials: "include",
+      headers,
+    });
   } catch {
-    return []
+    return [];
   }
-})
+});
 
-const agents = computed<Agent[]>(() => agentsData.value ?? [])
-const toast = useAppToast()
+const agents = computed<Agent[]>(() => agentsData.value ?? []);
+const toast = useAppToast();
 
 async function refreshAgents() {
   try {
-    agentsData.value = await $fetch<Agent[]>('/api/employees', {
-      credentials: 'include'
-    })
+    agentsData.value = await $fetch<Agent[]>("/api/employees", {
+      credentials: "include",
+    });
   } catch {
-    toast.error('Mise à jour des employés impossible.')
+    toast.error("Mise à jour des employés impossible.");
   }
 }
 
@@ -65,148 +82,175 @@ const {
   applySnapshot,
   beginEmployeeMove,
   completeEmployeeMove,
-  cancelEmployeeMove
-} = useDispatchStore()
-const { connect, disconnect } = useDispatchSocket(refreshAgents, wsToken)
-const movingEmployees = new Set<number>()
-const noteDraft = ref('')
-const noteDirty = ref(false)
-const savingNote = ref(false)
-const editingNote = ref(false)
-const noteEditor = ref<HTMLTextAreaElement | null>(null)
+  cancelEmployeeMove,
+} = useDispatchStore();
+const { connect, disconnect } = useDispatchSocket(refreshAgents, wsToken);
+const movingEmployees = new Set<number>();
+const noteDraft = ref("");
+const noteDirty = ref(false);
+const savingNote = ref(false);
+const editingNote = ref(false);
+const noteEditor = ref<HTMLTextAreaElement | null>(null);
 
-const { data: initialSnapshot, pending: snapshotPending } = await useAsyncData('dispatch-snapshot-initial', async () => {
-  try {
-    return await fetchSnapshot()
-  } catch {
-    return null
-  }
-})
+const { data: initialSnapshot, pending: snapshotPending } = await useAsyncData(
+  "dispatch-snapshot-initial",
+  async () => {
+    try {
+      return await fetchSnapshot();
+    } catch {
+      return null;
+    }
+  },
+);
 
 if (initialSnapshot.value) {
-  applySnapshot(initialSnapshot.value)
-  noteDraft.value = initialSnapshot.value.note ?? ''
+  applySnapshot(initialSnapshot.value);
+  noteDraft.value = initialSnapshot.value.note ?? "";
 }
 
-onMounted(() => connect())
-onBeforeUnmount(() => disconnect())
+onMounted(() => connect());
+onBeforeUnmount(() => disconnect());
 
 watch(
   () => snapshot.value.note,
   (note) => {
-    if (!editingNote.value && !noteDirty.value) noteDraft.value = note ?? ''
-  }
-)
+    if (!editingNote.value && !noteDirty.value) noteDraft.value = note ?? "";
+  },
+);
 
 watch(connected, (v) => {
-  if (v) toast.success('Synchronisation en direct.')
-})
+  if (v) toast.success("Synchronisation en direct.");
+});
 
-const byKind = (kind: string) => slots.value.find((s) => s.kind === kind) ?? null
-const astreinte = computed(() => byKind('astreinte'))
-const conges = computed(() => byKind('conges'))
-const ipt = computed(() => byKind('ipt'))
-const astreinteFin = computed(() => byKind('astreinte-fin'))
-const pause = computed(() => byKind('pause'))
+const byKind = (kind: string) =>
+  slots.value.find((s) => s.kind === kind) ?? null;
+const astreinte = computed(() => byKind("astreinte"));
+const conges = computed(() => byKind("conges"));
+const ipt = computed(() => byKind("ipt"));
+const astreinteFin = computed(() => byKind("astreinte-fin"));
+const pause = computed(() => byKind("pause"));
 
 // Agents pas encore assignés → pool "Hors service BCES"
 const pool = computed(() => {
-  const taken = new Set<number>()
-  for (const s of slots.value) for (const a of s.assignments) taken.add(a.employee_id)
+  const taken = new Set<number>();
+  for (const s of slots.value)
+    for (const a of s.assignments) taken.add(a.employee_id);
   return sortAgentsByGradeAndArrival(
-    agents.value.filter((agent) => agent.is_active && !taken.has(agent.id))
-  )
-})
+    agents.value.filter((agent) => agent.is_active && !taken.has(agent.id)),
+  );
+});
 
 async function onEmployeeDrop(employeeId: number, targetSlotId: number | null) {
-  if (movingEmployees.has(employeeId)) return
+  if (movingEmployees.has(employeeId)) return;
   const sourceSlot = slots.value.find((slot) =>
-    slot.assignments.some((assignment) => assignment.employee_id === employeeId)
-  )
-  if (sourceSlot?.id === targetSlotId || (targetSlotId === null && !sourceSlot)) return
+    slot.assignments.some(
+      (assignment) => assignment.employee_id === employeeId,
+    ),
+  );
+  if (sourceSlot?.id === targetSlotId || (targetSlotId === null && !sourceSlot))
+    return;
 
-  movingEmployees.add(employeeId)
-  beginEmployeeMove(employeeId, targetSlotId)
+  movingEmployees.add(employeeId);
+  beginEmployeeMove(employeeId, targetSlotId);
   try {
     const updatedSlot =
       targetSlotId === null
         ? await unassignUser(sourceSlot!.id, employeeId)
-        : await assignUser(targetSlotId, employeeId)
-    completeEmployeeMove(employeeId, updatedSlot)
+        : await assignUser(targetSlotId, employeeId);
+    completeEmployeeMove(employeeId, updatedSlot);
   } catch {
-    toast.error(targetSlotId === null ? 'Désassignation impossible.' : 'Assignation impossible.')
-    cancelEmployeeMove(employeeId)
+    toast.error(
+      targetSlotId === null
+        ? "Désassignation impossible."
+        : "Assignation impossible.",
+    );
+    cancelEmployeeMove(employeeId);
     try {
-      applySnapshot(await fetchSnapshot())
+      applySnapshot(await fetchSnapshot());
     } catch {
-      toast.error('Synchronisation du Dispatch impossible.')
+      toast.error("Synchronisation du Dispatch impossible.");
     }
   } finally {
-    movingEmployees.delete(employeeId)
+    movingEmployees.delete(employeeId);
   }
 }
 
-const adding = ref<boolean>(false)
+const adding = ref<boolean>(false);
 async function addIntervention() {
-  if (adding.value) return
-  adding.value = true
+  if (adding.value) return;
+  adding.value = true;
   try {
-    await createSlot('intervention')
+    await createSlot("intervention");
   } catch {
-    toast.error('Création impossible.')
+    toast.error("Création impossible.");
   } finally {
-    adding.value = false
+    adding.value = false;
   }
 }
 
-const addingFleetEntry = ref(false)
+const addingFleetEntry = ref(false);
 async function addFleetEntry() {
-  if (addingFleetEntry.value) return
-  addingFleetEntry.value = true
+  if (addingFleetEntry.value) return;
+  addingFleetEntry.value = true;
   try {
-    await createFleetEntry()
+    await createFleetEntry();
   } catch {
-    toast.error('Ajout de la ligne impossible.')
+    toast.error("Ajout de la ligne impossible.");
   } finally {
-    addingFleetEntry.value = false
+    addingFleetEntry.value = false;
   }
 }
 
 async function saveNote() {
-  if (savingNote.value || !noteDirty.value) return
-  savingNote.value = true
+  if (savingNote.value || !noteDirty.value) return;
+  savingNote.value = true;
   try {
-    const updatedSnapshot = await saveDispatchNote(noteDraft.value)
-    applySnapshot(updatedSnapshot)
-    noteDirty.value = false
+    const updatedSnapshot = await saveDispatchNote(noteDraft.value);
+    applySnapshot(updatedSnapshot);
+    noteDirty.value = false;
   } catch {
-    toast.error('Mise à jour du bloc-notes impossible.')
+    toast.error("Mise à jour du bloc-notes impossible.");
   } finally {
-    savingNote.value = false
+    savingNote.value = false;
   }
 }
 
 async function editNote() {
-  if (editingNote.value || savingNote.value) return
-  if (!noteDirty.value) noteDraft.value = snapshot.value.note ?? ''
-  editingNote.value = true
-  await nextTick()
-  noteEditor.value?.focus()
-  const end = noteEditor.value?.value.length ?? 0
-  noteEditor.value?.setSelectionRange(end, end)
+  if (editingNote.value || savingNote.value) return;
+  if (!noteDirty.value) noteDraft.value = snapshot.value.note ?? "";
+  editingNote.value = true;
+  await nextTick();
+  noteEditor.value?.focus();
+  const end = noteEditor.value?.value.length ?? 0;
+  noteEditor.value?.setSelectionRange(end, end);
 }
 
 async function finishNoteEdit() {
-  editingNote.value = false
-  await saveNote()
+  editingNote.value = false;
+  await saveNote();
 }
 </script>
 
 <template>
   <DispatchHeader
-    :can-reset-assignments="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_assignments'))"
-    :can-delete-interventions="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_slots'))"
-    :can-manage-frequencies="Boolean(meData?.is_super_admin || meData?.grade_permissions.includes('dispatch.manage_radios'))"
+    :can-reset-assignments="
+      Boolean(
+        meData?.is_super_admin ||
+        meData?.grade_permissions.includes('dispatch.manage_assignments'),
+      )
+    "
+    :can-delete-interventions="
+      Boolean(
+        meData?.is_super_admin ||
+        meData?.grade_permissions.includes('dispatch.manage_slots'),
+      )
+    "
+    :can-manage-frequencies="
+      Boolean(
+        meData?.is_super_admin ||
+        meData?.grade_permissions.includes('dispatch.manage_radios'),
+      )
+    "
   />
 
   <main class="dp">
@@ -285,11 +329,7 @@ async function finishNoteEdit() {
       </section>
 
       <aside class="z z--radio">
-        <RadioPanel
-          :radios="snapshot.radios"
-          :agents="agents"
-          :pool="pool"
-        />
+        <RadioPanel :radios="snapshot.radios" :agents="agents" :pool="pool" />
       </aside>
 
       <section class="z z--hopital">
@@ -299,7 +339,7 @@ async function finishNoteEdit() {
           <span class="z__hint">en service, hors intervention</span>
         </header>
         <SlotPanel
-          :slot="hopital"
+          :slot="hopital ?? undefined"
           :loading="!hopital"
           :agents="agents"
           accent="#ec8a86"
@@ -310,9 +350,11 @@ async function finishNoteEdit() {
 
       <div class="dp__lower">
         <section class="z z--astreinte">
-          <header class="z__head"><Icon name="lucide:shield-alert" size="12" /><span>Astreinte</span></header>
+          <header class="z__head">
+            <Icon name="lucide:shield-alert" size="12" /><span>Astreinte</span>
+          </header>
           <SlotPanel
-            :slot="astreinte"
+            :slot="astreinte ?? undefined"
             :loading="!astreinte"
             :agents="agents"
             @employee-drop="onEmployeeDrop"
@@ -321,9 +363,11 @@ async function finishNoteEdit() {
         </section>
 
         <section class="z z--conges">
-          <header class="z__head"><Icon name="lucide:parasol" size="12" /><span>Congés</span></header>
+          <header class="z__head">
+            <Icon name="lucide:parasol" size="12" /><span>Congés</span>
+          </header>
           <SlotPanel
-            :slot="conges"
+            :slot="conges ?? undefined"
             :loading="!conges"
             :agents="agents"
             @employee-drop="onEmployeeDrop"
@@ -333,9 +377,11 @@ async function finishNoteEdit() {
 
         <div class="dp__lower-bottom">
           <section class="z z--ipt">
-            <header class="z__head"><Icon name="lucide:accessibility" size="12" /><span>IPT</span></header>
+            <header class="z__head">
+              <Icon name="lucide:accessibility" size="12" /><span>IPT</span>
+            </header>
             <SlotPanel
-              :slot="ipt"
+              :slot="ipt ?? undefined"
               :loading="!ipt"
               :agents="agents"
               @employee-drop="onEmployeeDrop"
@@ -344,9 +390,13 @@ async function finishNoteEdit() {
           </section>
 
           <section class="z z--fin">
-            <header class="z__head"><Icon name="lucide:moon-star" size="12" /><span>Astreinte fin de service</span></header>
+            <header class="z__head">
+              <Icon name="lucide:moon-star" size="12" /><span
+                >Astreinte fin de service</span
+              >
+            </header>
             <SlotPanel
-              :slot="astreinteFin"
+              :slot="astreinteFin ?? undefined"
               :loading="!astreinteFin"
               :agents="agents"
               @employee-drop="onEmployeeDrop"
@@ -355,9 +405,11 @@ async function finishNoteEdit() {
           </section>
 
           <section class="z z--pause">
-            <header class="z__head"><Icon name="lucide:coffee" size="12" /><span>Pause</span></header>
+            <header class="z__head">
+              <Icon name="lucide:coffee" size="12" /><span>Pause</span>
+            </header>
             <SlotPanel
-              :slot="pause"
+              :slot="pause ?? undefined"
               :loading="!pause"
               :agents="agents"
               @employee-drop="onEmployeeDrop"
@@ -415,7 +467,9 @@ async function finishNoteEdit() {
             aria-label="Double-cliquer pour modifier la prise de note centrale"
             title="Double-cliquer pour modifier"
             @dblclick="editNote"
-          >{{ snapshot.note || 'Double-cliquez pour ajouter une note…' }}</button>
+          >
+            {{ snapshot.note || "Double-cliquez pour ajouter une note…" }}
+          </button>
         </section>
       </div>
     </div>
@@ -437,13 +491,15 @@ async function finishNoteEdit() {
     minmax(0, 1.15fr)
     minmax(0, 1fr)
     minmax(220px, 260px);
-  grid-template-rows: minmax(160px, max-content) minmax(170px, 1fr) 112px 112px 150px;
+  grid-template-rows:
+    minmax(160px, max-content) minmax(170px, 1fr)
+    112px 112px 150px;
   grid-template-areas:
-    'centrale hopital hors radio'
-    'inter hopital hors radio'
-    'inter lower lower radio'
-    'inter lower lower radio'
-    'inter tools tools radio';
+    "centrale hopital hors radio"
+    "inter hopital hors radio"
+    "inter lower lower radio"
+    "inter lower lower radio"
+    "inter tools tools radio";
   gap: 4px;
   height: 100%;
   min-height: 0;
@@ -455,8 +511,8 @@ async function finishNoteEdit() {
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
-    'astreinte conges'
-    'bottom bottom';
+    "astreinte conges"
+    "bottom bottom";
   gap: 4px;
   min-width: 0;
   min-height: 0;
@@ -466,7 +522,7 @@ async function finishNoteEdit() {
   grid-area: bottom;
   display: grid;
   grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr) minmax(0, 1fr);
-  grid-template-areas: 'ipt fin pause';
+  grid-template-areas: "ipt fin pause";
   gap: 4px;
   min-width: 0;
   min-height: 0;
@@ -542,7 +598,9 @@ async function finishNoteEdit() {
 }
 
 @keyframes dp-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .z {
   display: flex;
@@ -554,18 +612,40 @@ async function finishNoteEdit() {
   overflow: hidden;
 }
 
-.z--centrale { grid-area: centrale; }
-.z--inter    { grid-area: inter; }
-.z--hors     { grid-area: hors; }
-.z--radio    { grid-area: radio; }
-.z--hopital  { grid-area: hopital; }
-.z--astreinte{ grid-area: astreinte; }
-.z--conges   { grid-area: conges; }
-.z--ipt      { grid-area: ipt; }
-.z--fin      { grid-area: fin; }
-.z--pause    { grid-area: pause; }
+.z--centrale {
+  grid-area: centrale;
+}
+.z--inter {
+  grid-area: inter;
+}
+.z--hors {
+  grid-area: hors;
+}
+.z--radio {
+  grid-area: radio;
+}
+.z--hopital {
+  grid-area: hopital;
+}
+.z--astreinte {
+  grid-area: astreinte;
+}
+.z--conges {
+  grid-area: conges;
+}
+.z--ipt {
+  grid-area: ipt;
+}
+.z--fin {
+  grid-area: fin;
+}
+.z--pause {
+  grid-area: pause;
+}
 .z--fleet,
-.z--notes { min-height: 0; }
+.z--notes {
+  min-height: 0;
+}
 
 .z--centrale .z__rail :deep(.iv) {
   width: 100%;
@@ -662,8 +742,13 @@ async function finishNoteEdit() {
   flex-shrink: 0;
 }
 
-.z__plus:hover { background: #55ad7e; }
-.z__plus:disabled { opacity: 0.45; cursor: not-allowed; }
+.z__plus:hover {
+  background: #55ad7e;
+}
+.z__plus:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .z__body {
   flex: 1;
@@ -725,7 +810,10 @@ async function finishNoteEdit() {
   font-size: 9.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
 }
 
 .z__addcard:hover:not(:disabled) {
@@ -765,13 +853,17 @@ async function finishNoteEdit() {
   gap: 5px;
   padding: 3px 5px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(70, 153, 109, 0.40);
+  border: 1px dashed rgba(70, 153, 109, 0.4);
   cursor: grab;
   transition: background 0.12s ease;
 }
 
-.pool:hover { background: rgba(70, 153, 109, 0.14); }
-.pool:active { cursor: grabbing; }
+.pool:hover {
+  background: rgba(70, 153, 109, 0.14);
+}
+.pool:active {
+  cursor: grabbing;
+}
 
 .pool__avatar {
   width: 24px;
@@ -824,18 +916,22 @@ async function finishNoteEdit() {
 }
 
 @media (max-width: 900px) {
-  .dp { overflow: hidden; }
+  .dp {
+    overflow: hidden;
+  }
   .dp__board {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      'centrale centrale'
-      'inter inter'
-      'hopital hopital'
-      'hors hors'
-      'lower lower'
-      'tools tools'
-      'radio radio';
-    grid-template-rows: minmax(120px, max-content) 280px minmax(220px, auto) 220px 230px 180px 400px;
+      "centrale centrale"
+      "inter inter"
+      "hopital hopital"
+      "hors hors"
+      "lower lower"
+      "tools tools"
+      "radio radio";
+    grid-template-rows:
+      minmax(120px, max-content) 280px minmax(220px, auto)
+      220px 230px 180px 400px;
     height: auto;
     min-height: 100%;
     overflow-y: auto;

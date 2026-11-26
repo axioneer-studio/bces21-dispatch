@@ -1,71 +1,82 @@
 <script setup lang="ts">
-import type { Agent } from '~/utils/agent'
-import { agentDisplayName } from '~/utils/agent'
+import type { Agent } from "~/utils/agent";
+import { agentDisplayName } from "~/utils/agent";
 
 const props = withDefaults(
   defineProps<{
-    agent: Agent
-    agents?: Agent[]
-    draggable?: boolean
-    tone?: 'default' | 'assigned' | 'pool'
-    compact?: boolean
+    agent: Agent;
+    agents?: Agent[];
+    draggable?: boolean;
+    tone?: "default" | "assigned" | "pool";
+    compact?: boolean;
   }>(),
   {
     agents: () => [],
     draggable: false,
-    tone: 'default',
-    compact: false
-  }
-)
+    tone: "default",
+    compact: false,
+  },
+);
 
 const emit = defineEmits<{
-  dragstart: []
-}>()
+  dragstart: [];
+}>();
 
 const gradeTextColor = computed(() => {
-  const hex = props.agent.grade_color
-  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return '#ffffff'
+  const hex = props.agent.grade_color;
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return "#ffffff";
 
   const linearize = (index: number) => {
-    const channel = parseInt(hex.slice(index, index + 2), 16) / 255
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-  }
+    const channel = parseInt(hex.slice(index, index + 2), 16) / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  };
   const luminance =
-    linearize(1) * 0.2126 + linearize(3) * 0.7152 + linearize(5) * 0.0722
+    linearize(1) * 0.2126 + linearize(3) * 0.7152 + linearize(5) * 0.0722;
 
-  return luminance > 0.179 ? '#111111' : '#ffffff'
-})
+  return luminance > 0.179 ? "#111111" : "#ffffff";
+});
 
 const competencyRows = computed(() => {
-  const rows: string[][] = []
+  const rows: string[][] = [];
   for (let index = 0; index < props.agent.competencies.length; index += 6) {
-    rows.push(props.agent.competencies.slice(index, index + 6))
+    rows.push(props.agent.competencies.slice(index, index + 6));
   }
-  return rows
-})
+  return rows;
+});
 
 function onDragStart(e: DragEvent) {
   if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('application/json', JSON.stringify({ employeeId: props.agent.id }))
-    e.dataTransfer.setData('text/plain', String(props.agent.id))
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData(
+      "application/json",
+      JSON.stringify({ employeeId: props.agent.id }),
+    );
+    e.dataTransfer.setData("text/plain", String(props.agent.id));
   }
-  emit('dragstart')
+  emit("dragstart");
 }
-
-
 </script>
 
 <template>
   <div
     class="at"
-    :class="[`at--${tone}`, {
-      'at--compact': compact,
-      'at--graded': agent.grade_color
-    }]"
-    :style="agent.grade_color
-      ? { '--at-grade-color': agent.grade_color, '--at-grade-text': gradeTextColor }
-      : undefined"
+    :class="[
+      `at--${tone}`,
+      {
+        'at--compact': compact,
+        'at--graded': agent.grade_color,
+      },
+    ]"
+    :style="
+      agent.grade_color
+        ? {
+            '--at-grade-color': agent.grade_color,
+            '--at-grade-text': gradeTextColor,
+          }
+        : undefined
+    "
     :draggable="draggable"
     :title="`${agentDisplayName(agent, agents)} — ${agent.phone || 'sans numéro'}`"
     @dragstart="onDragStart"
@@ -73,15 +84,20 @@ function onDragStart(e: DragEvent) {
     <span class="at__name">{{ agentDisplayName(agent, agents) }}</span>
     <span class="at__skills">
       <span v-if="!competencyRows.length" class="at__skills-empty">·</span>
-      <span v-for="(row, rowIndex) in competencyRows" :key="rowIndex" class="at__skills-row">
+      <span
+        v-for="(row, rowIndex) in competencyRows"
+        :key="rowIndex"
+        class="at__skills-row"
+      >
         <span
           v-for="(competency, index) in row"
           :key="`${competency}-${index}`"
           class="at__skill"
-        >{{ competency }}</span>
+          >{{ competency }}</span
+        >
       </span>
     </span>
-    <span class="at__num">{{ agent.phone || '—' }}</span>
+    <span class="at__num">{{ agent.phone || "—" }}</span>
   </div>
 </template>
 
@@ -131,7 +147,11 @@ function onDragStart(e: DragEvent) {
 
 .at--graded {
   background: color-mix(in srgb, var(--at-grade-color) 20%, var(--dp-tile-bg));
-  border-color: color-mix(in srgb, var(--at-grade-color) 45%, var(--dp-tile-border));
+  border-color: color-mix(
+    in srgb,
+    var(--at-grade-color) 45%,
+    var(--dp-tile-border)
+  );
 }
 
 .at__name {
@@ -177,7 +197,7 @@ function onDragStart(e: DragEvent) {
 }
 
 .at__num {
-  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
   font-size: 9.5px;
   font-weight: 600;
   line-height: 1.15;
@@ -203,7 +223,9 @@ function onDragStart(e: DragEvent) {
   color: var(--dp-text-dim);
   opacity: 0;
   cursor: pointer;
-  transition: opacity 0.12s ease, color 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease;
 }
 
 .at:hover .at__x {

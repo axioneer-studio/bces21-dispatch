@@ -384,7 +384,7 @@ function ageFromBirthDate(value: string | null) {
 function formatArrivalDate(value: string | null) {
   if (!value) return "Date d’arrivée non renseignée";
   const [year, month, day] = value.slice(0, 10).split("-").map(Number);
-  const arrival = Date.UTC(year, month - 1, day);
+  const arrival = Date.UTC(year!, month! - 1, day!);
   const today = new Date();
   const todayUtc = Date.UTC(
     today.getFullYear(),
@@ -932,15 +932,15 @@ async function confirmDeleteEmployee() {
                     'hr-email-revealed': revealedEmails.includes(employee.id),
                   }"
                   @mouseenter="
-                    revealedEmails.value = (
-                      revealedEmails.value || []
-                    ).includes(employee.id)
-                      ? revealedEmails.value || []
-                      : [...(revealedEmails.value || []), employee.id]
+                    revealedEmails = (revealedEmails || []).includes(
+                      employee.id ?? 0,
+                    )
+                      ? revealedEmails || []
+                      : [...(revealedEmails || []), employee.id ?? 0]
                   "
                   @mouseleave="
-                    revealedEmails.value = (revealedEmails.value || []).filter(
-                      (id) => id !== employee.id,
+                    revealedEmails = (revealedEmails || []).filter(
+                      (id: number) => id !== (employee.id ?? 0),
                     )
                   "
                   @click="copyEmail(employee.email)"

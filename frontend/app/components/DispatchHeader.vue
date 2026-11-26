@@ -1,165 +1,182 @@
 <script setup lang="ts">
-import { resetAssignments, updateState } from '~/composables/useDispatchApi'
-import type { FrequencyKind } from '~/composables/useDispatchStore'
-import FrequencyPicker from '~/components/FrequencyPicker.vue'
-import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { resetAssignments, updateState } from "~/composables/useDispatchApi";
+import type { FrequencyKind } from "~/composables/useDispatchStore";
+import FrequencyPicker from "~/components/FrequencyPicker.vue";
+import ConfirmDialog from "~/components/ConfirmDialog.vue";
 
 const props = defineProps<{
-  canResetAssignments: boolean
-  canDeleteInterventions: boolean
-  canManageFrequencies?: boolean
-}>()
+  canResetAssignments: boolean;
+  canDeleteInterventions: boolean;
+  canManageFrequencies?: boolean;
+}>();
 
-const { state, snapshot, applyResetSnapshot } = useDispatchStore()
-const toast = useAppToast()
+const { state, snapshot, applyResetSnapshot } = useDispatchStore();
+const toast = useAppToast();
 
-const hospitalOpen = ref<boolean>(true)
-const hospitalMenu = ref<boolean>(false)
-const resettingAssignments = ref(false)
-const confirmVisible = ref(false)
-const deleteInterventions = ref(false)
+const hospitalOpen = ref<boolean>(true);
+const hospitalMenu = ref<boolean>(false);
+const resettingAssignments = ref(false);
+const confirmVisible = ref(false);
+const deleteInterventions = ref(false);
 
 const dynamicInterventions = computed(() =>
   snapshot.value.slots.filter(
-    (slot) => slot.kind === 'intervention' || slot.kind === 'consultation'
-  )
-)
-const hasAssignments = computed(() => snapshot.value.slots.some((slot) => slot.assignments.length > 0))
-const canResetDispatch = computed(() =>
-  hasAssignments.value ||
-  state.value.hospital_status !== 'ferme' ||
-  (props.canDeleteInterventions && dynamicInterventions.value.length > 0)
-)
+    (slot) => slot.kind === "intervention" || slot.kind === "consultation",
+  ),
+);
+const hasAssignments = computed(() =>
+  snapshot.value.slots.some((slot) => slot.assignments.length > 0),
+);
+const canResetDispatch = computed(
+  () =>
+    hasAssignments.value ||
+    state.value.hospital_status !== "ferme" ||
+    (props.canDeleteInterventions && dynamicInterventions.value.length > 0),
+);
 
 // --- Fréquences : double-clic pour ouvrir le popup de saisie / tirage aléatoire ---
 
 /** « 147 MHz », ou « Aucune » tant que la fréquence n'est pas enregistrée en base. */
 const frequencyText = (value: string | null) => {
-  const digits = value?.replace(/\s*MHz$/i, '').trim()
-  return digits ? `${digits} MHz` : 'Aucune'
-}
+  const digits = value?.replace(/\s*MHz$/i, "").trim();
+  return digits ? `${digits} MHz` : "Aucune";
+};
 
 const frequencies = computed(() => [
-  { kind: 'radio' as const, label: 'Radio', value: frequencyText(state.value.freq_bces) },
-  { kind: 'shared' as const, label: 'Radio commune', value: frequencyText(state.value.freq_shared) }
-])
+  {
+    kind: "radio" as const,
+    label: "Radio",
+    value: frequencyText(state.value.freq_bces),
+  },
+  {
+    kind: "shared" as const,
+    label: "Radio commune",
+    value: frequencyText(state.value.freq_shared),
+  },
+]);
 
 /** Popup de fréquence : quel type est en cours d'édition. */
-const editingFrequencyKind = ref<FrequencyKind | null>(null)
+const editingFrequencyKind = ref<FrequencyKind | null>(null);
 
 /** Bornes pour le type de fréquence en cours d'édition. */
 const editingBounds = computed(() => {
-  if (!editingFrequencyKind.value) return { min: null, max: null }
-  return snapshot.value.frequency_bounds[editingFrequencyKind.value] ?? { min: null, max: null }
-})
+  if (!editingFrequencyKind.value) return { min: null, max: null };
+  return (
+    snapshot.value.frequency_bounds[editingFrequencyKind.value] ?? {
+      min: null,
+      max: null,
+    }
+  );
+});
 
 /** Fréquence actuelle pour le type en cours d'édition. */
 const editingCurrent = computed(() => {
-  if (!editingFrequencyKind.value) return null
-  return editingFrequencyKind.value === 'radio' ? state.value.freq_bces : state.value.freq_shared
-})
+  if (!editingFrequencyKind.value) return null;
+  return editingFrequencyKind.value === "radio"
+    ? state.value.freq_bces
+    : state.value.freq_shared;
+});
 
 function openFrequencyPicker(kind: FrequencyKind) {
-  editingFrequencyKind.value = kind
+  editingFrequencyKind.value = kind;
 }
 
 function closeFrequencyPicker() {
-  editingFrequencyKind.value = null
+  editingFrequencyKind.value = null;
 }
 
 async function onFrequencyUpdated() {
   // La mise à jour est gérée par le composant FrequencyPicker via l'API Direction.
   // On recharge le snapshot via le WebSocket (broadcast) ou on attend la prochaine réception.
-  closeFrequencyPicker()
+  closeFrequencyPicker();
 }
 
 watch(
   () => state.value.hospital_status,
   (v) => {
-    hospitalOpen.value = v !== 'ferme'
+    hospitalOpen.value = v !== "ferme";
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
-async function setHospital(s: 'ouvert' | 'ferme' | 'nuit') {
+async function setHospital(s: "ouvert" | "ferme" | "nuit") {
   try {
-    await updateState({ hospital_status: s })
-    hospitalMenu.value = false
+    await updateState({ hospital_status: s });
+    hospitalMenu.value = false;
   } catch {
-    toast.error('Mise à jour impossible.')
+    toast.error("Mise à jour impossible.");
   }
 }
 
 async function resetDispatchAssignments() {
-  if (resettingAssignments.value || !canResetDispatch.value) return
+  if (resettingAssignments.value || !canResetDispatch.value) return;
 
-  resettingAssignments.value = true
+  resettingAssignments.value = true;
   try {
-    const updatedSnapshot = await resetAssignments(deleteInterventions.value)
-    applyResetSnapshot(updatedSnapshot)
+    const updatedSnapshot = await resetAssignments(deleteInterventions.value);
+    applyResetSnapshot(updatedSnapshot);
     toast.success(
       deleteInterventions.value
-        ? 'Dispatch réinitialisé : hôpital fermé, affectations retirées, radios éteintes, interventions supprimées et centrale vidée.'
-        : 'Dispatch réinitialisé : hôpital fermé, radios éteintes et employés remis hors service BCES.'
-    )
-    confirmVisible.value = false
-    deleteInterventions.value = false
+        ? "Dispatch réinitialisé : hôpital fermé, affectations retirées, radios éteintes, interventions supprimées et centrale vidée."
+        : "Dispatch réinitialisé : hôpital fermé, radios éteintes et employés remis hors service BCES.",
+    );
+    confirmVisible.value = false;
+    deleteInterventions.value = false;
   } catch {
-    toast.error('Réinitialisation du Dispatch impossible.')
+    toast.error("Réinitialisation du Dispatch impossible.");
   } finally {
-    resettingAssignments.value = false
+    resettingAssignments.value = false;
   }
 }
 
 // LSES / SAFD : statuts synchronisés depuis le Google Sheet (lecture seule)
 const lsesLabel = computed(() => {
   switch (state.value.lses_status) {
-    case 'ouvert':
-      return 'Ouvert'
-    case 'ferme':
-      return 'Fermé'
-    case 'nuit':
-      return 'Nuit'
+    case "ouvert":
+      return "Ouvert";
+    case "ferme":
+      return "Fermé";
+    case "nuit":
+      return "Nuit";
     default:
-      return "C'est bugué"
+      return "C'est bugué";
   }
-})
+});
 
 const lsesClass = computed(() => {
   switch (state.value.lses_status) {
-    case 'ouvert':
-      return 'dh__chip--on'
-    case 'nuit':
-      return 'dh__chip--nuit'
-    case 'ferme':
-      return 'dh__chip--off'
+    case "ouvert":
+      return "dh__chip--on";
+    case "nuit":
+      return "dh__chip--nuit";
+    case "ferme":
+      return "dh__chip--off";
     default:
-      return 'dh__chip--bug'
+      return "dh__chip--bug";
   }
-})
+});
 
 const safdLabel = computed(() => {
   switch (state.value.safd_status) {
-    case 'disponible':
-      return 'Disponibles'
-    case 'indisponible':
-      return 'Indisponibles'
+    case "disponible":
+      return "Disponibles";
+    case "indisponible":
+      return "Indisponibles";
     default:
-      return "C'est bugué"
+      return "C'est bugué";
   }
-})
+});
 
 const safdClass = computed(() => {
   switch (state.value.safd_status) {
-    case 'disponible':
-      return 'dh__chip--on'
-    case 'indisponible':
-      return 'dh__chip--off'
+    case "disponible":
+      return "dh__chip--on";
+    case "indisponible":
+      return "dh__chip--off";
     default:
-      return 'dh__chip--bug'
+      return "dh__chip--bug";
   }
-})
-
+});
 </script>
 
 <template>
@@ -180,7 +197,11 @@ const safdClass = computed(() => {
         @dblclick="openFrequencyPicker(frequency.kind)"
       >
         <Icon
-          :name="editingFrequencyKind === frequency.kind ? 'lucide:loader-circle' : 'lucide:radio'"
+          :name="
+            editingFrequencyKind === frequency.kind
+              ? 'lucide:loader-circle'
+              : 'lucide:radio'
+          "
           size="14"
           :class="{ dh__spin: editingFrequencyKind === frequency.kind }"
         />
@@ -197,17 +218,36 @@ const safdClass = computed(() => {
           @click="hospitalMenu = !hospitalMenu"
         >
           <Icon name="lucide:heart-pulse" size="14" />
-          Hôpital : <strong>{{ state.hospital_status === 'ouvert' ? 'Ouvert' : state.hospital_status === 'ferme' ? 'Fermé' : 'Nuit' }}</strong>
+          Hôpital :
+          <strong>{{
+            state.hospital_status === "ouvert"
+              ? "Ouvert"
+              : state.hospital_status === "ferme"
+                ? "Fermé"
+                : "Nuit"
+          }}</strong>
           <Icon name="lucide:chevron-down" size="12" />
         </button>
         <div v-if="hospitalMenu" class="dh__menu">
-          <button type="button" class="dh__menu-item" @click="setHospital('ouvert')">
+          <button
+            type="button"
+            class="dh__menu-item"
+            @click="setHospital('ouvert')"
+          >
             <Icon name="lucide:check" size="14" /> Ouvert
           </button>
-          <button type="button" class="dh__menu-item" @click="setHospital('ferme')">
+          <button
+            type="button"
+            class="dh__menu-item"
+            @click="setHospital('ferme')"
+          >
             <Icon name="lucide:x" size="14" /> Fermé
           </button>
-          <button type="button" class="dh__menu-item" @click="setHospital('nuit')">
+          <button
+            type="button"
+            class="dh__menu-item"
+            @click="setHospital('nuit')"
+          >
             <Icon name="lucide:moon" size="14" /> Nuit
           </button>
         </div>
@@ -222,10 +262,7 @@ const safdClass = computed(() => {
     </div>
 
     <div class="dh__group">
-      <span
-        class="dh__chip dh__chip--readonly"
-        :class="safdClass"
-      >
+      <span class="dh__chip dh__chip--readonly" :class="safdClass">
         <Icon name="lucide:fire-extinguisher" size="14" />
         SAFD : <strong>{{ safdLabel }}</strong>
       </span>
@@ -238,11 +275,14 @@ const safdClass = computed(() => {
         :disabled="resettingAssignments || !canResetDispatch"
         @click="confirmVisible = true"
       >
-        <Icon :name="resettingAssignments ? 'lucide:tornado' : 'lucide:tornado'" size="14" :class="{ 'dh__spin': resettingAssignments }" />
-        {{ resettingAssignments ? 'Réinitialisation…' : 'Tempête' }}
+        <Icon
+          :name="resettingAssignments ? 'lucide:tornado' : 'lucide:tornado'"
+          size="14"
+          :class="{ dh__spin: resettingAssignments }"
+        />
+        {{ resettingAssignments ? "Réinitialisation…" : "Tempête" }}
       </button>
     </div>
-
   </header>
   <Teleport to="body">
     <ConfirmDialog
@@ -252,7 +292,11 @@ const safdClass = computed(() => {
       confirm-label="Confirmer"
       cancel-label="Annuler"
       danger
-      :checkbox-label="dynamicInterventions.length > 0 ? `Supprimer aussi ${dynamicInterventions.length === 1 ? 'l\'intervention' : `les ${dynamicInterventions.length} interventions`}` : undefined"
+      :checkbox-label="
+        dynamicInterventions.length > 0
+          ? `Supprimer aussi ${dynamicInterventions.length === 1 ? 'l\'intervention' : `les ${dynamicInterventions.length} interventions`}`
+          : undefined
+      "
       :checkbox-checked="deleteInterventions"
       @confirm="resetDispatchAssignments"
       @cancel="confirmVisible = false"
@@ -312,8 +356,8 @@ const safdClass = computed(() => {
   gap: 6px;
   padding: 5px 10px;
   border-radius: 0;
-  background: rgba(70, 153, 109, 0.10);
-  border: 1px solid rgba(70, 153, 109, 0.40);
+  background: rgba(70, 153, 109, 0.1);
+  border: 1px solid rgba(70, 153, 109, 0.4);
   color: var(--dp-text);
   font-size: 11px;
   font-weight: 600;
@@ -358,7 +402,7 @@ const safdClass = computed(() => {
 
 .dh__chip--ferme {
   background: rgba(210, 85, 79, 0.18);
-  border-color: rgba(210, 85, 79, 0.50);
+  border-color: rgba(210, 85, 79, 0.5);
   color: #ec8a86;
 }
 
@@ -368,7 +412,7 @@ const safdClass = computed(() => {
 
 .dh__chip--nuit {
   background: rgba(120, 110, 200, 0.18);
-  border-color: rgba(120, 110, 200, 0.50);
+  border-color: rgba(120, 110, 200, 0.5);
   color: #c8c0f0;
 }
 
@@ -378,7 +422,7 @@ const safdClass = computed(() => {
 
 .dh__chip--bug {
   background: rgba(210, 160, 60, 0.18);
-  border-color: rgba(210, 160, 60, 0.50);
+  border-color: rgba(210, 160, 60, 0.5);
   color: #e8c878;
 }
 
@@ -409,7 +453,7 @@ const safdClass = computed(() => {
 }
 
 .dh__chip--freq {
-  background: rgba(0, 0, 0, 0.30);
+  background: rgba(0, 0, 0, 0.3);
   border-color: rgba(255, 255, 255, 0.08);
   color: var(--dp-text);
   font: inherit;
@@ -512,7 +556,9 @@ const safdClass = computed(() => {
 }
 
 @keyframes dh-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dh-modal {
@@ -673,13 +719,23 @@ const safdClass = computed(() => {
 }
 
 @keyframes dh-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes dh-panel-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .dh-reset-option {

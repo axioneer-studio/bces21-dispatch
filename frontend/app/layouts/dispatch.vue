@@ -1,24 +1,26 @@
 <script setup lang="ts">
-const config = useRuntimeConfig()
+const config = useRuntimeConfig();
 
-let previousHtmlOverflow: string | null = null
-let previousBodyOverflow: string | null = null
+let previousHtmlOverflow: string | null = null;
+let previousBodyOverflow: string | null = null;
 
 onMounted(() => {
-  document.body.dataset.layout = 'dispatch'
+  document.body.dataset.layout = "dispatch";
   // Empêche le double scroll : seul le conteneur de page (.admin-page) doit défiler.
-  previousHtmlOverflow = document.documentElement.style.overflow || null
-  previousBodyOverflow = document.body.style.overflow || null
-  document.documentElement.style.overflow = 'hidden'
-  document.body.style.overflow = 'hidden'
-})
+  previousHtmlOverflow = document.documentElement.style.overflow || null;
+  previousBodyOverflow = document.body.style.overflow || null;
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.overflow = "hidden";
+});
 onBeforeUnmount(() => {
-  delete document.body.dataset.layout
-  if (previousHtmlOverflow !== null) document.documentElement.style.overflow = previousHtmlOverflow
-  else document.documentElement.style.removeProperty('overflow')
-  if (previousBodyOverflow !== null) document.body.style.overflow = previousBodyOverflow
-  else document.body.style.removeProperty('overflow')
-})
+  delete document.body.dataset.layout;
+  if (previousHtmlOverflow !== null)
+    document.documentElement.style.overflow = previousHtmlOverflow;
+  else document.documentElement.style.removeProperty("overflow");
+  if (previousBodyOverflow !== null)
+    document.body.style.overflow = previousBodyOverflow;
+  else document.body.style.removeProperty("overflow");
+});
 </script>
 
 <template>

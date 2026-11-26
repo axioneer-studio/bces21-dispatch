@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { toasts, dismiss, pause, resume } = useToastStore()
+const { toasts, dismiss, pause, resume } = useToastStore();
 </script>
 
 <template>
@@ -30,7 +30,9 @@ const { toasts, dismiss, pause, resume } = useToastStore()
               <Icon name="lucide:x" size="16" />
             </button>
             <div class="bces-toast__body">
-              <p v-if="toast.title" class="bces-toast__title">{{ toast.title }}</p>
+              <p v-if="toast.title" class="bces-toast__title">
+                {{ toast.title }}
+              </p>
               <p class="bces-toast__message">{{ toast.message }}</p>
             </div>
             <div

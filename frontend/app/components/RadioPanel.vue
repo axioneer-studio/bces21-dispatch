@@ -1,270 +1,326 @@
 <script setup lang="ts">
-import type { DispatchRadio } from '~/composables/useDispatchStore'
-import type { RealtimeAgendaEvent } from '~/composables/useRealtimeData'
-import type { Agent } from '~/utils/agent'
-import { agentDisplayName, sortAgentsByGradeAndArrival } from '~/utils/agent'
-import { isDirectionRadio, radioStatus, splitRadios } from '~/utils/radios'
-import type { RadioStatus } from '~/utils/radios'
-import { updateRadio } from '~/composables/useDispatchApi'
+import type { DispatchRadio } from "~/composables/useDispatchStore";
+import type { RealtimeAgendaEvent } from "~/composables/useRealtimeData";
+import type { Agent } from "~/utils/agent";
+import { agentDisplayName, sortAgentsByGradeAndArrival } from "~/utils/agent";
+import { isDirectionRadio, radioStatus, splitRadios } from "~/utils/radios";
+import type { RadioStatus } from "~/utils/radios";
+import { updateRadio } from "~/composables/useDispatchApi";
 
 const props = defineProps<{
-  radios: DispatchRadio[]
-  agents: Agent[]
+  radios: DispatchRadio[];
+  agents: Agent[];
   /** Employés dans la réserve « Hors service BCES » : leurs radios sont verrouillées OFF. */
-  pool: Agent[]
-}>()
+  pool: Agent[];
+}>();
 
-const toast = useAppToast()
-const { agendaEvents, agendaLoaded } = useRealtimeData()
-const selectedAgendaEvent = ref<RealtimeAgendaEvent | null>(null)
-const agendaTimeFormatter = new Intl.DateTimeFormat('fr-FR', {
-  hour: '2-digit',
-  minute: '2-digit'
-})
-const agendaDateTimeFormatter = new Intl.DateTimeFormat('fr-FR', {
-  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  hour: '2-digit', minute: '2-digit'
-})
+const toast = useAppToast();
+const { agendaEvents, agendaLoaded } = useRealtimeData();
+const selectedAgendaEvent = ref<RealtimeAgendaEvent | null>(null);
+const agendaTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const agendaDateTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 function openAgendaEvent(event: RealtimeAgendaEvent) {
-  selectedAgendaEvent.value = event
+  selectedAgendaEvent.value = event;
 }
 
 function closeAgendaEvent() {
-  selectedAgendaEvent.value = null
+  selectedAgendaEvent.value = null;
 }
 
 function agendaEventTime(event: RealtimeAgendaEvent) {
-  const startsAt = new Date(event.starts_at)
-  if (!event.ends_at) return agendaTimeFormatter.format(startsAt)
+  const startsAt = new Date(event.starts_at);
+  if (!event.ends_at) return agendaTimeFormatter.format(startsAt);
 
-  const endsAt = new Date(event.ends_at)
-  const sameDay = startsAt.getFullYear() === endsAt.getFullYear()
-    && startsAt.getMonth() === endsAt.getMonth()
-    && startsAt.getDate() === endsAt.getDate()
+  const endsAt = new Date(event.ends_at);
+  const sameDay =
+    startsAt.getFullYear() === endsAt.getFullYear() &&
+    startsAt.getMonth() === endsAt.getMonth() &&
+    startsAt.getDate() === endsAt.getDate();
   if (sameDay) {
-    return `${agendaTimeFormatter.format(startsAt)} – ${agendaTimeFormatter.format(endsAt)}`
+    return `${agendaTimeFormatter.format(startsAt)} – ${agendaTimeFormatter.format(endsAt)}`;
   }
 
-  const nextDayAfterStart = new Date(startsAt)
-  nextDayAfterStart.setHours(0, 0, 0, 0)
-  nextDayAfterStart.setDate(nextDayAfterStart.getDate() + 1)
-  const endDate = new Date(endsAt)
-  endDate.setHours(0, 0, 0, 0)
+  const nextDayAfterStart = new Date(startsAt);
+  nextDayAfterStart.setHours(0, 0, 0, 0);
+  nextDayAfterStart.setDate(nextDayAfterStart.getDate() + 1);
+  const endDate = new Date(endsAt);
+  endDate.setHours(0, 0, 0, 0);
   if (endDate.getTime() === nextDayAfterStart.getTime()) {
-    return `${agendaTimeFormatter.format(startsAt)} - ${agendaTimeFormatter.format(endsAt)}`
+    return `${agendaTimeFormatter.format(startsAt)} - ${agendaTimeFormatter.format(endsAt)}`;
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   if (startsAt < today) {
-    return endsAt < tomorrow ? `Fin ${agendaTimeFormatter.format(endsAt)}` : 'En cours'
+    return endsAt < tomorrow
+      ? `Fin ${agendaTimeFormatter.format(endsAt)}`
+      : "En cours";
   }
-  return agendaTimeFormatter.format(startsAt)
+  return agendaTimeFormatter.format(startsAt);
 }
 
 const agendaDays = computed(() => {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 7)
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
 
-  const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
-  const groups = new Map<string, { key: string; label: string; events: RealtimeAgendaEvent[] }>()
+  const dayKey = (date: Date) =>
+    `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  const groups = new Map<
+    string,
+    { key: string; label: string; events: RealtimeAgendaEvent[] }
+  >();
   for (let offset = 0; offset < 7; offset += 1) {
-    const date = new Date(start)
-    date.setDate(date.getDate() + offset)
+    const date = new Date(start);
+    date.setDate(date.getDate() + offset);
     groups.set(dayKey(date), {
       key: dayKey(date),
-      label: offset === 0 ? "Aujourd'hui" : offset === 1 ? 'Demain' : new Intl.DateTimeFormat('fr-FR', {
-        weekday: 'short', day: 'numeric', month: 'short'
-      }).format(date),
-      events: []
-    })
+      label:
+        offset === 0
+          ? "Aujourd'hui"
+          : offset === 1
+            ? "Demain"
+            : new Intl.DateTimeFormat("fr-FR", {
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+              }).format(date),
+      events: [],
+    });
   }
 
   for (const event of agendaEvents.value) {
-    const eventStart = new Date(event.starts_at)
-    const eventEnd = event.ends_at ? new Date(event.ends_at) : null
+    const eventStart = new Date(event.starts_at);
+    const eventEnd = event.ends_at ? new Date(event.ends_at) : null;
     const overlapsWindow = eventEnd
       ? eventStart < end && eventEnd > start
-      : eventStart >= start && eventStart < end
-    if (!overlapsWindow) continue
+      : eventStart >= start && eventStart < end;
+    if (!overlapsWindow) continue;
 
     // Un événement qui a commencé avant aujourd'hui mais continue est listé aujourd'hui.
-    const displayDate = eventStart < start ? start : eventStart
-    groups.get(dayKey(displayDate))?.events.push(event)
+    const displayDate = eventStart < start ? start : eventStart;
+    groups.get(dayKey(displayDate))?.events.push(event);
   }
 
   return [...groups.values()]
     .filter((group) => group.events.length > 0)
     .map((group) => ({
       ...group,
-      events: group.events.sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
-    }))
-})
+      events: group.events.sort(
+        (a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at),
+      ),
+    }));
+});
 const agendaEventCount = computed(() =>
-  agendaDays.value.reduce((count, day) => count + day.events.length, 0)
-)
+  agendaDays.value.reduce((count, day) => count + day.events.length, 0),
+);
 
 // --- Menu (porteur ou état) : un seul ouvert, rendu dans <body> pour pouvoir
 // dépasser de la case, positionné sous la ligne de la radio (ou au-dessus
 // s'il manque de place en bas).
 
-type MenuKind = 'holder' | 'status'
-const MENU_MIN_WIDTH = 220
-const MENU_MAX_HEIGHT = 260
-const VIEWPORT_MARGIN = 8
+type MenuKind = "holder" | "status";
+const MENU_MIN_WIDTH = 220;
+const MENU_MAX_HEIGHT = 260;
+const VIEWPORT_MARGIN = 8;
 
-const openMenu = ref<{ radioId: number; kind: MenuKind; style: Record<string, string> } | null>(null)
-const menuEl = ref<HTMLElement | null>(null)
+const openMenu = ref<{
+  radioId: number;
+  kind: MenuKind;
+  style: Record<string, string>;
+} | null>(null);
+const menuEl = ref<HTMLElement | null>(null);
 const menuRadio = computed(() =>
-  openMenu.value ? props.radios.find((radio) => radio.id === openMenu.value!.radioId) ?? null : null
-)
+  openMenu.value
+    ? (props.radios.find((radio) => radio.id === openMenu.value!.radioId) ??
+      null)
+    : null,
+);
 
 const isMenuOpen = (radio: DispatchRadio, kind: MenuKind) =>
-  openMenu.value?.radioId === radio.id && openMenu.value.kind === kind
+  openMenu.value?.radioId === radio.id && openMenu.value.kind === kind;
 
 function menuStyle(row: HTMLElement): Record<string, string> {
-  const rect = row.getBoundingClientRect()
-  const width = Math.min(Math.max(rect.width, MENU_MIN_WIDTH), window.innerWidth - 2 * VIEWPORT_MARGIN)
-  const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.left, window.innerWidth - width - VIEWPORT_MARGIN))
-  const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN
-  const spaceAbove = rect.top - VIEWPORT_MARGIN
-  const above = spaceBelow < MENU_MAX_HEIGHT && spaceAbove > spaceBelow
-  const maxHeight = Math.min(MENU_MAX_HEIGHT, above ? spaceAbove : spaceBelow)
+  const rect = row.getBoundingClientRect();
+  const width = Math.min(
+    Math.max(rect.width, MENU_MIN_WIDTH),
+    window.innerWidth - 2 * VIEWPORT_MARGIN,
+  );
+  const left = Math.max(
+    VIEWPORT_MARGIN,
+    Math.min(rect.left, window.innerWidth - width - VIEWPORT_MARGIN),
+  );
+  const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+  const spaceAbove = rect.top - VIEWPORT_MARGIN;
+  const above = spaceBelow < MENU_MAX_HEIGHT && spaceAbove > spaceBelow;
+  const maxHeight = Math.min(MENU_MAX_HEIGHT, above ? spaceAbove : spaceBelow);
   return {
     left: `${left}px`,
     width: `${width}px`,
     maxHeight: `${maxHeight}px`,
     ...(above
       ? { bottom: `${window.innerHeight - rect.top + 2}px` }
-      : { top: `${rect.bottom + 2}px` })
-  }
+      : { top: `${rect.bottom + 2}px` }),
+  };
 }
 
 function toggleMenu(radio: DispatchRadio, kind: MenuKind, event: MouseEvent) {
-  if (isMenuOpen(radio, kind)) return closeMenu()
-  const row = (event.currentTarget as HTMLElement).closest<HTMLElement>('.rp__row')
-  if (!row) return
-  openMenu.value = { radioId: radio.id, kind, style: menuStyle(row) }
+  if (isMenuOpen(radio, kind)) return closeMenu();
+  const row = (event.currentTarget as HTMLElement).closest<HTMLElement>(
+    ".rp__row",
+  );
+  if (!row) return;
+  openMenu.value = { radioId: radio.id, kind, style: menuStyle(row) };
 }
 
-const closeMenu = () => { openMenu.value = null }
+const closeMenu = () => {
+  openMenu.value = null;
+};
 
 /** Le menu est positionné une fois : on le ferme si la page ou la liste défile. */
 function closeOnScroll(event: Event) {
-  if (openMenu.value && !menuEl.value?.contains(event.target as Node)) closeMenu()
+  if (openMenu.value && !menuEl.value?.contains(event.target as Node))
+    closeMenu();
 }
 
 onMounted(() => {
-  document.addEventListener('click', closeMenu)
-  document.addEventListener('scroll', closeOnScroll, true)
-  window.addEventListener('resize', closeMenu)
-})
+  document.addEventListener("click", closeMenu);
+  document.addEventListener("scroll", closeOnScroll, true);
+  window.addEventListener("resize", closeMenu);
+});
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', closeMenu)
-  document.removeEventListener('scroll', closeOnScroll, true)
-  window.removeEventListener('resize', closeMenu)
-})
+  document.removeEventListener("click", closeMenu);
+  document.removeEventListener("scroll", closeOnScroll, true);
+  window.removeEventListener("resize", closeMenu);
+});
 
 const sections = computed(() => {
-  const { direction, normal } = splitRadios(props.radios, props.agents)
+  const { direction, normal } = splitRadios(props.radios, props.agents);
   return [
-    { key: 'direction', title: 'Radio Direction', icon: 'lucide:radio-tower', radios: direction, empty: 'Aucune radio direction' },
-    { key: 'normal', title: 'Radio', icon: 'lucide:radio', radios: normal, empty: 'Aucune radio' }
-  ] as const
-})
+    {
+      key: "direction",
+      title: "Radio Direction",
+      icon: "lucide:radio-tower",
+      radios: direction,
+      empty: "Aucune radio direction",
+    },
+    {
+      key: "normal",
+      title: "Radio",
+      icon: "lucide:radio",
+      radios: normal,
+      empty: "Aucune radio",
+    },
+  ] as const;
+});
 
 /** Employés actifs sans radio, dans l'ordre de la réserve. */
 const agentsWithoutRadio = computed(() => {
   const equipped = new Set(
-    props.radios.flatMap((radio) => (radio.employee_id === null ? [] : [radio.employee_id]))
-  )
+    props.radios.flatMap((radio) =>
+      radio.employee_id === null ? [] : [radio.employee_id],
+    ),
+  );
   return sortAgentsByGradeAndArrival(
-    props.agents.filter((agent) => agent.is_active && !equipped.has(agent.id))
-  )
-})
+    props.agents.filter((agent) => agent.is_active && !equipped.has(agent.id)),
+  );
+});
 
 const hasDirectionMembers = computed(() =>
-  props.agents.some((agent) => agent.is_active && agent.grade_is_direction)
-)
+  props.agents.some((agent) => agent.is_active && agent.grade_is_direction),
+);
 
-const agentsById = computed(() => new Map(props.agents.map((agent) => [agent.id, agent])))
-const inDirection = (radio: DispatchRadio) => isDirectionRadio(radio, agentsById.value)
+const agentsById = computed(
+  () => new Map(props.agents.map((agent) => [agent.id, agent])),
+);
+const inDirection = (radio: DispatchRadio) =>
+  isDirectionRadio(radio, agentsById.value);
 
 /** Proposés à l'affectation : une radio Direction ne passe qu'à un autre membre de la Direction. */
 const candidatesFor = (radio: DispatchRadio) =>
   inDirection(radio)
     ? agentsWithoutRadio.value.filter((agent) => agent.grade_is_direction)
-    : agentsWithoutRadio.value
+    : agentsWithoutRadio.value;
 
 function noCandidateMessage(radio: DispatchRadio): string {
-  if (!inDirection(radio)) return 'Tous les employés actifs ont une radio.'
+  if (!inDirection(radio)) return "Tous les employés actifs ont une radio.";
   return hasDirectionMembers.value
-    ? 'Tous les membres de la Direction ont une radio.'
-    : 'Aucun membre de la Direction : cochez « Fait partie de la Direction » sur un grade.'
+    ? "Tous les membres de la Direction ont une radio."
+    : "Aucun membre de la Direction : cochez « Fait partie de la Direction » sur un grade.";
 }
 
-const isAssigned = (r: DispatchRadio) => r.employee_id !== null
+const isAssigned = (r: DispatchRadio) => r.employee_id !== null;
 
-const poolIds = computed(() => new Set(props.pool.map((agent) => agent.id)))
+const poolIds = computed(() => new Set(props.pool.map((agent) => agent.id)));
 const employeeInPool = (radio: DispatchRadio) =>
-  radio.employee_id !== null && poolIds.value.has(radio.employee_id)
+  radio.employee_id !== null && poolIds.value.has(radio.employee_id);
 
 const STATUS_OPTIONS: { value: RadioStatus; label: string }[] = [
-  { value: 'on', label: 'ON' },
-  { value: 'standby', label: 'Indisponible' },
-  { value: 'off', label: 'OFF' }
-]
+  { value: "on", label: "ON" },
+  { value: "standby", label: "Indisponible" },
+  { value: "off", label: "OFF" },
+];
 const statusLabel = (r: DispatchRadio) =>
-  STATUS_OPTIONS.find((option) => option.value === radioStatus(r))!.label
+  STATUS_OPTIONS.find((option) => option.value === radioStatus(r))!.label;
 
 /** Message d'erreur renvoyé par l'API (`detail`), sinon le message par défaut. */
 function apiError(error: unknown, fallback: string): string {
-  const detail = (error as { data?: { detail?: unknown } } | null)?.data?.detail
-  return typeof detail === 'string' && detail ? detail : fallback
+  const detail = (error as { data?: { detail?: unknown } } | null)?.data
+    ?.detail;
+  return typeof detail === "string" && detail ? detail : fallback;
 }
 
 async function setStatus(radio: DispatchRadio, status: RadioStatus) {
-  closeMenu()
-  if (status === radioStatus(radio)) return
+  closeMenu();
+  if (status === radioStatus(radio)) return;
   if (employeeInPool(radio)) {
-    toast.warning(
-      'Employé hors service BCES : la radio reste éteinte.'
-    )
-    return
+    toast.warning("Employé hors service BCES : la radio reste éteinte.");
+    return;
   }
-  if (status !== 'off' && !isAssigned(radio)) {
-    toast.warning('Affectez la radio à un employé avant de l’allumer.')
-    return
+  if (status !== "off" && !isAssigned(radio)) {
+    toast.warning("Affectez la radio à un employé avant de l’allumer.");
+    return;
   }
   try {
-    await updateRadio(radio.id, { is_on: status === 'on', is_loading: status === 'standby' })
+    await updateRadio(radio.id, {
+      is_on: status === "on",
+      is_loading: status === "standby",
+    });
   } catch (error) {
-    toast.error(apiError(error, 'Mise à jour impossible.'))
+    toast.error(apiError(error, "Mise à jour impossible."));
   }
 }
 
 const doctorOf = (radio: DispatchRadio) =>
-  props.agents.find((a) => a.id === radio.employee_id) ?? null
+  props.agents.find((a) => a.id === radio.employee_id) ?? null;
 
 const doctorName = (radio: DispatchRadio) => {
-  const d = doctorOf(radio)
-  return d ? agentDisplayName(d, props.agents) : '—'
-}
-
+  const d = doctorOf(radio);
+  return d ? agentDisplayName(d, props.agents) : "—";
+};
 
 async function setDoctor(radio: DispatchRadio, agentId: number | null) {
-  closeMenu()
-  if (agentId === radio.employee_id) return
+  closeMenu();
+  if (agentId === radio.employee_id) return;
   try {
-    await updateRadio(radio.id, { employee_id: agentId })
+    await updateRadio(radio.id, { employee_id: agentId });
   } catch (error) {
-    toast.error(apiError(error, 'Mise à jour impossible.'))
+    toast.error(apiError(error, "Mise à jour impossible."));
   }
 }
 </script>
@@ -277,7 +333,10 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
       class="rp__group"
       :class="{ 'rp__group--grow': section.key === 'normal' }"
     >
-      <header class="rp__head" :class="{ 'rp__head--dir': section.key === 'direction' }">
+      <header
+        class="rp__head"
+        :class="{ 'rp__head--dir': section.key === 'direction' }"
+      >
         <Icon :name="section.icon" size="12" />
         <span>{{ section.title }}</span>
         <span class="rp__count">{{ section.radios.length }}</span>
@@ -289,7 +348,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
           class="rp__row"
           :data-status="radioStatus(r)"
         >
-          <span class="rp__serial">{{ r.serial || '—' }}</span>
+          <span class="rp__serial">{{ r.serial || "—" }}</span>
           <div class="rp__doctor" @click.stop>
             <button
               type="button"
@@ -310,27 +369,45 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
               :aria-expanded="isMenuOpen(r, 'status')"
               @click="toggleMenu(r, 'status', $event)"
             >
-              <Icon v-if="radioStatus(r) === 'on'" name="lucide:check" size="11" />
-              <Icon v-else-if="radioStatus(r) === 'off'" name="lucide:x" size="11" />
+              <Icon
+                v-if="radioStatus(r) === 'on'"
+                name="lucide:check"
+                size="11"
+              />
+              <Icon
+                v-else-if="radioStatus(r) === 'off'"
+                name="lucide:x"
+                size="11"
+              />
               <Icon v-else name="lucide:hourglass" size="11" />
             </button>
           </div>
         </div>
-        <div v-if="!section.radios.length" class="rp__empty">{{ section.empty }}</div>
+        <div v-if="!section.radios.length" class="rp__empty">
+          {{ section.empty }}
+        </div>
       </div>
     </section>
 
     <section class="rp__agenda">
       <header class="rp__head">
         <Icon name="lucide:calendar-days" size="12" />
-        <NuxtLink to="/agenda" class="rp__agenda-link">Agenda · 7 jours</NuxtLink>
+        <NuxtLink to="/agenda" class="rp__agenda-link"
+          >Agenda · 7 jours</NuxtLink
+        >
         <span class="rp__count">{{ agendaEventCount }}</span>
       </header>
       <div class="rp__agenda-events" aria-live="polite">
         <p v-if="!agendaLoaded" class="rp__empty">Connexion à l’agenda…</p>
-        <p v-else-if="!agendaDays.length" class="rp__empty">Aucun événement cette semaine</p>
+        <p v-else-if="!agendaDays.length" class="rp__empty">
+          Aucun événement cette semaine
+        </p>
         <template v-else>
-          <section v-for="day in agendaDays" :key="day.key" class="rp__agenda-day">
+          <section
+            v-for="day in agendaDays"
+            :key="day.key"
+            class="rp__agenda-day"
+          >
             <h3>{{ day.label }}</h3>
             <button
               type="button"
@@ -356,7 +433,12 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
         @click.self="closeAgendaEvent"
         @keydown.esc="closeAgendaEvent"
       >
-        <section class="rp__agenda-detail-panel" role="dialog" aria-modal="true" aria-labelledby="agenda-detail-title">
+        <section
+          class="rp__agenda-detail-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="agenda-detail-title"
+        >
           <header class="rp__agenda-detail-head">
             <div class="rp__agenda-detail-icon">
               <Icon name="lucide:calendar-days" size="18" />
@@ -365,7 +447,12 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
               <h2 id="agenda-detail-title">{{ selectedAgendaEvent.title }}</h2>
               <p>Détails de l’événement</p>
             </div>
-            <button type="button" class="rp__agenda-detail-close" aria-label="Fermer" @click="closeAgendaEvent">
+            <button
+              type="button"
+              class="rp__agenda-detail-close"
+              aria-label="Fermer"
+              @click="closeAgendaEvent"
+            >
               <Icon name="lucide:x" size="16" />
             </button>
           </header>
@@ -373,19 +460,39 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
             <div class="rp__agenda-detail-time">
               <span class="rp__agenda-detail-label">Date et heure</span>
               <strong>
-                {{ agendaDateTimeFormatter.format(new Date(selectedAgendaEvent.starts_at)) }}
+                {{
+                  agendaDateTimeFormatter.format(
+                    new Date(selectedAgendaEvent.starts_at),
+                  )
+                }}
                 <template v-if="selectedAgendaEvent.ends_at">
-                  <span> – </span>{{ agendaDateTimeFormatter.format(new Date(selectedAgendaEvent.ends_at)) }}
+                  <span> – </span
+                  >{{
+                    agendaDateTimeFormatter.format(
+                      new Date(selectedAgendaEvent.ends_at),
+                    )
+                  }}
                 </template>
               </strong>
             </div>
             <div class="rp__agenda-detail-description">
               <span class="rp__agenda-detail-label">Description</span>
-              <p>{{ selectedAgendaEvent.description?.trim() || 'Aucune description.' }}</p>
+              <p>
+                {{
+                  selectedAgendaEvent.description?.trim() ||
+                  "Aucune description."
+                }}
+              </p>
             </div>
           </div>
           <footer class="rp__agenda-detail-footer">
-            <button type="button" class="rp__agenda-detail-action" @click="closeAgendaEvent">Fermer</button>
+            <button
+              type="button"
+              class="rp__agenda-detail-action"
+              @click="closeAgendaEvent"
+            >
+              Fermer
+            </button>
           </footer>
         </section>
       </div>
@@ -404,13 +511,21 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
             <div class="rp__doctor-current">
               <span>{{ agentDisplayName(doctorOf(menuRadio)!, agents) }}</span>
             </div>
-            <button type="button" class="rp__doctor-item" @click="setDoctor(menuRadio, null)">
+            <button
+              type="button"
+              class="rp__doctor-item"
+              @click="setDoctor(menuRadio, null)"
+            >
               <Icon name="lucide:x" size="10" /> Retirer l’affectation
             </button>
           </template>
-          <p class="rp__doctor-label">{{ inDirection(menuRadio) ? 'Direction sans radio' : 'Sans radio' }}</p>
+          <p class="rp__doctor-label">
+            {{ inDirection(menuRadio) ? "Direction sans radio" : "Sans radio" }}
+          </p>
           <button
-            v-for="a in candidatesFor(menuRadio)" :key="a.id" type="button"
+            v-for="a in candidatesFor(menuRadio)"
+            :key="a.id"
+            type="button"
             class="rp__doctor-item"
             @click="setDoctor(menuRadio, a.id)"
           >
@@ -426,13 +541,23 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
             :key="option.value"
             type="button"
             class="rp__doctor-item rp__status-item"
-            :class="{ 'rp__doctor-item--active': radioStatus(menuRadio) === option.value }"
+            :class="{
+              'rp__doctor-item--active':
+                radioStatus(menuRadio) === option.value,
+            }"
             :data-status="option.value"
-            :disabled="option.value !== 'off' && (employeeInPool(menuRadio) || !isAssigned(menuRadio))"
+            :disabled="
+              option.value !== 'off' &&
+              (employeeInPool(menuRadio) || !isAssigned(menuRadio))
+            "
             @click="setStatus(menuRadio, option.value)"
           >
             <Icon v-if="option.value === 'on'" name="lucide:check" size="10" />
-            <Icon v-else-if="option.value === 'off'" name="lucide:x" size="10" />
+            <Icon
+              v-else-if="option.value === 'off'"
+              name="lucide:x"
+              size="10"
+            />
             <Icon v-else name="lucide:hourglass" size="10" />
             <strong>{{ option.label }}</strong>
           </button>
@@ -741,15 +866,15 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   border-color: var(--dp-line-strong);
 }
 
-.rp__row[data-status='on'] {
+.rp__row[data-status="on"] {
   border-left: 2px solid var(--dp-accent);
 }
 
-.rp__row[data-status='standby'] {
+.rp__row[data-status="standby"] {
   border-left: 2px solid var(--dp-warn);
 }
 
-.rp__row[data-status='off'] {
+.rp__row[data-status="off"] {
   border-left: 2px solid var(--dp-line-strong);
 }
 
@@ -771,13 +896,13 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   border-color: var(--dp-line-strong);
 }
 
-.rp__power[data-status='on'] {
+.rp__power[data-status="on"] {
   background: var(--dp-accent-soft);
   border-color: var(--dp-accent-line);
   color: var(--dp-accent);
 }
 
-.rp__power[data-status='standby'] {
+.rp__power[data-status="standby"] {
   background: var(--dp-warn-soft);
   border-color: var(--dp-warn-line);
   color: var(--dp-warn);
@@ -786,7 +911,7 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
 .rp__serial {
   padding: 2px 3px;
   color: var(--dp-text-2);
-  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
   font-size: 9.5px;
   font-weight: 600;
   overflow: hidden;
@@ -803,8 +928,12 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   justify-content: flex-start;
 }
 
-.rp__status-item[data-status='on'] { color: var(--dp-accent); }
-.rp__status-item[data-status='standby'] { color: var(--dp-warn); }
+.rp__status-item[data-status="on"] {
+  color: var(--dp-accent);
+}
+.rp__status-item[data-status="standby"] {
+  color: var(--dp-warn);
+}
 
 .rp__status-item:disabled {
   opacity: 0.4;
@@ -847,7 +976,6 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 /* Rendu dans <body> : position et taille calculées depuis la ligne (menuStyle). */
 .rp__doctor-menu {
@@ -927,9 +1055,6 @@ async function setDoctor(radio: DispatchRadio, agentId: number | null) {
   font-style: italic;
   white-space: normal;
 }
-
-
-
 
 .rp__empty {
   padding: 12px;

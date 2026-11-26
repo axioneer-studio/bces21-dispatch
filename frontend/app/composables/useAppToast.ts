@@ -1,23 +1,23 @@
-import type { ToastInput } from '~/types/toast'
+import type { ToastInput } from "~/types/toast";
 
 export function useAppToast() {
-  const store = useToastStore()
+  const store = useToastStore();
 
   function push(input: ToastInput) {
-    return store.push(input)
+    return store.push(input);
   }
 
   return {
     push,
     info: (message: string, opts: Partial<ToastInput> = {}) =>
-      push({ ...opts, type: 'info', message }),
+      push({ ...opts, type: "info", message }),
     success: (message: string, opts: Partial<ToastInput> = {}) =>
-      push({ ...opts, type: 'success', message }),
+      push({ ...opts, type: "success", message }),
     error: (message: string, opts: Partial<ToastInput> = {}) =>
-      push({ ...opts, type: 'error', message }),
+      push({ ...opts, type: "error", message }),
     warning: (message: string, opts: Partial<ToastInput> = {}) =>
-      push({ ...opts, type: 'warning', message }),
+      push({ ...opts, type: "warning", message }),
     dismiss: store.dismiss,
-    clear: store.clear
-  }
+    clear: store.clear,
+  };
 }

@@ -1,35 +1,35 @@
 <script setup lang="ts">
 const props = defineProps<{
-  modelValue: string | null
-}>()
+  modelValue: string | null;
+}>();
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string | null]
-}>()
+  "update:modelValue": [value: string | null];
+}>();
 
-const draft = ref<string>(props.modelValue ?? '')
+const draft = ref<string>(props.modelValue ?? "");
 
 watch(
   () => props.modelValue,
   (v) => {
-    draft.value = v ?? ''
-  }
-)
+    draft.value = v ?? "";
+  },
+);
 
-let commitTimer: ReturnType<typeof setTimeout> | null = null
+let commitTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onInput() {
-  if (commitTimer) clearTimeout(commitTimer)
+  if (commitTimer) clearTimeout(commitTimer);
   commitTimer = setTimeout(() => {
-    const v = draft.value.trim()
-    emit('update:modelValue', v === '' ? null : v)
-  }, 400)
+    const v = draft.value.trim();
+    emit("update:modelValue", v === "" ? null : v);
+  }, 400);
 }
 
 function onBlur() {
-  if (commitTimer) clearTimeout(commitTimer)
-  const v = draft.value.trim()
-  emit('update:modelValue', v === '' ? null : v)
+  if (commitTimer) clearTimeout(commitTimer);
+  const v = draft.value.trim();
+  emit("update:modelValue", v === "" ? null : v);
 }
 </script>
 
@@ -73,7 +73,7 @@ function onBlur() {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.30);
+  background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--bces-border);
   color: var(--bces-text);
   font-size: 11px;

@@ -1,21 +1,21 @@
 <script setup lang="ts">
-useHead({ title: 'Connexion • BCES' })
+useHead({ title: "Connexion • BCES" });
 
-const config = useRuntimeConfig()
-const toast = useAppToast()
+const config = useRuntimeConfig();
+const toast = useAppToast();
 
 onMounted(async () => {
-  const query = new URLSearchParams(window.location.search)
-  const code = query.get('error')
+  const query = new URLSearchParams(window.location.search);
+  const code = query.get("error");
   if (code) {
-    const message = query.get('error_description') || useErrorMessage(code)
-    toast.error(message ?? 'La connexion a échoué.')
-    window.history.replaceState({}, '', window.location.pathname)
+    const message = query.get("error_description") || useErrorMessage(code);
+    toast.error(message ?? "La connexion a échoué.");
+    window.history.replaceState({}, "", window.location.pathname);
   }
-  if (query.get('status') === 'pending') {
-    await navigateTo('/attente', { replace: true })
+  if (query.get("status") === "pending") {
+    await navigateTo("/attente", { replace: true });
   }
-})
+});
 </script>
 
 <template>
@@ -23,7 +23,10 @@ onMounted(async () => {
     <div class="bces-card__brand">
       <img
         src="https://s3.axioneer.com/bces21-dispatch/images/logo-72.webp"
-        srcset="https://s3.axioneer.com/bces21-dispatch/images/logo-72.webp 1x, https://s3.axioneer.com/bces21-dispatch/images/logo.webp 2x"
+        srcset="
+          https://s3.axioneer.com/bces21-dispatch/images/logo-72.webp 1x,
+          https://s3.axioneer.com/bces21-dispatch/images/logo.webp    2x
+        "
         alt="BCES"
         width="72"
         height="72"

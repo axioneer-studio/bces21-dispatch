@@ -1,5 +1,5 @@
-import { ref, type Ref } from 'vue'
-import { useGlobalLoading } from './useGlobalLoading'
+import { ref, type Ref } from "vue";
+import { useGlobalLoading } from "./useGlobalLoading";
 
 /**
  * Récupère des données avec un indicateur de chargement global affiché
@@ -15,20 +15,20 @@ import { useGlobalLoading } from './useGlobalLoading'
  */
 export async function useAsyncDataWithLoading<T>(
   key: string,
-  handler: () => Promise<T>
+  handler: () => Promise<T>,
 ): Promise<{ data: Ref<T | null> }> {
-  const { start, stop } = useGlobalLoading()
-  const data = ref<T | null>(null)
+  const { start, stop } = useGlobalLoading();
+  const data = ref<T | null>(null);
 
-  start()
+  start();
   try {
-    const result = await handler()
-    data.value = result
+    const result = await handler();
+    data.value = result;
     // Délai minimum d'affichage pour que le loader soit visible,
     // même si les données arrivent immédiatement (cache).
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    return { data }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { data: data as Ref<T | null> };
   } finally {
-    stop()
+    stop();
   }
 }

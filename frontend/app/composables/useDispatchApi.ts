@@ -5,141 +5,157 @@ import type {
   DispatchState,
   FleetEntry,
   FrequencyKind,
-} from './useDispatchStore'
+} from "./useDispatchStore";
 
 function base(): string {
   // Retourne une chaîne vide pour que les appels utilisent des URLs relatives
   // passées par le proxy Nitro (/api/** → backend), qui transmet les cookies.
-  return ''
+  return "";
 }
 
 async function req<T>(
   path: string,
   options: {
-    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-    body?: Record<string, unknown>
-    credentials?: 'include'
-  } = {}
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    body?: Record<string, unknown>;
+    credentials?: "include";
+  } = {},
 ): Promise<T> {
-  const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
+  const headers = import.meta.server
+    ? useRequestHeaders(["cookie"])
+    : undefined;
   // Nuxt's request fetch resolves relative URLs against the incoming request
   // during SSR and forwards the session cookie to the API proxy.
-  const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+  const requestFetch = import.meta.server ? useRequestFetch() : $fetch;
   return await requestFetch<T>(`${base()}${path}`, {
-    method: options.method ?? 'GET',
+    method: (options.method ?? "GET") as any,
     body: options.body,
-    credentials: 'include',
-    headers
-  })
+    credentials: "include",
+    headers,
+  });
 }
 
 export async function fetchSnapshot() {
-  return await req<DispatchSnapshot>('/api/dispatch/snapshot')
+  return await req<DispatchSnapshot>("/api/dispatch/snapshot");
 }
 
 export async function resetAssignments(deleteInterventions: boolean) {
-  return await req<DispatchSnapshot>(
-    '/api/dispatch/assignments/reset',
-    { method: 'POST', body: { delete_interventions: deleteInterventions } }
-  )
+  return await req<DispatchSnapshot>("/api/dispatch/assignments/reset", {
+    method: "POST",
+    body: { delete_interventions: deleteInterventions },
+  });
 }
 
 export async function saveDispatchNote(content: string) {
-  return await req<DispatchSnapshot>(
-    '/api/dispatch/note',
-    { method: 'PUT', body: { content } }
-  )
+  return await req<DispatchSnapshot>("/api/dispatch/note", {
+    method: "PUT",
+    body: { content },
+  });
 }
 
-export async function createSlot(kind: 'intervention' | 'consultation') {
-  return await req<DispatchSlot>('/api/dispatch/slots', {
-    method: 'POST',
-    body: { kind }
-  })
+export async function createSlot(kind: "intervention" | "consultation") {
+  return await req<DispatchSlot>("/api/dispatch/slots", {
+    method: "POST",
+    body: { kind },
+  });
 }
 
 export async function updateSlot(
   id: number,
   patch: Partial<{
-    title: string | null
-    status: string | null
-    zip_code: string | null
-    location: string | null
-    type_label: string | null
-  }>
+    title: string | null;
+    status: string | null;
+    zip_code: string | null;
+    location: string | null;
+    type_label: string | null;
+  }>,
 ) {
   return await req<DispatchSlot>(`/api/dispatch/slots/${id}`, {
-    method: 'PATCH',
-    body: patch
-  })
+    method: "PATCH",
+    body: patch,
+  });
 }
 
 export async function deleteSlot(id: number) {
-  return await req<{ message: string }>(`/api/dispatch/slots/${id}`, { method: 'DELETE' })
+  return await req<{ message: string }>(`/api/dispatch/slots/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function assignUser(slotId: number, employeeId: number) {
   return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign`, {
-    method: 'POST',
-    body: { employee_id: employeeId }
-  })
+    method: "POST",
+    body: { employee_id: employeeId },
+  });
 }
 
 export async function unassignUser(slotId: number, employeeId: number) {
-  return await req<DispatchSlot>(`/api/dispatch/slots/${slotId}/assign/${employeeId}`, {
-    method: 'DELETE'
-  })
+  return await req<DispatchSlot>(
+    `/api/dispatch/slots/${slotId}/assign/${employeeId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export async function createFleetEntry() {
-  return await req<FleetEntry>('/api/dispatch/fleet', { method: 'POST' })
+  return await req<FleetEntry>("/api/dispatch/fleet", { method: "POST" });
 }
 
 export async function updateFleetEntry(
   id: number,
-  patch: Partial<Pick<FleetEntry, 'vehicle_id' | 'location' | 'note'>>
+  patch: Partial<Pick<FleetEntry, "vehicle_id" | "location" | "note">>,
 ) {
   return await req<FleetEntry>(`/api/dispatch/fleet/${id}`, {
-    method: 'PATCH',
-    body: patch
-  })
+    method: "PATCH",
+    body: patch,
+  });
 }
 
 export async function deleteFleetEntry(id: number) {
-  return await req<{ message: string }>(`/api/dispatch/fleet/${id}`, { method: 'DELETE' })
+  return await req<{ message: string }>(`/api/dispatch/fleet/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function updateRadio(
   id: number,
-  patch: Partial<Pick<DispatchRadio, 'employee_id' | 'is_on' | 'is_loading'>>
+  patch: Partial<Pick<DispatchRadio, "employee_id" | "is_on" | "is_loading">>,
 ) {
   return await req<DispatchRadio>(`/api/dispatch/radios/${id}`, {
-    method: 'PATCH',
-    body: patch
-  })
+    method: "PATCH",
+    body: patch,
+  });
 }
 
 /** Tire une nouvelle fréquence au hasard entre les bornes réglées dans Paramètres. */
 export async function randomizeFrequency(kind: FrequencyKind) {
-  return await req<{ kind: FrequencyKind; current: string | null; min: number | null; max: number | null }>(
-    `/api/dispatch/frequencies/${kind}/random`,
-    { method: 'POST' }
-  )
+  return await req<{
+    kind: FrequencyKind;
+    current: string | null;
+    min: number | null;
+    max: number | null;
+  }>(`/api/dispatch/frequencies/${kind}/random`, { method: "POST" });
 }
 
 export async function updateState(
   patch: Partial<
-    Pick<DispatchState, 'hospital_status' | 'lses_status' | 'safd_status' | 'radio_codes'>
-  >
+    Pick<
+      DispatchState,
+      "hospital_status" | "lses_status" | "safd_status" | "radio_codes"
+    >
+  >,
 ) {
-  return await req<DispatchState>('/api/dispatch/state', {
-    method: 'PATCH',
-    body: patch
-  })
+  return await req<DispatchState>("/api/dispatch/state", {
+    method: "PATCH",
+    body: patch,
+  });
 }
 
 /** Demande à l'API l'URL d'autorisation Discord (le navigateur reste sur :3000). */
 export async function fetchDiscordAuthorizeUrl(): Promise<string> {
-  const { authorize_url } = await req<{ authorize_url: string }>('/api/auth/discord/url')
-  return authorize_url
+  const { authorize_url } = await req<{ authorize_url: string }>(
+    "/api/auth/discord/url",
+  );
+  return authorize_url;
 }

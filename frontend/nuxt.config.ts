@@ -1,6 +1,8 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import tailwindcss from "@tailwindcss/vite";
 
+declare const process: any;
+
 const publicApiBase =
   process.env.NUXT_PUBLIC_API_BASE || "http://localhost:8000";
 const apiProxyBase = (
@@ -34,7 +36,42 @@ export default defineNuxtConfig({
         { charset: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { name: "color-scheme", content: "dark" },
-        { name: "theme-color", content: "#21252b" },
+        { name: "theme-color", content: "#46996D" },
+        {
+          name: "description",
+          content:
+            "Plateforme de dispatch BCES — gestion des interventions et des équipes",
+        },
+        // Open Graph
+        { property: "og:title", content: "BCES Dispatch" },
+        {
+          property: "og:description",
+          content:
+            "Plateforme de dispatch BCES — gestion des interventions et des équipes",
+        },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: "https://bces21-dispatch.axioneer.com" },
+        {
+          property: "og:image",
+          content:
+            "https://s3.axioneer.com/bces21-dispatch/images/background.webp",
+        },
+        { property: "og:site_name", content: "BCES Dispatch" },
+        // Twitter
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "BCES Dispatch" },
+        {
+          name: "twitter:description",
+          content:
+            "Plateforme de dispatch BCES — gestion des interventions et des équipes",
+        },
+        {
+          name: "twitter:image",
+          content:
+            "https://s3.axioneer.com/bces21-dispatch/images/background.webp",
+        },
+        // Facebook
+        { property: "fb:app_id", content: "" },
       ],
       link: [
         {
@@ -48,11 +85,6 @@ export default defineNuxtConfig({
 
   ui: {
     colorMode: false,
-  },
-  loading: {
-    color: '#38bdf8',
-    height: '4px',
-    duration: 5000,
   },
   devServer: {
     host: "localhost",

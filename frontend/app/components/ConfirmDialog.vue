@@ -1,50 +1,60 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref } from "vue";
 
 interface ConfirmDialogProps {
-  visible?: boolean
-  title?: string
-  message?: string
-  confirmLabel?: string
-  cancelLabel?: string
-  danger?: boolean
-  checkboxLabel?: string
-  checkboxChecked?: boolean
+  visible?: boolean;
+  title?: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  checkboxLabel?: string;
+  checkboxChecked?: boolean;
 }
 
 const props = withDefaults(defineProps<ConfirmDialogProps>(), {
   visible: false,
-  title: 'Confirmation',
-  message: '',
-  confirmLabel: 'Confirmer',
-  cancelLabel: 'Annuler',
+  title: "Confirmation",
+  message: "",
+  confirmLabel: "Confirmer",
+  cancelLabel: "Annuler",
   danger: false,
-  checkboxLabel: '',
-  checkboxChecked: false
-})
+  checkboxLabel: "",
+  checkboxChecked: false,
+});
 
 const emit = defineEmits<{
-  (e: 'confirm'): void
-  (e: 'cancel'): void
-  (e: 'update:visible', value: boolean): void
-  (e: 'update:checkboxChecked', value: boolean): void
-}>()
+  (e: "confirm"): void;
+  (e: "cancel"): void;
+  (e: "update:visible", value: boolean): void;
+  (e: "update:checkboxChecked", value: boolean): void;
+}>();
 
 function onConfirm() {
-  emit('update:visible', false)
-  emit('confirm')
+  emit("update:visible", false);
+  emit("confirm");
 }
 
 function onCancel() {
-  emit('update:visible', false)
-  emit('cancel')
+  emit("update:visible", false);
+  emit("cancel");
 }
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="props.visible" class="confirm-overlay" @click.self="onCancel" @keydown.esc="onCancel">
-      <section class="confirm-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div
+      v-if="props.visible"
+      class="confirm-overlay"
+      @click.self="onCancel"
+      @keydown.esc="onCancel"
+    >
+      <section
+        class="confirm-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+      >
         <header class="confirm-header">
           <div class="confirm-header__start">
             <div class="confirm-header__icon">
@@ -55,7 +65,12 @@ function onCancel() {
               <p class="confirm-header__subtitle">{{ props.message }}</p>
             </div>
           </div>
-          <button type="button" class="confirm-close" aria-label="Fermer" @click="onCancel">
+          <button
+            type="button"
+            class="confirm-close"
+            aria-label="Fermer"
+            @click="onCancel"
+          >
             <Icon name="lucide:x" size="16" />
           </button>
         </header>
@@ -65,11 +80,19 @@ function onCancel() {
             <input
               type="checkbox"
               :checked="props.checkboxChecked"
-              @change="$event => emit('update:checkboxChecked', ($event.target as HTMLInputElement).checked)"
+              @change="
+                ($event) =>
+                  emit(
+                    'update:checkboxChecked',
+                    ($event.target as HTMLInputElement).checked,
+                  )
+              "
               class="confirm-option__input"
-            >
+            />
             <span class="confirm-option__box">
-              <span v-if="props.checkboxChecked" class="confirm-option__check">✓</span>
+              <span v-if="props.checkboxChecked" class="confirm-option__check"
+                >✓</span
+              >
             </span>
             <span class="confirm-option__text">
               <strong>{{ props.checkboxLabel }}</strong>
@@ -80,7 +103,11 @@ function onCancel() {
         <slot name="content" />
 
         <footer class="confirm-footer">
-          <button type="button" class="confirm-button confirm-button--cancel" @click="onCancel">
+          <button
+            type="button"
+            class="confirm-button confirm-button--cancel"
+            @click="onCancel"
+          >
             {{ props.cancelLabel }}
           </button>
           <button
@@ -335,7 +362,9 @@ function onCancel() {
 
 .confirm-option__checkbox input:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--dp-accent) 50%, transparent), 0 6px 16px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--dp-accent) 50%, transparent),
+    0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
 .confirm-option__label strong {
@@ -355,13 +384,23 @@ function onCancel() {
 }
 
 @keyframes confirm-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes confirm-panel-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 640px) {

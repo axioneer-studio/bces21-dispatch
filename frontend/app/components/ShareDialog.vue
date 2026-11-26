@@ -1,42 +1,52 @@
 <script setup lang="ts">
 interface ShareDialogProps {
-  visible?: boolean
-  title?: string
-  error?: string
-  confirmLabel?: string
-  cancelLabel?: string
-  danger?: boolean
+  visible?: boolean;
+  title?: string;
+  error?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
 }
 
 const props = withDefaults(defineProps<ShareDialogProps>(), {
   visible: false,
-  title: 'Partager',
-  error: '',
-  confirmLabel: 'Enregistrer',
-  cancelLabel: 'Annuler',
-  danger: false
-})
+  title: "Partager",
+  error: "",
+  confirmLabel: "Enregistrer",
+  cancelLabel: "Annuler",
+  danger: false,
+});
 
 const emit = defineEmits<{
-  (e: 'confirm'): void
-  (e: 'cancel'): void
-  (e: 'update:visible', value: boolean): void
-}>()
+  (e: "confirm"): void;
+  (e: "cancel"): void;
+  (e: "update:visible", value: boolean): void;
+}>();
 
 function onConfirm() {
-  emit('confirm')
+  emit("confirm");
 }
 
 function onCancel() {
-  emit('update:visible', false)
-  emit('cancel')
+  emit("update:visible", false);
+  emit("cancel");
 }
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="props.visible" class="share-overlay" @click.self="onCancel" @keydown.esc="onCancel">
-      <section class="share-panel" role="dialog" aria-modal="true" aria-labelledby="share-title">
+    <div
+      v-if="props.visible"
+      class="share-overlay"
+      @click.self="onCancel"
+      @keydown.esc="onCancel"
+    >
+      <section
+        class="share-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-title"
+      >
         <header class="share-header">
           <div class="share-header__start">
             <div class="share-header__icon">
@@ -46,7 +56,12 @@ function onCancel() {
               <h2 id="share-title">{{ props.title }}</h2>
             </div>
           </div>
-          <button type="button" class="share-close" aria-label="Fermer" @click="onCancel">
+          <button
+            type="button"
+            class="share-close"
+            aria-label="Fermer"
+            @click="onCancel"
+          >
             <Icon name="lucide:x" size="16" />
           </button>
         </header>
@@ -62,7 +77,11 @@ function onCancel() {
               <span>{{ props.error }}</span>
             </div>
             <div class="share-footer__actions">
-              <button type="button" class="share-button share-button--cancel" @click="onCancel">
+              <button
+                type="button"
+                class="share-button share-button--cancel"
+                @click="onCancel"
+              >
                 {{ props.cancelLabel }}
               </button>
               <button
@@ -273,13 +292,23 @@ function onCancel() {
 }
 
 @keyframes share-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes share-panel-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 640px) {

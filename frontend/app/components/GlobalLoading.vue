@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useGlobalLoading } from '~/composables/useGlobalLoading'
+import { useGlobalLoading } from "~/composables/useGlobalLoading";
 
-const { isLoading } = useGlobalLoading()
+const { isLoading } = useGlobalLoading();
 </script>
 
 <template>

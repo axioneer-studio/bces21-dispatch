@@ -1,109 +1,126 @@
 <script setup lang="ts">
-import type { FleetEntry, ParkingSpot, Vehicle } from '~/composables/useDispatchStore'
-import { deleteFleetEntry, updateFleetEntry } from '~/composables/useDispatchApi'
+import type {
+  FleetEntry,
+  ParkingSpot,
+  Vehicle,
+} from "~/composables/useDispatchStore";
+import {
+  deleteFleetEntry,
+  updateFleetEntry,
+} from "~/composables/useDispatchApi";
 
 const props = defineProps<{
-  entries: FleetEntry[]
-  vehicles: Vehicle[]
-  parkingSpots: ParkingSpot[]
-}>()
+  entries: FleetEntry[];
+  vehicles: Vehicle[];
+  parkingSpots: ParkingSpot[];
+}>();
 
-const toast = useAppToast()
-const spotsListId = useId()
+const toast = useAppToast();
+const spotsListId = useId();
 
-type TextField = 'location' | 'note'
+type TextField = "location" | "note";
 
 /** Message d'erreur renvoyé par l'API (`detail`), sinon le message par défaut. */
 function apiError(error: unknown, fallback: string): string {
-  const detail = (error as { data?: { detail?: unknown } } | null)?.data?.detail
-  return typeof detail === 'string' && detail ? detail : fallback
+  const detail = (error as { data?: { detail?: unknown } } | null)?.data
+    ?.detail;
+  return typeof detail === "string" && detail ? detail : fallback;
 }
 
 // --- Véhicule : uniquement dans la liste, un véhicule par ligne ---
 
 const usedVehicleIds = computed(
-  () => new Set(props.entries.flatMap((entry) => (entry.vehicle_id === null ? [] : [entry.vehicle_id])))
-)
+  () =>
+    new Set(
+      props.entries.flatMap((entry) =>
+        entry.vehicle_id === null ? [] : [entry.vehicle_id],
+      ),
+    ),
+);
 
 const vehicleName = (entry: FleetEntry) =>
-  props.vehicles.find((vehicle) => vehicle.id === entry.vehicle_id)?.name ?? '—'
+  props.vehicles.find((vehicle) => vehicle.id === entry.vehicle_id)?.name ??
+  "—";
 
 /** Véhicules proposés : ceux qui ne sont sur aucune autre ligne, plus celui de la ligne. */
 function vehicleOptions(entry: FleetEntry): Vehicle[] {
   return props.vehicles.filter(
-    (vehicle) => vehicle.id === entry.vehicle_id || !usedVehicleIds.value.has(vehicle.id)
-  )
+    (vehicle) =>
+      vehicle.id === entry.vehicle_id || !usedVehicleIds.value.has(vehicle.id),
+  );
 }
 
 async function setVehicle(entry: FleetEntry, event: Event) {
-  const select = event.target as HTMLSelectElement
-  const vehicleId = select.value ? Number(select.value) : null
-  if (vehicleId === entry.vehicle_id) return
+  const select = event.target as HTMLSelectElement;
+  const vehicleId = select.value ? Number(select.value) : null;
+  if (vehicleId === entry.vehicle_id) return;
   try {
-    await updateFleetEntry(entry.id, { vehicle_id: vehicleId })
+    await updateFleetEntry(entry.id, { vehicle_id: vehicleId });
   } catch (error) {
-    select.value = entry.vehicle_id === null ? '' : String(entry.vehicle_id)
-    toast.error(apiError(error, 'Mise à jour du véhicule impossible.'))
+    select.value = entry.vehicle_id === null ? "" : String(entry.vehicle_id);
+    toast.error(apiError(error, "Mise à jour du véhicule impossible."));
   }
 }
 
 // --- Lieu et informations : texte enregistré à la sortie du champ ---
 
 /** Saisie en cours, par champ (`<id>:<champ>`), pour ne pas être écrasée par le direct. */
-const drafts = reactive<Record<string, string>>({})
+const drafts = reactive<Record<string, string>>({});
 /** Valeur envoyée au serveur, affichée en attendant sa confirmation. */
-const pending = reactive<Record<string, string>>({})
+const pending = reactive<Record<string, string>>({});
 
-const fieldKey = (entry: FleetEntry, field: TextField) => `${entry.id}:${field}`
+const fieldKey = (entry: FleetEntry, field: TextField) =>
+  `${entry.id}:${field}`;
 
 function fieldValue(entry: FleetEntry, field: TextField): string {
-  const key = fieldKey(entry, field)
-  return drafts[key] ?? pending[key] ?? entry[field]
+  const key = fieldKey(entry, field);
+  return drafts[key] ?? pending[key] ?? entry[field];
 }
 
 function startEdit(entry: FleetEntry, field: TextField) {
-  drafts[fieldKey(entry, field)] = fieldValue(entry, field)
+  drafts[fieldKey(entry, field)] = fieldValue(entry, field);
 }
 
 function onInput(entry: FleetEntry, field: TextField, event: Event) {
-  drafts[fieldKey(entry, field)] = (event.target as HTMLInputElement).value
+  drafts[fieldKey(entry, field)] = (event.target as HTMLInputElement).value;
 }
 
 function cancelEdit(entry: FleetEntry, field: TextField, event: KeyboardEvent) {
-  delete drafts[fieldKey(entry, field)]
-  ;(event.target as HTMLInputElement).blur()
+  delete drafts[fieldKey(entry, field)];
+  (event.target as HTMLInputElement).blur();
 }
 
 async function commit(entry: FleetEntry, field: TextField) {
-  const key = fieldKey(entry, field)
-  const draft = drafts[key]
-  if (draft === undefined) return
-  delete drafts[key]
-  const value = draft.trim()
-  if (value === entry[field]) return
-  pending[key] = value
+  const key = fieldKey(entry, field);
+  const draft = drafts[key];
+  if (draft === undefined) return;
+  delete drafts[key];
+  const value = draft.trim();
+  if (value === entry[field]) return;
+  pending[key] = value;
   try {
-    await updateFleetEntry(entry.id, { [field]: value })
+    await updateFleetEntry(entry.id, { [field]: value });
   } catch (error) {
-    toast.error(apiError(error, 'Mise à jour de la ligne impossible.'))
+    toast.error(apiError(error, "Mise à jour de la ligne impossible."));
   } finally {
-    delete pending[key]
+    delete pending[key];
   }
 }
 
 function blurField(event: KeyboardEvent) {
-  ;(event.target as HTMLInputElement).blur()
+  (event.target as HTMLInputElement).blur();
 }
 
 // --- Suppression ---
 
 async function removeEntry(entry: FleetEntry) {
-  const filled = entry.vehicle_id !== null || entry.location !== '' || entry.note !== ''
-  if (filled && !window.confirm('Supprimer cette ligne de la flotte ?')) return
+  const filled =
+    entry.vehicle_id !== null || entry.location !== "" || entry.note !== "";
+  if (filled && !window.confirm("Supprimer cette ligne de la flotte ?")) return;
   try {
-    await deleteFleetEntry(entry.id)
+    await deleteFleetEntry(entry.id);
   } catch (error) {
-    toast.error(apiError(error, 'Suppression de la ligne impossible.'))
+    toast.error(apiError(error, "Suppression de la ligne impossible."));
   }
 }
 </script>
@@ -121,7 +138,9 @@ async function removeEntry(entry: FleetEntry) {
       <div v-for="entry in entries" :key="entry.id" class="fl__row">
         <div class="fl__vehicle">
           <!-- Donne à la colonne la largeur du nom affiché (un <select> prendrait celle de sa plus longue option). -->
-          <span class="fl__sizer" aria-hidden="true">{{ vehicleName(entry) }}</span>
+          <span class="fl__sizer" aria-hidden="true">{{
+            vehicleName(entry)
+          }}</span>
           <select
             class="fl__field fl__select"
             :value="entry.vehicle_id ?? ''"
@@ -129,16 +148,27 @@ async function removeEntry(entry: FleetEntry) {
             @change="setVehicle(entry, $event)"
           >
             <option value="">—</option>
-            <option v-for="vehicle in vehicleOptions(entry)" :key="vehicle.id" :value="vehicle.id">
+            <option
+              v-for="vehicle in vehicleOptions(entry)"
+              :key="vehicle.id"
+              :value="vehicle.id"
+            >
               {{ vehicle.name }}
             </option>
           </select>
-          <Icon name="lucide:chevron-down" size="10" class="fl__chevron" aria-hidden="true" />
+          <Icon
+            name="lucide:chevron-down"
+            size="10"
+            class="fl__chevron"
+            aria-hidden="true"
+          />
         </div>
 
         <div class="fl__location">
           <!-- Élargit la colonne au lieu le plus long, pour qu'il ne soit jamais coupé. -->
-          <span class="fl__sizer" aria-hidden="true">{{ fieldValue(entry, 'location') || 'Lieu' }}</span>
+          <span class="fl__sizer" aria-hidden="true">{{
+            fieldValue(entry, "location") || "Lieu"
+          }}</span>
           <input
             class="fl__field"
             type="text"
@@ -152,7 +182,7 @@ async function removeEntry(entry: FleetEntry) {
             @blur="commit(entry, 'location')"
             @keydown.enter="blurField"
             @keydown.esc="cancelEdit(entry, 'location', $event)"
-          >
+          />
         </div>
 
         <input
@@ -167,7 +197,7 @@ async function removeEntry(entry: FleetEntry) {
           @blur="commit(entry, 'note')"
           @keydown.enter="blurField"
           @keydown.esc="cancelEdit(entry, 'note', $event)"
-        >
+        />
 
         <button
           type="button"

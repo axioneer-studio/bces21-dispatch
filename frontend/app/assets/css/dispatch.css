@@ -29,10 +29,10 @@
   /* Sémantique */
   --dp-danger: #d9534f;
   --dp-danger-soft: rgba(217, 83, 79, 0.14);
-  --dp-danger-line: rgba(217, 83, 79, 0.40);
+  --dp-danger-line: rgba(217, 83, 79, 0.4);
   --dp-warn: #c98a2e;
   --dp-warn-soft: rgba(201, 138, 46, 0.14);
-  --dp-warn-line: rgba(201, 138, 46, 0.40);
+  --dp-warn-line: rgba(201, 138, 46, 0.4);
   --dp-info: #3d7fb8;
   --dp-info-soft: rgba(61, 127, 184, 0.14);
 
@@ -45,7 +45,7 @@
 
 /* Le body porte son image de fond pour les écrans d'authentification.
    Sur le layout dispatch on le neutralise pour un fond plat + palette dédiée. */
-body[data-layout='dispatch'] {
+body[data-layout="dispatch"] {
   background-image: none !important;
   background-color: var(--dp-bg) !important;
   color: var(--dp-text) !important;

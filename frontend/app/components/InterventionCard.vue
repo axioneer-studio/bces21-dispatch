@@ -1,129 +1,147 @@
 <script setup lang="ts">
-import type { DispatchSlot } from '~/composables/useDispatchStore'
-import type { Agent } from '~/utils/agent'
-import { sortAgentsByGradeAndArrival } from '~/utils/agent'
-import { assignUser, deleteSlot, updateSlot } from '~/composables/useDispatchApi'
-import { findStatus } from '~/utils/statuses'
-import StatusPicker from '~/components/StatusPicker.vue'
+import type { DispatchSlot } from "~/composables/useDispatchStore";
+import type { Agent } from "~/utils/agent";
+import { sortAgentsByGradeAndArrival } from "~/utils/agent";
+import {
+  assignUser,
+  deleteSlot,
+  updateSlot,
+} from "~/composables/useDispatchApi";
+import { findStatus } from "~/utils/statuses";
+import StatusPicker from "~/components/StatusPicker.vue";
 
 const props = defineProps<{
-  slot: DispatchSlot
-  agents: Agent[]
-  hospitalSlotId?: number
-  fixed?: boolean
-  compact?: boolean
-  label?: string
-}>()
+  slot: DispatchSlot;
+  agents: Agent[];
+  hospitalSlotId?: number;
+  fixed?: boolean;
+  compact?: boolean;
+  label?: string;
+}>();
 
 const emit = defineEmits<{
-  removed: [slotId: number]
-  'employee-drop': [employeeId: number, slotId: number]
-  'employee-remove': [employeeId: number, slotId: number]
-}>()
+  removed: [slotId: number];
+  "employee-drop": [employeeId: number, slotId: number];
+  "employee-remove": [employeeId: number, slotId: number];
+}>();
 
-const toast = useAppToast()
-const { snapshot } = useDispatchStore()
+const toast = useAppToast();
+const { snapshot } = useDispatchStore();
 /** Couleur du statut de l'intervention, choisie dans Administration (aucune par défaut). */
-const statusColor = computed(() => findStatus(snapshot.value.statuses, props.slot.status)?.color ?? null)
-const currentStatus = computed(() => findStatus(snapshot.value.statuses, props.slot.status))
-const statusPickerOpen = ref(false)
-const dropOver = ref<boolean>(false)
-const removing = ref<boolean>(false)
+const statusColor = computed(
+  () => findStatus(snapshot.value.statuses, props.slot.status)?.color ?? null,
+);
+const currentStatus = computed(() =>
+  findStatus(snapshot.value.statuses, props.slot.status),
+);
+const statusPickerOpen = ref(false);
+const dropOver = ref<boolean>(false);
+const removing = ref<boolean>(false);
 
 function setStatus(statusId: string | null) {
-  statusPickerOpen.value = false
+  statusPickerOpen.value = false;
   updateSlot(props.slot.id, { status: statusId, location: null }).catch(() => {
-    toast.error('Mise à jour impossible.')
-  })
+    toast.error("Mise à jour impossible.");
+  });
 }
 
 function setZip(zip: string | null) {
   updateSlot(props.slot.id, { zip_code: zip }).catch(() => {
-    toast.error('Mise à jour impossible.')
-  })
+    toast.error("Mise à jour impossible.");
+  });
 }
 
 async function remove() {
-  if (props.fixed || removing.value) return
+  if (props.fixed || removing.value) return;
 
-  const assignedEmployeeIds = props.slot.assignments.map((assignment) => assignment.employee_id)
+  const assignedEmployeeIds = props.slot.assignments.map(
+    (assignment) => assignment.employee_id,
+  );
   if (assignedEmployeeIds.length && props.hospitalSlotId === undefined) {
-    toast.error('Suppression impossible : l’hôpital est indisponible.')
-    return
+    toast.error("Suppression impossible : l’hôpital est indisponible.");
+    return;
   }
 
-  removing.value = true
+  removing.value = true;
   try {
     if (props.hospitalSlotId !== undefined) {
       for (const employeeId of assignedEmployeeIds) {
-        await assignUser(props.hospitalSlotId, employeeId)
+        await assignUser(props.hospitalSlotId, employeeId);
       }
     }
-    await deleteSlot(props.slot.id)
-    emit('removed', props.slot.id)
+    await deleteSlot(props.slot.id);
+    emit("removed", props.slot.id);
   } catch {
-    toast.error('Suppression impossible. Les agents restants sont toujours assignés.')
+    toast.error(
+      "Suppression impossible. Les agents restants sont toujours assignés.",
+    );
   } finally {
-    removing.value = false
+    removing.value = false;
   }
 }
 
 const assigned = computed(() => {
-  const assignments = [...props.slot.assignments]
-  if (props.slot.kind === 'centrale') {
+  const assignments = [...props.slot.assignments];
+  if (props.slot.kind === "centrale") {
     assignments.sort(
       (a, b) =>
         a.order - b.order ||
         a.created_at.localeCompare(b.created_at) ||
-        a.id - b.id
-    )
+        a.id - b.id,
+    );
     return assignments
-      .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
-      .filter((agent): agent is Agent => Boolean(agent))
+      .map((assignment) =>
+        props.agents.find((agent) => agent.id === assignment.employee_id),
+      )
+      .filter((agent): agent is Agent => Boolean(agent));
   }
 
   return sortAgentsByGradeAndArrival(
     assignments
-      .map((assignment) => props.agents.find((agent) => agent.id === assignment.employee_id))
-      .filter((agent): agent is Agent => Boolean(agent))
-  )
-})
+      .map((assignment) =>
+        props.agents.find((agent) => agent.id === assignment.employee_id),
+      )
+      .filter((agent): agent is Agent => Boolean(agent)),
+  );
+});
 
 function onDragOver(e: DragEvent) {
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  dropOver.value = true
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  dropOver.value = true;
 }
 
 function onDragLeave() {
-  dropOver.value = false
+  dropOver.value = false;
 }
 
 function onDrop(e: DragEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  dropOver.value = false
-  const transfer = e.dataTransfer
-  if (!transfer) return
-  let employeeId: number | null = null
+  e.preventDefault();
+  e.stopPropagation();
+  dropOver.value = false;
+  const transfer = e.dataTransfer;
+  if (!transfer) return;
+  let employeeId: number | null = null;
   try {
-    const raw = transfer.getData('application/json')
+    const raw = transfer.getData("application/json");
     if (raw) {
-      const payload = JSON.parse(raw) as { employeeId?: number }
-      if (typeof payload.employeeId === 'number') employeeId = payload.employeeId
+      const payload = JSON.parse(raw) as { employeeId?: number };
+      if (typeof payload.employeeId === "number")
+        employeeId = payload.employeeId;
     }
   } catch {
-    employeeId = null
+    employeeId = null;
   }
   if (employeeId === null) {
-    const plainTextId = Number(transfer.getData('text/plain'))
-    if (Number.isInteger(plainTextId) && plainTextId > 0) employeeId = plainTextId
+    const plainTextId = Number(transfer.getData("text/plain"));
+    if (Number.isInteger(plainTextId) && plainTextId > 0)
+      employeeId = plainTextId;
   }
-  if (employeeId !== null) emit('employee-drop', employeeId, props.slot.id)
+  if (employeeId !== null) emit("employee-drop", employeeId, props.slot.id);
 }
 
 function unassign(agentId: number) {
-  emit('employee-remove', agentId, props.slot.id)
+  emit("employee-remove", agentId, props.slot.id);
 }
 </script>
 
@@ -133,7 +151,7 @@ function unassign(agentId: number) {
     :class="{
       'iv--compact': compact || !fixed,
       'iv--colored': statusColor,
-      'iv--unassigned': !fixed && !assigned.length && !dropOver
+      'iv--unassigned': !fixed && !assigned.length && !dropOver,
     }"
     :style="statusColor ? { '--status-color': statusColor } : undefined"
     :data-drop-over="dropOver ? '1' : '0'"
@@ -142,24 +160,29 @@ function unassign(agentId: number) {
     @drop="onDrop"
   >
     <div class="iv__bar">
-      <span class="iv__label">{{ label ?? slot.title ?? 'Intervention' }}</span>
+      <span class="iv__label">{{ label ?? slot.title ?? "Intervention" }}</span>
       <div class="iv__controls">
-        <ZipPicker
-          :model-value="slot.zip_code"
-          @update:model-value="setZip"
-        />
+        <ZipPicker :model-value="slot.zip_code" @update:model-value="setZip" />
         <div class="iv__status-popup">
           <button
             type="button"
             class="iv__status-trigger"
             :class="{ 'iv__status-trigger--set': currentStatus }"
             :style="statusColor ? { '--status-color': statusColor } : undefined"
-            :title="currentStatus ? `Statut : ${currentStatus.label}` : 'Choisir un statut'"
+            :title="
+              currentStatus
+                ? `Statut : ${currentStatus.label}`
+                : 'Choisir un statut'
+            "
             aria-label="Afficher ou modifier le statut"
             @click="statusPickerOpen = true"
           >
             <span class="iv__status-dot" />
-            <span class="iv__status-value">{{ currentStatus ? `${currentStatus.emoji} ${currentStatus.label}` : 'Statut' }}</span>
+            <span class="iv__status-value">{{
+              currentStatus
+                ? `${currentStatus.emoji} ${currentStatus.label}`
+                : "Statut"
+            }}</span>
             <Icon name="lucide:chevron-down" size="12" />
           </button>
         </div>
@@ -192,9 +215,11 @@ function unassign(agentId: number) {
         :agents="agents"
         tone="assigned"
         draggable
-
       />
-      <div v-if="!assigned.length && !fixed" class="iv__hint iv__hint--unassigned">
+      <div
+        v-if="!assigned.length && !fixed"
+        class="iv__hint iv__hint--unassigned"
+      >
         À PRENDRE
       </div>
       <div v-else-if="!assigned.length" class="iv__hint">
@@ -219,7 +244,9 @@ function unassign(agentId: number) {
   background: var(--dp-panel);
   border: 1px solid var(--dp-line);
   border-left: 3px solid var(--dp-accent-line);
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 /* Statut coloré dans Administration : bordure et fond teintés.
@@ -230,7 +257,7 @@ function unassign(agentId: number) {
   background: color-mix(in srgb, var(--status-color) 12%, var(--dp-panel));
 }
 
-.iv[data-drop-over='1'] {
+.iv[data-drop-over="1"] {
   background: var(--dp-accent-soft);
   border-color: var(--dp-accent);
   border-left-color: var(--dp-accent);
@@ -283,7 +310,9 @@ function unassign(agentId: number) {
   list-style: none;
 }
 
-.iv__status-trigger::-webkit-details-marker { display: none; }
+.iv__status-trigger::-webkit-details-marker {
+  display: none;
+}
 .iv__status-trigger--set {
   border-color: var(--status-color);
   color: var(--dp-text);
@@ -298,7 +327,14 @@ function unassign(agentId: number) {
   flex: 0 0 auto;
 }
 
-.iv__status-value { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.iv__status-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .iv__label {
   min-height: 14px;
@@ -422,5 +458,4 @@ function unassign(agentId: number) {
   font-weight: 800;
   letter-spacing: 0.08em;
 }
-
 </style>
