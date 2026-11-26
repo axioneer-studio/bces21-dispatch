@@ -71,7 +71,9 @@ def next_storm(now: datetime, at: time) -> datetime:
     """Prochaine Tempête strictement après `now`, dans le fuseau de `now`."""
     target = now.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
     if target <= now:
-        target = (now + timedelta(days=1)).replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
+        target = (now + timedelta(days=1)).replace(
+            hour=at.hour, minute=at.minute, second=0, microsecond=0
+        )
     return target
 
 
@@ -83,9 +85,14 @@ async def run_storm() -> None:
 
 async def _wait(stop_event: asyncio.Event, timeout: float | None) -> None:
     """Attend l'arrêt de l'API, un changement de réglages ou la fin du délai."""
-    waiters = [asyncio.ensure_future(stop_event.wait()), asyncio.ensure_future(_settings_changed.wait())]
+    waiters = [
+        asyncio.ensure_future(stop_event.wait()),
+        asyncio.ensure_future(_settings_changed.wait()),
+    ]
     try:
-        await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+        await asyncio.wait(
+            waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+        )
     finally:
         for waiter in waiters:
             waiter.cancel()
@@ -99,7 +106,9 @@ async def storm_loop(stop_event: asyncio.Event) -> None:
             async with SessionLocal() as db:
                 schedule = await read_schedule(db)
         except Exception:
-            logger.exception("Lecture des réglages de la Tempête automatique impossible.")
+            logger.exception(
+                "Lecture des réglages de la Tempête automatique impossible."
+            )
             await _wait(stop_event, MAX_WAIT_SECONDS)
             continue
         if not schedule.enabled:

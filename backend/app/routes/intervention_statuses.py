@@ -14,7 +14,9 @@ router = APIRouter(
 
 
 @router.get("", response_model=list[cis.InterventionStatusOut])
-async def list_statuses(db: AsyncSession = Depends(get_db)) -> list[cis.InterventionStatusOut]:
+async def list_statuses(
+    db: AsyncSession = Depends(get_db),
+) -> list[cis.InterventionStatusOut]:
     return await cis.list_statuses(db)
 
 
@@ -44,5 +46,7 @@ async def move_status(
 
 
 @router.delete("/{status_id}", response_model=cis.MessageResponse)
-async def delete_status(status_id: int, db: AsyncSession = Depends(get_db)) -> cis.MessageResponse:
+async def delete_status(
+    status_id: int, db: AsyncSession = Depends(get_db)
+) -> cis.MessageResponse:
     return await cis.delete_status(status_id, db)

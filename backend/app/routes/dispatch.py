@@ -1,6 +1,13 @@
 ﻿"""Routes Dispatch (couche transport mince)."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.session import decode_token, get_session_cookie_name

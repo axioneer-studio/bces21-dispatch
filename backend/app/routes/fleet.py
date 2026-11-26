@@ -24,9 +24,7 @@ async def create_fleet_entry(
     return await cf.create_fleet_entry(db)
 
 
-@router.patch(
-    "/api/dispatch/fleet/{entry_id}", response_model=cf.FleetEntryOut
-)
+@router.patch("/api/dispatch/fleet/{entry_id}", response_model=cf.FleetEntryOut)
 async def update_fleet_entry(
     entry_id: int,
     payload: cf.FleetEntryUpdateRequest,
@@ -36,9 +34,7 @@ async def update_fleet_entry(
     return await cf.update_fleet_entry(entry_id, payload, db)
 
 
-@router.delete(
-    "/api/dispatch/fleet/{entry_id}", response_model=cf.MessageResponse
-)
+@router.delete("/api/dispatch/fleet/{entry_id}", response_model=cf.MessageResponse)
 async def delete_fleet_entry(
     entry_id: int,
     db: AsyncSession = Depends(get_db),
@@ -58,9 +54,7 @@ async def list_vehicles(
     return await cf.list_vehicles(db)
 
 
-@router.put(
-    "/api/admin/vehicles/import", response_model=cf.VehicleImportResult
-)
+@router.put("/api/admin/vehicles/import", response_model=cf.VehicleImportResult)
 async def import_vehicles(
     payload: cf.VehicleImportRequest,
     db: AsyncSession = Depends(get_db),
@@ -70,7 +64,9 @@ async def import_vehicles(
 
 
 @router.post(
-    "/api/admin/vehicles", response_model=cf.VehicleOut, status_code=status.HTTP_201_CREATED
+    "/api/admin/vehicles",
+    response_model=cf.VehicleOut,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_vehicle(
     payload: cf.VehicleCreateRequest,

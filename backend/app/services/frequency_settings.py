@@ -13,7 +13,10 @@ from app.schemas import FrequencyBounds, FrequencyKind
 FREQUENCY_KINDS: tuple[FrequencyKind, ...] = ("radio", "shared")
 
 # Colonne de l'état du Dispatch qui contient la fréquence actuelle.
-STATE_COLUMNS: dict[FrequencyKind, str] = {"radio": "freq_bces", "shared": "freq_shared"}
+STATE_COLUMNS: dict[FrequencyKind, str] = {
+    "radio": "freq_bces",
+    "shared": "freq_shared",
+}
 
 LABELS: dict[FrequencyKind, str] = {
     "radio": "Fréquence Radio BCES",
@@ -45,7 +48,9 @@ async def read_all_bounds(db: AsyncSession) -> dict[FrequencyKind, FrequencyBoun
     return {kind: await read_bounds(db, kind) for kind in FREQUENCY_KINDS}
 
 
-async def write_bounds(db: AsyncSession, kind: FrequencyKind, low: int, high: int) -> None:
+async def write_bounds(
+    db: AsyncSession, kind: FrequencyKind, low: int, high: int
+) -> None:
     for bound, value in (("min", low), ("max", high)):
         key = _setting_key(kind, bound)
         setting = await db.get(ApplicationSetting, key)
@@ -59,5 +64,7 @@ def current_frequency(state: DispatchState, kind: FrequencyKind) -> str | None:
     return getattr(state, STATE_COLUMNS[kind])
 
 
-def set_current_frequency(state: DispatchState, kind: FrequencyKind, value: int | None) -> None:
+def set_current_frequency(
+    state: DispatchState, kind: FrequencyKind, value: int | None
+) -> None:
     setattr(state, STATE_COLUMNS[kind], None if value is None else str(value))

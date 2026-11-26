@@ -79,21 +79,20 @@ def _check_training_flags(grade: Grade) -> None:
 
 async def list_grade_permissions() -> list[dict]:
     return [
-        {"key": key, "label": label}
-        for key, label in GRADE_PERMISSION_CATALOG.items()
+        {"key": key, "label": label} for key, label in GRADE_PERMISSION_CATALOG.items()
     ]
 
 
 async def list_grades(db: AsyncSession) -> list[GradeOut]:
     grades = (
-        await db.execute(select(Grade).order_by(Grade.level.asc(), Grade.name.asc()))
-    ).scalars().all()
+        (await db.execute(select(Grade).order_by(Grade.level.asc(), Grade.name.asc())))
+        .scalars()
+        .all()
+    )
     return [await _grade_out(db, grade) for grade in grades]
 
 
-async def create_grade(
-    payload: GradeCreateRequest, db: AsyncSession
-) -> GradeOut:
+async def create_grade(payload: GradeCreateRequest, db: AsyncSession) -> GradeOut:
     name = payload.name.strip()
     existing = await db.scalar(
         select(Grade.id).where(func.lower(Grade.name) == name.lower())
@@ -175,9 +174,11 @@ async def _radio_out(db: AsyncSession, radio: DispatchRadio) -> DirectionRadioOu
         id=radio.id,
         serial=radio.serial,
         employee_id=radio.employee_id,
-        employee_name=" ".join(filter(None, [employee.first_name, employee.last_name]))
-        if employee
-        else None,
+        employee_name=(
+            " ".join(filter(None, [employee.first_name, employee.last_name]))
+            if employee
+            else None
+        ),
         is_on=radio.is_on,
         is_loading=radio.is_loading,
         is_direction=bool(employee and employee.grade and employee.grade.is_direction),
@@ -201,7 +202,9 @@ async def list_radios(db: AsyncSession) -> list[DirectionRadioOut]:
     out = [await _radio_out(db, radio) for radio in radios]
     return sorted(
         out,
-        key=lambda radio: 0 if radio.is_direction else 1 if radio.employee_id is not None else 2,
+        key=lambda radio: (
+            0 if radio.is_direction else 1 if radio.employee_id is not None else 2
+        ),
     )
 
 
@@ -284,11 +287,18 @@ async def update_frequency(
     state = await _direction_state(db)
     if payload.min is not None or payload.max is not None:
         current_bounds = await read_bounds(db, kind)
+        low = payload.min if payload.min is not None else current_bounds.min
+        high = payload.max if payload.max is not None else current_bounds.max
+        if low is None or high is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Renseignez les deux bornes de la fréquence.",
+            )
         await write_bounds(
             db,
             kind,
-            payload.min if payload.min is not None else current_bounds.min,
-            payload.max if payload.max is not None else current_bounds.max,
+            low,
+            high,
         )
     set_current_frequency(state, kind, payload.current)
     await db.commit()

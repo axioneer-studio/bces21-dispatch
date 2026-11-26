@@ -1,8 +1,10 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import delete
+from sqlalchemy.engine import CursorResult
 
 from app.config import get_settings
 from app.database import SessionLocal
@@ -23,7 +25,7 @@ async def purge_uncompleted_accounts() -> int:
             )
         )
         await session.commit()
-        count = result.rowcount or 0
+        count = cast(CursorResult, result).rowcount or 0
     if count:
         logger.info("Purged %s uncompleted account(s).", count)
     return count

@@ -1,5 +1,7 @@
 """Contrôleur de l'agenda : événements."""
 
+from datetime import datetime
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +16,8 @@ from app.schemas import (
 
 
 async def list_events(
-    start: object | None,
-    end: object | None,
+    start: datetime | None,
+    end: datetime | None,
     db: AsyncSession,
 ) -> list[AgendaEventOut]:
     query = select(AgendaEvent).order_by(AgendaEvent.starts_at)
@@ -23,19 +25,18 @@ async def list_events(
         query = query.where(AgendaEvent.starts_at >= start)
     if end:
         query = query.where(AgendaEvent.starts_at < end)
-    return (await db.execute(query)).scalars().all()
+    events = (await db.execute(query)).scalars().all()
+    return [AgendaEventOut.model_validate(event) for event in events]
 
 
-async def create_event(
-    payload: AgendaEventCreate, db: AsyncSession
-) -> AgendaEventOut:
+async def create_event(payload: AgendaEventCreate, db: AsyncSession) -> AgendaEventOut:
     if payload.ends_at and payload.ends_at < payload.starts_at:
         raise HTTPException(status_code=422, detail="La fin doit être après le début.")
     event = AgendaEvent(**payload.model_dump())
     db.add(event)
     await db.commit()
     await db.refresh(event)
-    return event
+    return AgendaEventOut.model_validate(event)
 
 
 async def update_event(
@@ -50,7 +51,7 @@ async def update_event(
         raise HTTPException(status_code=422, detail="La fin doit être après le début.")
     await db.commit()
     await db.refresh(event)
-    return event
+    return AgendaEventOut.model_validate(event)
 
 
 async def delete_event(event_id: int, db: AsyncSession) -> MessageResponse:
@@ -59,4 +60,4 @@ async def delete_event(event_id: int, db: AsyncSession) -> MessageResponse:
         raise HTTPException(status_code=404, detail="Événement introuvable.")
     await db.delete(event)
     await db.commit()
-    return {"message": "Événement supprimé."}
+    return MessageResponse(message="Événement supprimé.")

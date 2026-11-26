@@ -25,10 +25,15 @@ async def _state(db: AsyncSession) -> DispatchState:
     return state
 
 
-async def _setting_out(db: AsyncSession, state: DispatchState, kind: FrequencyKind) -> FrequencySettingOut:
+async def _setting_out(
+    db: AsyncSession, state: DispatchState, kind: FrequencyKind
+) -> FrequencySettingOut:
     bounds = await read_bounds(db, kind)
     return FrequencySettingOut(
-        kind=kind, current=current_frequency(state, kind), min=bounds.min, max=bounds.max
+        kind=kind,
+        current=current_frequency(state, kind),
+        min=bounds.min,
+        max=bounds.max,
     )
 
 
@@ -55,7 +60,9 @@ async def randomize_frequency(
         )
     state = await _state(db)
     set_current_frequency(
-        state, kind, _random_frequency(bounds.min, bounds.max, current_frequency(state, kind))
+        state,
+        kind,
+        _random_frequency(bounds.min, bounds.max, current_frequency(state, kind)),
     )
     await db.commit()
     await push_snapshot(db)

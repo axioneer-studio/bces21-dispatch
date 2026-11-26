@@ -26,11 +26,11 @@ logger = logging.getLogger("bces.status_sync")
 
 STATUS_SYNC_INTERVAL_SECONDS = 10
 
-LSES_MIC = "\U0001F399"  # 🎙
-LSES_MOON = "\U0001F319"  # 🌙
+LSES_MIC = "\U0001f399"  # 🎙
+LSES_MOON = "\U0001f319"  # 🌙
 
 
-def map_lses(raw: str) -> str:
+def map_lses(raw: str | None) -> str:
     value = (raw or "").strip()
     if not value:
         return "bug"
@@ -48,7 +48,7 @@ def map_lses(raw: str) -> str:
     return "bug"
 
 
-def map_safd(raw: str) -> str:
+def map_safd(raw: str | None) -> str:
     value = (raw or "").strip()
     lower = value.lower()
     if lower in ("disponibles", "disponible", "oui", "yes", "true", "1"):

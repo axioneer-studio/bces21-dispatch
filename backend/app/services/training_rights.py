@@ -46,20 +46,34 @@ def employee_competencies(employee: Employee) -> list[str]:
         value = json.loads(employee.competencies or "[]")
     except (TypeError, ValueError):
         return []
-    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+    return (
+        [item for item in value if isinstance(item, str)]
+        if isinstance(value, list)
+        else []
+    )
 
 
-def from_stage_module(employee: Employee, emoji: str, module_emojis: dict[str, list[str]]) -> bool:
+def from_stage_module(
+    employee: Employee, emoji: str, module_emojis: dict[str, list[str]]
+) -> bool:
     """L'emoji est celui d'un module de l'étape de l'employé : chez lui, il vient
     de sa fiche de formation, pas d'un pôle ou d'une spécialité."""
     stage = employee_stage(employee)
-    return stage is not None and any(emoji_key(item) == emoji_key(emoji) for item in module_emojis[stage])
+    return stage is not None and any(
+        emoji_key(item) == emoji_key(emoji) for item in module_emojis[stage]
+    )
 
 
-def pole_competencies(employee: Employee, module_emojis: dict[str, list[str]]) -> list[str]:
+def pole_competencies(
+    employee: Employee, module_emojis: dict[str, list[str]]
+) -> list[str]:
     """Compétences qui comptent pour les pôles et spécialités (`module_emojis` :
     `formation_stages.module_emojis_by_stage`)."""
-    return [item for item in employee_competencies(employee) if not from_stage_module(employee, item, module_emojis)]
+    return [
+        item
+        for item in employee_competencies(employee)
+        if not from_stage_module(employee, item, module_emojis)
+    ]
 
 
 def parse_training_permissions(value: str | None) -> list[str]:
@@ -69,15 +83,29 @@ def parse_training_permissions(value: str | None) -> list[str]:
         return []
     if not isinstance(permissions, list):
         return []
-    return [permission for permission in permissions if permission in TRAINING_PERMISSION_CATALOG]
+    return [
+        permission
+        for permission in permissions
+        if permission in TRAINING_PERMISSION_CATALOG
+    ]
 
 
 async def _granting_trainings(db: AsyncSession) -> list[Training]:
-    trainings = (await db.execute(select(Training).where(Training.kind == "general"))).scalars().all()
-    return [training for training in trainings if parse_training_permissions(training.permissions)]
+    trainings = (
+        (await db.execute(select(Training).where(Training.kind == "general")))
+        .scalars()
+        .all()
+    )
+    return [
+        training
+        for training in trainings
+        if parse_training_permissions(training.permissions)
+    ]
 
 
-def _permissions_of(employee: Employee, trainings: list[Training], module_emojis: dict[str, list[str]]) -> set[str]:
+def _permissions_of(
+    employee: Employee, trainings: list[Training], module_emojis: dict[str, list[str]]
+) -> set[str]:
     owned = {emoji_key(item) for item in pole_competencies(employee, module_emojis)}
     return {
         permission
@@ -87,18 +115,30 @@ def _permissions_of(employee: Employee, trainings: list[Training], module_emojis
     }
 
 
-async def employees_with_training_permission(db: AsyncSession, permission: str) -> list[Employee]:
+async def employees_with_training_permission(
+    db: AsyncSession, permission: str
+) -> list[Employee]:
     """Employés actifs qui ont validé une formation donnant ce droit."""
     trainings = await _granting_trainings(db)
     if not trainings:
         return []
     employees = (
-        await db.execute(
-            select(Employee).where(Employee.is_active.is_(True)).order_by(Employee.first_name, Employee.last_name)
+        (
+            await db.execute(
+                select(Employee)
+                .where(Employee.is_active.is_(True))
+                .order_by(Employee.first_name, Employee.last_name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     module_emojis = await module_emojis_by_stage(db)
-    return [employee for employee in employees if permission in _permissions_of(employee, trainings, module_emojis)]
+    return [
+        employee
+        for employee in employees
+        if permission in _permissions_of(employee, trainings, module_emojis)
+    ]
 
 
 async def user_training_permissions(db: AsyncSession, user: User) -> list[str]:
@@ -106,16 +146,26 @@ async def user_training_permissions(db: AsyncSession, user: User) -> list[str]:
     les droits RH si sa tuile est de la Direction. Un super-admin les a tous."""
     if user.has_super_admin_rights:
         return list(TRAINING_PERMISSION_CATALOG)
-    employee = await db.scalar(select(Employee).where(Employee.account_user_id == user.id))
+    employee = await db.scalar(
+        select(Employee).where(Employee.account_user_id == user.id)
+    )
     if employee is None or not employee.is_active:
         return []
-    permissions = _permissions_of(employee, await _granting_trainings(db), await module_emojis_by_stage(db))
+    permissions = _permissions_of(
+        employee, await _granting_trainings(db), await module_emojis_by_stage(db)
+    )
     if employee.grade and employee.grade.is_direction:
         permissions.add(HR_PERMISSION)
-    return [permission for permission in TRAINING_PERMISSION_CATALOG if permission in permissions]
+    return [
+        permission
+        for permission in TRAINING_PERMISSION_CATALOG
+        if permission in permissions
+    ]
 
 
-async def user_has_training_permission(db: AsyncSession, user: User, permission: str) -> bool:
+async def user_has_training_permission(
+    db: AsyncSession, user: User, permission: str
+) -> bool:
     return permission in await user_training_permissions(db, user)
 
 
@@ -130,7 +180,9 @@ async def require_hr_access(
 ) -> User:
     if await user_has_hr_access(db, user):
         return user
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès à cette page non autorisé.")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail="Accès à cette page non autorisé."
+    )
 
 
 def require_training_permission(permission: str):

@@ -37,7 +37,9 @@ _database_url = _settings.database_url
 if _database_url.startswith("postgres://"):
     _database_url = "postgresql+asyncpg://" + _database_url.removeprefix("postgres://")
 elif _database_url.startswith("postgresql://"):
-    _database_url = "postgresql+asyncpg://" + _database_url.removeprefix("postgresql://")
+    _database_url = "postgresql+asyncpg://" + _database_url.removeprefix(
+        "postgresql://"
+    )
 
 engine = create_async_engine(
     _database_url,
@@ -144,9 +146,7 @@ async def _move_user_role_to_user_roles(conn) -> None:
     pour que la reprise ne se refasse pas après un retrait de rôle."""
     try:
         async with conn.begin_nested():
-            await conn.execute(
-                text(
-                    """
+            await conn.execute(text("""
                     INSERT INTO user_roles (user_id, role_id)
                     SELECT u.id, u.role_id FROM users u
                     WHERE u.role_id IS NOT NULL
@@ -155,10 +155,10 @@ async def _move_user_role_to_user_roles(conn) -> None:
                           SELECT 1 FROM user_roles ur
                           WHERE ur.user_id = u.id AND ur.role_id = u.role_id
                       )
-                    """
-                )
+                    """))
+            await conn.execute(
+                text("UPDATE users SET role_id = NULL WHERE role_id IS NOT NULL")
             )
-            await conn.execute(text("UPDATE users SET role_id = NULL WHERE role_id IS NOT NULL"))
     except Exception:
         pass  # base créée sans la colonne users.role_id
 
@@ -248,7 +248,10 @@ _DISPATCH_STATE_RENAMES = [
 # connaît pas (SQLite n'a pas d'ALTER COLUMN).
 _DISPATCH_FREQUENCY_STATEMENTS = [
     # Fréquences actuelles : aucune valeur par défaut, vides tant qu'elles ne sont pas réglées.
-    *(f"ALTER TABLE dispatch_state RENAME COLUMN {old} TO {new}" for old, new in _DISPATCH_STATE_RENAMES),
+    *(
+        f"ALTER TABLE dispatch_state RENAME COLUMN {old} TO {new}"
+        for old, new in _DISPATCH_STATE_RENAMES
+    ),
     *(
         f"ALTER TABLE dispatch_state ALTER COLUMN {column} {change}"
         for column in ("freq_bces", "freq_shared")
@@ -279,9 +282,7 @@ async def _run_dispatch_migrations(conn) -> None:
     except Exception:
         pass
 
-    await conn.execute(
-        text(
-            """
+    await conn.execute(text("""
             UPDATE dispatch_slots
             SET status = NULL
             WHERE lower(trim(status)) IN (
@@ -289,24 +290,18 @@ async def _run_dispatch_migrations(conn) -> None:
                 'a prendre'
             )
             OR upper(trim(status)) LIKE '%A PRENDRE%'
-            """
-        )
-    )
+            """))
 
 
 async def _run_access_migrations(conn) -> None:
-    await conn.execute(
-        text(
-            """
+    await conn.execute(text("""
             UPDATE users
             SET is_super_admin = TRUE
             WHERE id = (
                 SELECT id FROM users ORDER BY created_at ASC, id ASC LIMIT 1
             )
             AND NOT EXISTS (SELECT 1 FROM users WHERE is_super_admin = TRUE)
-            """
-        )
-    )
+            """))
 
 
 async def _seed_intervention_statuses(conn) -> None:
@@ -323,7 +318,9 @@ async def _seed_intervention_statuses(conn) -> None:
     try:
         async with conn.begin_nested():
             await conn.execute(
-                text("ALTER TABLE intervention_statuses ADD COLUMN kind VARCHAR(16) DEFAULT 'status' NOT NULL")
+                text(
+                    "ALTER TABLE intervention_statuses ADD COLUMN kind VARCHAR(16) DEFAULT 'status' NOT NULL"
+                )
             )
         kind_added = True
     except Exception:
@@ -331,7 +328,9 @@ async def _seed_intervention_statuses(conn) -> None:
     if kind_added:
         for order, (key, _label, _emoji) in enumerate(DEFAULT_PLACES):
             await conn.execute(
-                text('UPDATE intervention_statuses SET kind = :kind, "order" = :order WHERE key = :key'),
+                text(
+                    'UPDATE intervention_statuses SET kind = :kind, "order" = :order WHERE key = :key'
+                ),
                 {"kind": PLACE_KIND, "order": order, "key": key},
             )
 
@@ -361,18 +360,24 @@ async def _seed_intervention_statuses(conn) -> None:
     )
 
 
-async def _seed_once(conn, key: str, statement: str, rows: list[dict] | None = None) -> None:
+async def _seed_once(
+    conn, key: str, statement: str, rows: list[dict] | None = None
+) -> None:
     """Injecte des valeurs par défaut une seule fois : la clé dans
     application_settings empêche de les recréer après les avoir supprimées.
     Sans `rows`, l'instruction s'exécute une fois, sans paramètre."""
-    if await conn.scalar(text("SELECT COUNT(*) FROM application_settings WHERE key = :key"), {"key": key}):
+    if await conn.scalar(
+        text("SELECT COUNT(*) FROM application_settings WHERE key = :key"), {"key": key}
+    ):
         return
     if rows is None:
         await conn.execute(text(statement))
     elif rows:
         await conn.execute(text(statement), rows)
     await conn.execute(
-        text("INSERT INTO application_settings (key, value, updated_at) VALUES (:key, 'true', :now)"),
+        text(
+            "INSERT INTO application_settings (key, value, updated_at) VALUES (:key, 'true', :now)"
+        ),
         {"key": key, "now": datetime.now(UTC)},
     )
 
@@ -394,18 +399,36 @@ async def _seed_intern_defaults(conn) -> None:
 
     def module_rows(modules: list[tuple[str, str]]) -> list[dict]:
         return [
-            {"category": category, "name": name, "is_required": category in REQUIRED_CATEGORIES, "now": now}
+            {
+                "category": category,
+                "name": name,
+                "is_required": category in REQUIRED_CATEGORIES,
+                "now": now,
+            }
             for category, name in modules
         ]
 
-    await _seed_once(conn, "intern_defaults_seeded", module_statement, module_rows(DEFAULT_INTERN_MODULES))
+    await _seed_once(
+        conn,
+        "intern_defaults_seeded",
+        module_statement,
+        module_rows(DEFAULT_INTERN_MODULES),
+    )
     await _seed_once(
         conn,
         "intern_questions_seeded",
         "INSERT INTO intern_questions (question, answer, created_at) VALUES (:question, :answer, :now)",
-        [{"question": question, "answer": answer, "now": now} for question, answer in DEFAULT_INTERN_QUESTIONS],
+        [
+            {"question": question, "answer": answer, "now": now}
+            for question, answer in DEFAULT_INTERN_QUESTIONS
+        ],
     )
-    await _seed_once(conn, "resident_defaults_seeded", module_statement, module_rows(DEFAULT_RESIDENT_MODULES))
+    await _seed_once(
+        conn,
+        "resident_defaults_seeded",
+        module_statement,
+        module_rows(DEFAULT_RESIDENT_MODULES),
+    )
     # Modules créés avant la case « Obligatoire » : ceux des types qui la
     # cochent par défaut la reçoivent une fois.
     categories = ", ".join(f"'{category}'" for category in REQUIRED_CATEGORIES)
@@ -426,22 +449,34 @@ async def _backfill_employees() -> None:
 
     async with SessionLocal() as session:
         employees = (
-            await session.execute(select(Employee).where(Employee.account_user_id.is_not(None)))
-        ).scalars().all()
+            (
+                await session.execute(
+                    select(Employee).where(Employee.account_user_id.is_not(None))
+                )
+            )
+            .scalars()
+            .all()
+        )
         by_user = {employee.account_user_id: employee for employee in employees}
 
         if has_legacy_assignments:
             legacy_rows = (
-                await session.execute(
-                    text(
-                        'SELECT slot_id, user_id, "order", created_at '
-                        "FROM dispatch_assignments ORDER BY id"
+                (
+                    await session.execute(
+                        text(
+                            'SELECT slot_id, user_id, "order", created_at '
+                            "FROM dispatch_assignments ORDER BY id"
+                        )
                     )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             existing = (
-                await session.execute(select(DispatchAssignment.employee_id))
-            ).scalars().all()
+                (await session.execute(select(DispatchAssignment.employee_id)))
+                .scalars()
+                .all()
+            )
             assigned_employee_ids = set(existing)
             for row in legacy_rows:
                 employee = by_user.get(row["user_id"])
@@ -528,9 +563,7 @@ async def init_db() -> None:
                 )
             ).scalar_one_or_none()
             if not found:
-                session.add(
-                    DispatchSlot(kind=kind, title=title, order=order)
-                )
+                session.add(DispatchSlot(kind=kind, title=title, order=order))
             else:
                 # Normalise l'ordre des lignes créées avant l'introduction
                 # de cette table (les anciens ordre -600/-200 … se chevauchent).

@@ -16,18 +16,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Employee, InternModule
+from app.schemas import InternStage
 
-TRIAL = "trial"
-TRAINING = "training"
+TRIAL: InternStage = "trial"
+TRAINING: InternStage = "training"
 TRIAL_CATEGORIES = ("basics", "tools", "interventions", "injuries")
 TRAINING_CATEGORIES = ("mandatory", "optional")
 
 
-def module_stage(module: InternModule) -> str:
+def module_stage(module: InternModule) -> InternStage:
     return TRIAL if module.category in TRIAL_CATEGORIES else TRAINING
 
 
-def employee_stage(employee: Employee) -> str | None:
+def employee_stage(employee: Employee) -> InternStage | None:
     grade = employee.grade
     if grade is None:
         return None
@@ -41,7 +42,12 @@ def employee_stage(employee: Employee) -> str | None:
 async def module_emojis_by_stage(db: AsyncSession) -> dict[str, list[str]]:
     """Emojis des modules de chaque étape."""
     by_stage: dict[str, list[str]] = {TRIAL: [], TRAINING: []}
-    modules = (await db.execute(select(InternModule).where(InternModule.emoji.is_not(None)))).scalars().all()
+    modules = (
+        (await db.execute(select(InternModule).where(InternModule.emoji.is_not(None))))
+        .scalars()
+        .all()
+    )
     for module in modules:
-        by_stage[module_stage(module)].append(module.emoji)
+        if module.emoji is not None:
+            by_stage[module_stage(module)].append(module.emoji)
     return by_stage

@@ -17,7 +17,9 @@ from app.schemas import (
 
 
 def _slug(label: str) -> str:
-    ascii_label = unicodedata.normalize("NFKD", label).encode("ascii", "ignore").decode()
+    ascii_label = (
+        unicodedata.normalize("NFKD", label).encode("ascii", "ignore").decode()
+    )
     return re.sub(r"[^a-z0-9]+", "_", ascii_label.lower()).strip("_")[:28] or "statut"
 
 
@@ -25,7 +27,13 @@ async def _new_key(db: AsyncSession, label: str) -> str:
     """Clé stable dérivée du libellé, rendue unique (elle ne change plus ensuite)."""
     base = _slug(label)
     taken = set(
-        (await db.execute(select(InterventionStatus.key).where(InterventionStatus.key.like(f"{base}%")))).scalars()
+        (
+            await db.execute(
+                select(InterventionStatus.key).where(
+                    InterventionStatus.key.like(f"{base}%")
+                )
+            )
+        ).scalars()
     )
     key, number = base, 2
     while key in taken:
@@ -42,12 +50,20 @@ async def _get_status(db: AsyncSession, status_id: int) -> InterventionStatus:
 
 async def _ordered(db: AsyncSession) -> list[InterventionStatus]:
     """Les statuts, puis les lieux, chacun dans son ordre."""
-    return list((await db.execute(select(InterventionStatus).order_by(*intervention_status_order()))).scalars())
+    return list(
+        (
+            await db.execute(
+                select(InterventionStatus).order_by(*intervention_status_order())
+            )
+        ).scalars()
+    )
 
 
 async def _next_order(db: AsyncSession, kind: str) -> int:
     last_order = await db.scalar(
-        select(func.max(InterventionStatus.order)).where(InterventionStatus.kind == kind)
+        select(func.max(InterventionStatus.order)).where(
+            InterventionStatus.kind == kind
+        )
     )
     return (last_order + 1) if last_order is not None else 0
 
@@ -94,7 +110,9 @@ async def update_status(
     return InterventionStatusOut.model_validate(item)
 
 
-async def move_status(status_id: int, direction: int, db: AsyncSession) -> list[InterventionStatusOut]:
+async def move_status(
+    status_id: int, direction: int, db: AsyncSession
+) -> list[InterventionStatusOut]:
     """Monte (`direction=-1`) ou descend (`direction=1`) l'entrée dans la liste de son
     type (statuts ou lieux). Renvoie toute la liste, statuts puis lieux."""
     if direction not in (-1, 1):
@@ -114,7 +132,9 @@ async def move_status(status_id: int, direction: int, db: AsyncSession) -> list[
 
 async def delete_status(status_id: int, db: AsyncSession) -> MessageResponse:
     item = await _get_status(db, status_id)
-    in_use = await db.scalar(select(DispatchSlot.id).where(DispatchSlot.status == item.key).limit(1))
+    in_use = await db.scalar(
+        select(DispatchSlot.id).where(DispatchSlot.status == item.key).limit(1)
+    )
     if in_use is not None:
         raise HTTPException(
             status_code=409,
@@ -123,4 +143,4 @@ async def delete_status(status_id: int, db: AsyncSession) -> MessageResponse:
     await db.delete(item)
     await db.commit()
     await push_snapshot(db)
-    return {"message": "Statut supprimé."}
+    return MessageResponse(message="Statut supprimé.")

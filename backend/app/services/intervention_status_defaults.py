@@ -58,6 +58,9 @@ DEFAULT_PLACES: list[tuple[str, str, str]] = [
 
 # (clé, libellé, emoji, Primo Inter, type), dans l'ordre d'affichage de chaque type.
 DEFAULT_INTERVENTION_STATUSES: list[tuple[str, str, str, bool, str]] = [
-    *((key, label, emoji, is_primo, STATUS_KIND) for key, label, emoji, is_primo in DEFAULT_STATUSES),
+    *(
+        (key, label, emoji, is_primo, STATUS_KIND)
+        for key, label, emoji, is_primo in DEFAULT_STATUSES
+    ),
     *((key, label, emoji, False, PLACE_KIND) for key, label, emoji in DEFAULT_PLACES),
 ]

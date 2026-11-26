@@ -33,8 +33,16 @@ _PREFIX = "formation_threshold_"
 async def read_thresholds(db: AsyncSession) -> InternThresholdsOut:
     values = DEFAULT_THRESHOLDS.model_dump()
     settings = (
-        await db.execute(select(ApplicationSetting).where(ApplicationSetting.key.startswith(_PREFIX)))
-    ).scalars().all()
+        (
+            await db.execute(
+                select(ApplicationSetting).where(
+                    ApplicationSetting.key.startswith(_PREFIX)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     for setting in settings:
         key = setting.key.removeprefix(_PREFIX)
         if key not in values:
