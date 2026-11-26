@@ -614,7 +614,7 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
 
 <style scoped>
 .direction-page { flex: 1; min-height: 0; overflow: auto; padding: clamp(22px, 4vw, 48px); background: var(--dp-bg); }
-.direction-header, .direction-section, .direction-error { width: min(1180px, 100%); margin-right: auto; margin-left: auto; }
+.direction-header, .direction-section, .direction-error { width: 100%; margin-right: 0; margin-left: 0; }
 .direction-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
 .direction-eyebrow { margin-bottom: 9px; color: var(--dp-accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
 .direction-header h1 { margin: 0; font-size: clamp(28px, 3.2vw, 38px); letter-spacing: -.04em; }.direction-header p, .direction-section__heading p { margin: 9px 0 0; color: var(--dp-text-2); font-size: 13px; line-height: 1.6; }
@@ -665,7 +665,7 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
 .direction-dialog__footer .direction-button { min-height: 40px; padding: 0 14px; font-size: 11px; }
 .direction-dialog[open] { animation: direction-dialog-in .16s ease-out; }
 @keyframes direction-dialog-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(.99); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-.direction-nav { display: flex; gap: 6px; width: min(1180px, 100%); margin: 0 auto 16px; padding: 7px; overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel); }
+.direction-nav { display: flex; gap: 6px; width: 100%; margin: 0 0 16px; padding: 7px; overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel); }
 .direction-nav button { display: inline-flex; min-height: 42px; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid transparent; border-radius: 9px; color: var(--dp-text-2); background: transparent; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; }
 .direction-nav button:hover { color: var(--dp-text); background: var(--dp-panel-2); }
 .direction-nav button.is-active { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }

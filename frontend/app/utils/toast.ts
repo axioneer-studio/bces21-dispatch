@@ -2,13 +2,13 @@ export const ERROR_MESSAGES: Record<string, string> = {
   discord_misconfigured: 'Identifiants Discord non configurés côté serveur.',
   invalid_state: 'Session OAuth expirée ou invalide.',
   discord_failed: 'Connexion Discord refusée.',
+  discord_rate_limited: 'Discord limite temporairement les connexions. Réessaie dans quelques minutes.',
   discord_profile_unavailable: 'Profil Discord indisponible.',
   unknown_account: 'Aucun compte n’est associé à ce profil Discord.',
   missing_code: 'Code OAuth manquant.',
   not_authenticated: 'Tu dois être connecté pour accéder à cette page.',
   invalid_token: 'Session invalide.',
   expired_token: 'Session expirée.',
-  account_pending: 'Compte en attente de validation par un membre actif.',
   registration_closed: 'Les inscriptions sont actuellement fermées.',
   account_unavailable: 'Ce compte est désactivé ou son accès a été refusé.'
 }

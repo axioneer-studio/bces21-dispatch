@@ -34,7 +34,11 @@ export default defineEventHandler(async (event) => {
       },
     })
   } catch (err) {
-    event.node.res.writeHead(302, { 'Location': '/?error=discord_failed' })
+    const fetchError = err as { statusCode?: number; status?: number }
+    const errorCode = fetchError.statusCode === 429 || fetchError.status === 429
+      ? 'discord_rate_limited'
+      : 'discord_failed'
+    event.node.res.writeHead(302, { 'Location': `/?error=${errorCode}` })
     event.node.res.end()
     return
   }
@@ -83,6 +87,18 @@ export default defineEventHandler(async (event) => {
     return
   }
 
-  event.node.res.writeHead(302, { 'Location': redirectUrl })
+  const clearedSessionCookie =
+    `bces_session=; Path=/; HttpOnly; ` +
+    `SameSite=${sameSite}${secure}${domainAttr}; Max-Age=0`
+  const clearedStateCookie = state
+    ? `bces_oauth_state_${state}=; Path=/; HttpOnly; ` +
+      `SameSite=${sameSite}${secure}${domainAttr}; Max-Age=0`
+    : ''
+  event.node.res.writeHead(302, {
+    'Location': redirectUrl,
+    'Set-Cookie': clearedStateCookie
+      ? [clearedSessionCookie, clearedStateCookie]
+      : clearedSessionCookie
+  })
   event.node.res.end()
 })

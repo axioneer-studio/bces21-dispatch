@@ -47,7 +47,6 @@ if (meData.value?.prenom_rp && meData.value?.nom_rp) {
 
 const prenom = ref<string>('')
 const nom = ref<string>('')
-const phone = ref<string>('')
 const error = ref<string | null>(null)
 const loading = ref<boolean>(false)
 const expired = ref<boolean>(false)
@@ -153,19 +152,10 @@ function validateField(value: string): { ok: boolean; message: string | null } {
 const prenomState = computed(() => validateField(prenom.value))
 const nomState = computed(() => validateField(nom.value))
 
-const phoneState = computed(() => {
-  const t = phone.value.trim()
-  if (t === '') return { ok: true, message: null as string | null }
-  if (t.length < 6) return { ok: false, message: '6 chiffres minimum.' }
-  if (!/^[\d\-\+\(\) ]{6,20}$/.test(t)) return { ok: false, message: 'Caractères invalides.' }
-  return { ok: true, message: null as string | null }
-})
-
 const canSubmit = computed<boolean>(
   () =>
     prenomState.value.ok &&
     nomState.value.ok &&
-    phoneState.value.ok &&
     !loading.value &&
     !expired.value
 )
@@ -175,10 +165,9 @@ function loadDraft() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return
-    const data = JSON.parse(raw) as { prenom?: string; nom?: string; phone?: string }
+    const data = JSON.parse(raw) as { prenom?: string; nom?: string }
     if (typeof data.prenom === 'string' && !prenom.value) prenom.value = data.prenom
     if (typeof data.nom === 'string' && !nom.value) nom.value = data.nom
-    if (typeof data.phone === 'string' && !phone.value) phone.value = data.phone
   } catch {
     /* ignore */
   }
@@ -189,7 +178,7 @@ function saveDraft() {
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ prenom: prenom.value, nom: nom.value, phone: phone.value })
+      JSON.stringify({ prenom: prenom.value, nom: nom.value })
     )
   } catch {
     /* ignore */
@@ -226,15 +215,14 @@ async function submit() {
       method: 'POST',
       body: {
         prenomRP: prenom.value.trim(),
-        nomRP: nom.value.trim(),
-        phone: phone.value.trim()
+        nomRP: nom.value.trim()
       },
       credentials: 'include'
     })
     clearDraft()
     if (result.status === 'pending') {
       toast.warning('Profil envoyé. Ton compte est en attente de validation.')
-      await navigateTo('/?status=pending')
+      await navigateTo('/attente')
       return
     }
     toast.success('Compte activé. Bienvenue !')
@@ -268,7 +256,7 @@ onMounted(() => {
   }, 1000)
 })
 
-watch([prenom, nom, phone], () => saveDraft())
+watch([prenom, nom], () => saveDraft())
 
 onBeforeUnmount(() => {
   if (intervalId !== null) clearInterval(intervalId)
@@ -354,7 +342,7 @@ onBeforeUnmount(() => {
       <form class="bces-form" @submit.prevent="submit">
         <div class="bces-grid-2">
           <div class="bces-field">
-            <label for="prenom" class="bces-field__label">Prénom</label>
+            <label for="prenom" class="bces-field__label"><span>Prénom <span class="bces-field__required" aria-hidden="true">*</span></span></label>
             <input
               id="prenom"
               v-model="prenom"
@@ -378,7 +366,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="bces-field">
-            <label for="nom" class="bces-field__label">Nom</label>
+            <label for="nom" class="bces-field__label"><span>Nom <span class="bces-field__required" aria-hidden="true">*</span></span></label>
             <input
               id="nom"
               v-model="nom"
@@ -402,29 +390,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="bces-field">
-          <label for="phone" class="bces-field__label">Téléphone <span class="bces-field__opt">(optionnel)</span></label>
-          <input
-            id="phone"
-            v-model="phone"
-            type="tel"
-            class="bces-input"
-            :class="{
-              'bces-input--ok': phoneState.ok && phone.trim() !== '',
-              'bces-input--err': phoneState.message !== null
-            }"
-            placeholder="555-1234"
-            autocomplete="tel"
-            inputmode="tel"
-            :disabled="expired"
-          />
-          <p
-            v-if="phoneState.message"
-            class="bces-field__hint bces-field__hint--err"
-          >
-            {{ phoneState.message }}
-          </p>
-        </div>
 
         <button
           type="submit"

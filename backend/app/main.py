@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.router import router as auth_router
 from app.config import get_settings
-from app.database import get_db, init_db
+from app.controllers import agenda as agenda_controller
+from app.controllers.dispatch import manager as ws_manager
+from app.database import SessionLocal, get_db, init_db
 from app.deps import get_current_user, user_role_pages
 from app.models import Employee, Grade, User
 from app.routes.administration import router as administration_router
@@ -78,6 +80,25 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def notify_realtime_clients(request, call_next):
+    response = await call_next(request)
+    if (
+        request.url.path.startswith("/api/")
+        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and response.status_code < 400
+    ):
+        await ws_manager.broadcast({"type": "data_changed"})
+        if request.url.path.startswith("/api/agenda/"):
+            async with SessionLocal() as db:
+                events = await agenda_controller.list_events(None, None, db)
+            await ws_manager.broadcast({
+                "type": "agenda_events",
+                "data": [event.model_dump(mode="json") for event in events],
+            })
+    return response
 
 app.add_middleware(
     CORSMiddleware,

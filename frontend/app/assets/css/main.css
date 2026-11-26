@@ -567,6 +567,11 @@ button {
   margin-left: 4px;
 }
 
+.bces-field__required {
+  color: #ec8a86;
+  font-weight: 800;
+}
+
 .bces-toast-stack {
   position: fixed;
   right: 20px;

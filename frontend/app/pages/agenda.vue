@@ -10,6 +10,7 @@ type EventItem = {
   ends_at: string | null
   description: string | null
   color: string
+  is_automatic?: boolean
 }
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
@@ -34,6 +35,7 @@ const views: { value: View; label: string; icon: string }[] = [
 
 const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const cursor = ref(new Date())
+const realtimeRevision = useState<number>('realtime-data-revision', () => 0)
 const view = ref<View>('month')
 const events = ref<EventItem[]>([])
 const loading = ref(true)
@@ -49,6 +51,8 @@ const saving = ref(false)
 const deleting = ref(false)
 const calendarEnabled = ref(true)
 const editingEvent = ref<EventItem | null>(null)
+const viewingEvent = ref<EventItem | null>(null)
+const deleteTarget = ref<EventItem | null>(null)
 
 const form = reactive({
   title: '',
@@ -216,6 +220,7 @@ function toLocalDateTime(value: string) {
 
 function openEditor(date = cursor.value, event?: EventItem) {
   if (!canManageEvents.value) return
+  viewingEvent.value = null
   editingEvent.value = event ?? null
   form.title = event?.title ?? ''
   form.description = event?.description ?? ''
@@ -224,6 +229,15 @@ function openEditor(date = cursor.value, event?: EventItem) {
   form.ends_at = event?.ends_at ? toLocalDateTime(event.ends_at) : ''
   actionError.value = ''
   editorOpen.value = true
+}
+
+function openEventDetails(event: EventItem) {
+  viewingEvent.value = event
+  actionError.value = ''
+}
+
+function closeEventDetails() {
+  viewingEvent.value = null
 }
 
 function closeEditor() {
@@ -243,7 +257,13 @@ async function loadEvents() {
   loadError.value = ''
   authRequired.value = false
   try {
-    events.value = await $fetch<EventItem[]>('/api/agenda/events', { credentials: 'include' })
+    const year = cursor.value.getFullYear()
+    const start = new Date(year - 1, 0, 1).toISOString()
+    const end = new Date(year + 3, 0, 1).toISOString()
+    events.value = await $fetch<EventItem[]>('/api/agenda/events', {
+      credentials: 'include',
+      query: { start, end }
+    })
   } catch (cause) {
     events.value = []
     authRequired.value = isUnauthorized(cause)
@@ -254,6 +274,9 @@ async function loadEvents() {
     loading.value = false
   }
 }
+
+watch(() => cursor.value.getFullYear(), () => void loadEvents())
+watch(realtimeRevision, () => void loadEvents())
 
 async function saveEvent() {
   if (!canManageEvents.value) return
@@ -300,10 +323,16 @@ async function saveEvent() {
   }
 }
 
-async function removeEvent(event: EventItem) {
+function requestDeleteEvent(event: EventItem) {
   if (!canManageEvents.value) return
-  if (!window.confirm(`Supprimer « ${event.title} » de l’agenda ?`)) return
+  viewingEvent.value = null
+  deleteTarget.value = event
   actionError.value = ''
+}
+
+async function removeEvent() {
+  const event = deleteTarget.value
+  if (!event || !canManageEvents.value || deleting.value) return
   deleting.value = true
   try {
     await $fetch(`/api/agenda/events/${event.id}`, {
@@ -314,6 +343,7 @@ async function removeEvent(event: EventItem) {
       editorOpen.value = false
       editingEvent.value = null
     }
+    deleteTarget.value = null
     await loadEvents()
   } catch {
     actionError.value = 'Suppression impossible. Veuillez réessayer.'
@@ -373,7 +403,16 @@ function openMonth(month: number) {
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && editorOpen.value) closeEditor()
+  if (event.key !== 'Escape') return
+  if (deleteTarget.value) {
+    if (!deleting.value) deleteTarget.value = null
+    return
+  }
+  if (viewingEvent.value) {
+    closeEventDetails()
+    return
+  }
+  if (editorOpen.value) closeEditor()
 }
 
 onMounted(() => {
@@ -546,19 +585,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
               </button>
               <span v-else class="month-day__number"><span>{{ date.getDate() }}</span></span>
               <div class="month-day__events">
-                <component
-                  :is="canManageEvents ? 'button' : 'div'"
+                <button
                   v-for="event in eventsFor(date).slice(0, 3)"
                   :key="event.id"
                   type="button"
                   class="month-event"
                   :style="{ '--event-color': event.color || '#58ad7b' }"
-                  :title="`${formatDay(date)} · ${eventTime(event, date)} · ${event.title} — modifier`"
-                  @click="canManageEvents && openEditor(date, event)"
+                  :title="`${formatDay(date)} · ${eventTime(event, date)} · ${event.title}`"
+                  @click="openEventDetails(event)"
                 >
                   <time>{{ eventTime(event, date) }}</time>
                   <span>{{ event.title }}</span>
-                </component>
+                </button>
                 <span v-if="eventsFor(date).length > 3" class="month-day__more">
                   + {{ eventsFor(date).length - 3 }} autre{{ eventsFor(date).length > 4 ? 's' : '' }}
                 </span>
@@ -621,16 +659,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
             </div>
             <div class="upcoming-day__events">
               <article v-for="event in group.events" :key="event.id" class="event-card" :style="{ '--event-color': event.color || '#58ad7b' }">
-                <span class="event-card__accent"></span>
-                <time>{{ eventTime(event, group.date) }}</time>
-                <div class="event-card__content">
-                  <h3>{{ event.title }}</h3>
-                  <p v-if="event.description">{{ event.description }}</p>
-                </div>
-                <button v-if="canManageEvents" type="button" :aria-label="`Modifier ${event.title}`" @click="openEditor(group.date, event)">
+                <button class="event-card__main" type="button" @click="openEventDetails(event)">
+                  <span class="event-card__accent"></span>
+                  <time>{{ eventTime(event, group.date) }}</time>
+                  <div class="event-card__content">
+                    <h3>{{ event.title }}</h3>
+                    <p v-if="event.description">{{ event.description }}</p>
+                  </div>
+                </button>
+                <button v-if="canManageEvents && !event.is_automatic" type="button" :aria-label="`Modifier ${event.title}`" @click.stop="openEditor(group.date, event)">
                   <Icon name="lucide:pencil" size="16" />
                 </button>
-                <button v-if="canManageEvents" type="button" :aria-label="`Supprimer ${event.title}`" @click="removeEvent(event)">
+                <button v-if="canManageEvents && !event.is_automatic" type="button" :aria-label="`Supprimer ${event.title}`" @click.stop="requestDeleteEvent(event)">
                   <Icon name="lucide:trash-2" size="16" />
                 </button>
               </article>
@@ -656,15 +696,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
                 class="event-card"
                 :style="{ '--event-color': event.color || '#58ad7b' }"
               >
-                <time>{{ eventTime(event, date) }}</time>
-                <div class="event-card__content">
-                  <h3>{{ event.title }}</h3>
-                  <p v-if="event.description">{{ event.description }}</p>
-                </div>
-                <button v-if="canManageEvents" type="button" :aria-label="`Modifier ${event.title}`" @click="openEditor(date, event)">
+                <button class="event-card__main" type="button" @click="openEventDetails(event)">
+                  <span class="event-card__accent"></span>
+                  <time>{{ eventTime(event, date) }}</time>
+                  <div class="event-card__content">
+                    <h3>{{ event.title }}</h3>
+                    <p v-if="event.description">{{ event.description }}</p>
+                  </div>
+                </button>
+                <button v-if="canManageEvents && !event.is_automatic" type="button" :aria-label="`Modifier ${event.title}`" @click.stop="openEditor(date, event)">
                   <Icon name="lucide:pencil" size="15" />
                 </button>
-                <button v-if="canManageEvents" type="button" :aria-label="`Supprimer ${event.title}`" @click="removeEvent(event)">
+                <button v-if="canManageEvents && !event.is_automatic" type="button" :aria-label="`Supprimer ${event.title}`" @click.stop="requestDeleteEvent(event)">
                   <Icon name="lucide:trash-2" size="15" />
                 </button>
               </article>
@@ -678,17 +721,59 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
       </section>
     </div>
 
+    <div v-if="viewingEvent" class="agenda-modal" @click.self="closeEventDetails">
+      <section class="agenda-dialog agenda-dialog--detail" role="dialog" aria-modal="true" aria-labelledby="agenda-detail-title">
+        <header class="agenda-dialog__header">
+          <span class="agenda-dialog__icon"><Icon name="lucide:calendar-days" size="18" /></span>
+          <div class="agenda-dialog__heading">
+            <h2 id="agenda-detail-title">{{ viewingEvent.title }}</h2>
+            <p>Détails de l’événement</p>
+          </div>
+          <button type="button" aria-label="Fermer" @click="closeEventDetails">
+            <Icon name="lucide:x" size="19" />
+          </button>
+        </header>
+        <div class="agenda-detail__body">
+          <section class="agenda-detail__section">
+            <span>Date et heure</span>
+            <strong>
+              {{ new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(viewingEvent.starts_at)) }}
+              <template v-if="viewingEvent.ends_at">
+                <span> – </span>{{ new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(viewingEvent.ends_at)) }}
+              </template>
+            </strong>
+          </section>
+          <section class="agenda-detail__section">
+            <span>Description</span>
+            <p>{{ viewingEvent.description?.trim() || 'Aucune description.' }}</p>
+          </section>
+        </div>
+        <footer class="agenda-dialog__footer">
+          <button v-if="canManageEvents && !viewingEvent.is_automatic" type="button" class="agenda-button agenda-button--danger" @click="requestDeleteEvent(viewingEvent)">
+            <Icon name="lucide:trash-2" size="15" /> Supprimer
+          </button>
+          <span class="agenda-dialog__footer-spacer"></span>
+          <button type="button" class="agenda-button agenda-button--quiet" @click="closeEventDetails">Fermer</button>
+          <button v-if="canManageEvents && !viewingEvent.is_automatic" type="button" class="agenda-button agenda-button--primary" @click="openEditor(new Date(viewingEvent.starts_at), viewingEvent)">
+            <Icon name="lucide:pencil" size="14" /> Modifier
+          </button>
+        </footer>
+      </section>
+    </div>
+
     <div v-if="editorOpen" class="agenda-modal" @click.self="closeEditor">
       <form class="agenda-dialog" @submit.prevent="saveEvent">
         <header class="agenda-dialog__header">
-          <div>
-            <span class="agenda-dialog__eyebrow">{{ editingEvent ? 'MODIFIER' : 'NOUVEL' }} ÉVÉNEMENT</span>
+          <span class="agenda-dialog__icon"><Icon :name="editingEvent ? 'lucide:pencil' : 'lucide:calendar-plus'" size="18" /></span>
+          <div class="agenda-dialog__heading">
             <h2>{{ editingEvent ? 'Modifier le rendez-vous' : 'Créer un événement' }}</h2>
+            <p>{{ editingEvent ? 'Modifiez les informations de l’événement.' : 'Ajoutez un événement à l’agenda partagé.' }}</p>
           </div>
           <button type="button" aria-label="Fermer" @click="closeEditor">
             <Icon name="lucide:x" size="19" />
           </button>
         </header>
+        <div class="agenda-dialog__body">
         <label class="agenda-field">
           <span>Titre <i>*</i></span>
           <input v-model="form.title" required maxlength="120" autofocus placeholder="Ex. Réunion d’équipe" />
@@ -712,13 +797,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
           <input v-model="form.color" type="color" aria-label="Couleur de l’événement" />
         </label>
         <p v-if="actionError" class="agenda-dialog__error" role="alert">{{ actionError }}</p>
+        </div>
         <footer class="agenda-dialog__footer">
           <button
             v-if="editingEvent"
             type="button"
             class="agenda-button agenda-button--danger"
             :disabled="saving || deleting"
-            @click="removeEvent(editingEvent)"
+            @click="requestDeleteEvent(editingEvent)"
           >
             <Icon v-if="deleting" name="lucide:loader-circle" size="15" class="is-spinning" />
             <Icon v-else name="lucide:trash-2" size="15" />
@@ -732,6 +818,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
           </button>
         </footer>
       </form>
+    </div>
+
+    <div v-if="deleteTarget" class="agenda-modal" @click.self="!deleting && (deleteTarget = null)">
+      <section class="agenda-dialog agenda-dialog--confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title">
+        <header class="agenda-dialog__header">
+          <span class="agenda-dialog__icon agenda-dialog__icon--danger"><Icon name="lucide:trash-2" size="18" /></span>
+          <div class="agenda-dialog__heading">
+            <h2 id="delete-dialog-title">Supprimer l’événement ?</h2>
+            <p>Cette action est définitive.</p>
+          </div>
+          <button type="button" aria-label="Fermer" :disabled="deleting" @click="deleteTarget = null; actionError = ''">
+            <Icon name="lucide:x" size="19" />
+          </button>
+        </header>
+        <div class="agenda-confirm__body">
+          <p>Confirmer la suppression de <strong>{{ deleteTarget.title }}</strong> ?</p>
+          <p v-if="actionError" class="agenda-dialog__error" role="alert">{{ actionError }}</p>
+        </div>
+        <footer class="agenda-dialog__footer">
+          <span class="agenda-dialog__footer-spacer"></span>
+          <button type="button" class="agenda-button agenda-button--quiet" :disabled="deleting" @click="deleteTarget = null; actionError = ''">Annuler</button>
+          <button type="button" class="agenda-button agenda-button--danger agenda-button--danger-solid" :disabled="deleting" @click="removeEvent">
+            <Icon v-if="deleting" name="lucide:loader-circle" size="15" class="is-spinning" />
+            <Icon v-else name="lucide:trash-2" size="15" />
+            {{ deleting ? 'Suppression…' : 'Supprimer' }}
+          </button>
+        </footer>
+      </section>
     </div>
   </main>
 </template>
@@ -965,15 +1079,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 .upcoming-day__date strong { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid var(--agenda-border); border-radius: 9px; color: var(--agenda-text); background: var(--agenda-bg); font-size: 16px; }
 .upcoming-day__date > span { padding-top: 3px; color: var(--agenda-muted); font-size: 10px; text-transform: capitalize; }
 .upcoming-day__events { display: grid; gap: 8px; }
-.event-card { display: flex; align-items: flex-start; gap: 13px; min-width: 0; padding: 12px; border: 1px solid var(--agenda-border); border-radius: 8px; background: #151a1f; }
+.event-card { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--agenda-border); border-radius: 8px; background: #151a1f; }
+.event-card__main { display: flex; flex: 1; align-items: flex-start; gap: 13px; min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.event-card__main:focus-visible { outline: 2px solid var(--agenda-accent); outline-offset: 3px; }
 .event-card__accent { width: 3px; min-height: 34px; flex: 0 0 3px; margin: 1px 0; border-radius: 3px; background: var(--event-color); }
-.event-card > time { flex: 0 0 auto; padding-top: 2px; color: var(--agenda-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.event-card__main > time { flex: 0 0 auto; padding-top: 2px; color: var(--agenda-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .event-card__content { flex: 1; min-width: 0; }
 .event-card__content h3 { font-size: 12px; font-weight: 650; }
 .event-card__content p { margin-top: 4px; color: var(--agenda-muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; }
-.event-card > button { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; border-radius: 6px; color: var(--agenda-dim); }
-.event-card > button:hover { color: var(--agenda-accent); background: rgba(101, 189, 137, .09); }
-.event-card > button:last-child:hover { color: #e78d87; background: rgba(226, 120, 114, .09); }
+.event-card > button:not(.event-card__main) { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; border-radius: 6px; color: var(--agenda-dim); }
+.event-card > button:not(.event-card__main):hover { color: var(--agenda-accent); background: rgba(101, 189, 137, .09); }
+.event-card > button:not(.event-card__main):last-child:hover { color: #e78d87; background: rgba(226, 120, 114, .09); }
 .agenda-empty { display: flex; min-height: 280px; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
 .agenda-empty > span { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid var(--agenda-border); border-radius: 14px; color: var(--agenda-accent); background: rgba(101, 189, 137, .08); }
 .agenda-empty h3 { font-size: 14px; }
@@ -988,20 +1104,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 .week-day.is-today .week-day__header > strong { color: #0d1710; background: var(--agenda-accent); }
 .week-day__events { display: grid; align-content: start; gap: 8px; min-height: 140px; padding: 10px 8px; }
 .week-day__events .event-card { flex-wrap: wrap; gap: 8px; padding: 9px; }
+.week-day__events .event-card__main { flex-basis: calc(100% - 70px); flex-wrap: wrap; gap: 8px; }
 .week-day__events .event-card__accent { display: none; }
-.week-day__events .event-card > time { width: 100%; color: var(--event-color); font-weight: 650; }
+.week-day__events .event-card__main > time { width: 100%; color: var(--event-color); font-weight: 650; }
 .week-day__events .event-card__content { flex-basis: calc(100% - 70px); }
-.week-day__events .event-card > button { margin-left: auto; }
+.week-day__events .event-card > button:not(.event-card__main) { margin-left: auto; }
 .week-day__empty { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; border: 1px dashed var(--agenda-border); border-radius: 6px; color: var(--agenda-dim); font-size: 10px; }
 .week-day__empty:hover { border-color: rgba(101, 189, 137, .4); color: var(--agenda-accent); }
 
-.agenda-modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(5, 8, 10, .76); backdrop-filter: blur(5px); }
-.agenda-dialog { width: min(510px, 100%); padding: 23px; border: 1px solid #35404b; border-radius: 12px; background: #171d23; box-shadow: 0 26px 80px rgba(0, 0, 0, .5); }
-.agenda-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 22px; }
-.agenda-dialog__eyebrow { color: var(--agenda-accent); font-size: 9px; font-weight: 750; letter-spacing: .13em; }
-.agenda-dialog__header h2 { margin-top: 5px; font-size: 17px; font-weight: 650; }
-.agenda-dialog__header > button { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 6px; color: var(--agenda-muted); }
-.agenda-dialog__header > button:hover { color: var(--agenda-text); background: var(--agenda-surface-raised); }
+.agenda-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow-y: auto; padding: 24px; background: rgba(5, 8, 11, .72); backdrop-filter: blur(8px); }
+.agenda-dialog { display: flex; width: min(520px, 94%); max-height: 90vh; flex-direction: column; overflow: hidden; padding: 0; border: 1px solid var(--agenda-border); border-radius: 16px; background: var(--agenda-surface); color: var(--agenda-text); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }
+.agenda-dialog__header { display: flex; align-items: center; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--agenda-border); background: var(--agenda-surface-raised); }
+.agenda-dialog__icon { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border: 1px solid rgba(101, 189, 137, .28); border-radius: 10px; color: var(--agenda-accent); background: rgba(101, 189, 137, .12); }
+.agenda-dialog__icon--danger { border-color: rgba(226, 120, 114, .3); color: #e78d87; background: rgba(226, 120, 114, .1); }
+.agenda-dialog__heading { min-width: 0; flex: 1; }
+.agenda-dialog__header h2 { margin: 0; color: var(--agenda-text); font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.agenda-dialog__header p { margin: 3px 0 0; color: var(--agenda-muted); font-size: 12px; line-height: 1.4; }
+.agenda-dialog__header > button { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border: 1px solid var(--agenda-border); border-radius: 8px; color: var(--agenda-muted); background: transparent; }
+.agenda-dialog__header > button:hover:not(:disabled) { color: var(--agenda-text); background: var(--agenda-surface); }
+.agenda-dialog__header > button:disabled { opacity: .5; }
+.agenda-dialog__body { display: grid; gap: 16px; overflow-y: auto; padding: 20px 24px; }
+.agenda-dialog__body > .agenda-field { margin: 0; }
+.agenda-dialog__dates .agenda-field { margin: 0; }
 .agenda-field { display: grid; gap: 7px; margin: 14px 0; color: var(--agenda-muted); font-size: 11px; font-weight: 550; }
 .agenda-field > span i { color: #e78d87; font-style: normal; }
 .agenda-field input:not([type='color']), .agenda-field textarea { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid #35404b; border-radius: 6px; outline: none; color: var(--agenda-text); background: #101419; font-size: 12px; }
@@ -1011,7 +1135,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 .agenda-field--color { grid-template-columns: 1fr auto; align-items: center; }
 .agenda-field--color input { width: 37px; height: 29px; padding: 2px; border: 1px solid #35404b; border-radius: 5px; background: #101419; }
 .agenda-dialog__error { margin: 10px 0 0; color: #f0a29d; font-size: 11px; }
-.agenda-dialog__footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--agenda-border); }
+.agenda-dialog__footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: auto; padding: 14px 24px; border-top: 1px solid var(--agenda-border); }
 .agenda-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 7px; padding: 0 13px; border: 1px solid transparent; border-radius: 6px; font-size: 11px; font-weight: 650; }
 .agenda-button:disabled { cursor: wait; opacity: .65; }
 .agenda-button--quiet { border-color: var(--agenda-border); color: var(--agenda-muted); }
@@ -1019,8 +1143,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 .agenda-dialog__footer-spacer { flex: 1; }
 .agenda-button--danger { border-color: rgba(226, 120, 114, .28); color: #e78d87; }
 .agenda-button--danger:hover:not(:disabled) { border-color: rgba(226, 120, 114, .5); background: rgba(226, 120, 114, .09); }
+.agenda-button--danger-solid { border-color: #b95e59; color: #1c0b0a; background: #e78d87; }
+.agenda-button--danger-solid:hover:not(:disabled) { border-color: #d17670; background: #f0a29d; }
 .agenda-button--primary { border-color: #4a9b69; color: #08130b; background: var(--agenda-accent); }
 .agenda-button--primary:hover:not(:disabled) { background: #81d29f; }
+.agenda-detail__body, .agenda-confirm__body { display: grid; gap: 18px; overflow-y: auto; padding: 20px 24px; }
+.agenda-detail__section { display: grid; gap: 7px; padding: 14px 16px; border: 1px solid var(--agenda-border); border-radius: 10px; background: var(--agenda-bg); }
+.agenda-detail__section > span { color: var(--agenda-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.agenda-detail__section > strong { color: var(--agenda-accent); font-size: 13px; font-weight: 650; line-height: 1.5; text-transform: capitalize; }
+.agenda-detail__section > p, .agenda-confirm__body > p { margin: 0; color: var(--agenda-text); font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.agenda-confirm__body > p strong { color: var(--agenda-text); }
+.agenda-confirm__body > .agenda-dialog__error { color: #f0a29d; font-size: 11px; }
+.agenda-dialog--confirm { width: min(520px, 94%); }
 .is-spinning { animation: agenda-spin .75s linear infinite; }
 
 @media (max-width: 1100px) {
@@ -1030,6 +1164,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 }
 
 @media (max-width: 760px) {
+  .agenda-modal { padding: 12px; }
+  .agenda-dialog { width: 100%; max-height: 94vh; }
+  .agenda-dialog__header { gap: 11px; padding: 16px; }
+  .agenda-dialog__body, .agenda-detail__body, .agenda-confirm__body { gap: 13px; padding: 16px; }
+  .agenda-dialog__footer { flex-wrap: wrap; padding: 12px 16px; }
+  .agenda-dialog__footer > button { flex: 1; }
+  .agenda-dialog__dates { grid-template-columns: 1fr; gap: 13px; }
   .agenda-page { height: auto; min-height: 100%; overflow: visible; }
   .agenda-header { flex-basis: 52px; padding: 0 15px; }
   .agenda-heading { gap: 9px; }

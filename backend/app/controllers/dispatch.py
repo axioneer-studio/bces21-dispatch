@@ -275,17 +275,21 @@ class ConnectionManager:
         self.active: set = set()
         self._lock = asyncio.Lock()
         self._send_locks: dict[Any, asyncio.Lock] = {}
+        self._user_ids: dict[Any, int] = {}
 
-    async def connect(self, ws) -> None:
+    async def connect(self, ws, user_id: int | None = None) -> None:
         await ws.accept()
         async with self._lock:
             self.active.add(ws)
             self._send_locks[ws] = asyncio.Lock()
+            if user_id is not None:
+                self._user_ids[ws] = user_id
 
     async def disconnect(self, ws) -> None:
         async with self._lock:
             self.active.discard(ws)
             self._send_locks.pop(ws, None)
+            self._user_ids.pop(ws, None)
 
     async def send(self, ws, message: dict[str, Any]) -> None:
         async with self._lock:
@@ -312,6 +316,16 @@ class ConnectionManager:
                 await self.send(ws, message)
             except Exception:
                 pass
+
+    async def revoke_user(self, user_id: int) -> None:
+        async with self._lock:
+            clients = [ws for ws, connected_user_id in self._user_ids.items() if connected_user_id == user_id]
+        for ws in clients:
+            try:
+                await self.send(ws, {"type": "account_revoked"})
+                await ws.close(code=4403, reason="Compte désactivé ou supprimé")
+            except Exception:
+                await self.disconnect(ws)
 
 
 manager = ConnectionManager()

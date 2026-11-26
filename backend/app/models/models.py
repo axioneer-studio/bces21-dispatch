@@ -115,6 +115,13 @@ class Employee(Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     arrival_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    diploma: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    boat_license: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    boat_license_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    helicopter_license: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    helicopter_license_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     competencies: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     account_user_id: Mapped[int | None] = mapped_column(
