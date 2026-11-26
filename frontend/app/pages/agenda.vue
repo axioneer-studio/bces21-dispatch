@@ -50,6 +50,7 @@ const editorOpen = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const calendarEnabled = ref(true)
+const birthdaysEnabled = ref(true)
 const editingEvent = ref<EventItem | null>(null)
 const viewingEvent = ref<EventItem | null>(null)
 const deleteTarget = ref<EventItem | null>(null)
@@ -124,7 +125,10 @@ const monthDays = computed(() => {
   })
 })
 
-const visibleEvents = computed(() => calendarEnabled.value ? events.value : [])
+const visibleEvents = computed(() => events.value.filter(event => {
+  if (event.is_automatic) return birthdaysEnabled.value
+  return calendarEnabled.value
+}))
 const upcomingEvents = computed(() => visibleEvents.value
   .filter(event => {
     const todayStart = new Date()
@@ -498,6 +502,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
             <span class="agenda-calendar-toggle__swatch"></span>
             <span>Agenda partagé</span>
             <Icon v-if="calendarEnabled" name="lucide:check" size="13" />
+          </label>
+          <label class="agenda-calendar-toggle agenda-calendar-toggle--birthdays">
+            <input v-model="birthdaysEnabled" type="checkbox">
+            <span class="agenda-calendar-toggle__swatch"></span>
+            <span>Anniversaires</span>
+            <Icon v-if="birthdaysEnabled" name="lucide:check" size="13" />
           </label>
         </section>
 
@@ -999,6 +1009,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 .agenda-calendar-toggle input:not(:checked) + .agenda-calendar-toggle__swatch { background: transparent; }
 .agenda-calendar-toggle > span:nth-of-type(2) { flex: 1; }
 .agenda-calendar-toggle > svg { color: var(--agenda-accent); }
+.agenda-calendar-toggle--birthdays .agenda-calendar-toggle__swatch {
+  border-color: #d69e38;
+  background: #d69e38;
+}
+.agenda-calendar-toggle--birthdays input:not(:checked) + .agenda-calendar-toggle__swatch {
+  background: transparent;
+}
+.agenda-calendar-toggle--birthdays > svg { color: #d69e38; }
 .agenda-sidebar__summary { display: flex; align-items: center; gap: 10px; margin-top: 25px; padding: 13px 10px; border-top: 1px solid var(--agenda-border); }
 .agenda-sidebar__summary-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 8px; color: var(--agenda-accent); background: rgba(101, 189, 137, .1); }
 .agenda-sidebar__summary p { color: var(--agenda-muted); font-size: 11px; }

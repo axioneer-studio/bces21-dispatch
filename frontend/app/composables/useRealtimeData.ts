@@ -5,6 +5,7 @@ export interface RealtimeAgendaEvent {
   ends_at: string | null
   description: string | null
   color: string
+  is_automatic?: boolean
 }
 
 export function useRealtimeData() {
