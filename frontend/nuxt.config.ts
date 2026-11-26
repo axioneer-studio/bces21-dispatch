@@ -50,7 +50,7 @@ export default defineNuxtConfig({
             "Dispatch BCES - Plateforme web tout-en-un dédiée à la gestion opérationnelle des services de secours, centralisant les interventions, les équipes, les effectifs, les véhicules, les ressources et l'ensemble des opérations quotidiennes au sein d'une interface unique.",
         },
         { property: "og:type", content: "website" },
-        { property: "og:url", content: "https://bces21-dispatch.axioneer.com" },
+        { property: "og:url", content: "https://bces.axioneer.com" },
         {
           property: "og:image",
           content:
