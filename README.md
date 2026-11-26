@@ -795,11 +795,14 @@ un pôle et un module peuvent avoir le même.
 - En production, `NUXT_PUBLIC_API_BASE` doit être l'URL HTTPS publique du
   backend (`API_URL` dans la configuration Docker/Coolify), pour les requêtes
   API directes et le WebSocket.
-- **Authentification** : le cookie et l'accès Dispatch sont vérifiés avant
-  l'`accept()`. En cas d'échec, la connexion est close avec le code `1008` (le client arrête
-  alors de se reconnecter).
+- **Authentification** : le cookie de session et le statut actif sont vérifiés avant
+  l'`accept()`. Les comptes actifs peuvent recevoir les invalidations générales ; le
+  snapshot Dispatch initial est envoyé uniquement aux comptes qui ont accès à Dispatch.
 - **Messages serveur** : `{"type": "snapshot", "data": {slots, radios, state}}`
   envoyé à la connexion puis à chaque mutation REST ou changement de statut.
+- **Invalidation générale** : `{"type": "data_changed"}` après chaque mutation API
+  réussie. Les pages ouvertes rechargent leurs propres données autorisées ; le message
+  ne contient aucune donnée métier.
 - **Keep-alive** : le client envoie `"ping"` toutes les 25 s, le serveur répond
   `{"type": "pong"}`.
 - **Reconnexion** : back-off exponentiel (1 s → 30 s max).

@@ -24,7 +24,6 @@ class HealthResponse(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     prenomRP: str = Field(min_length=2, max_length=120)
     nomRP: str = Field(min_length=2, max_length=120)
-    phone: str = Field(default="", max_length=20)
 
     @field_validator("prenomRP", "nomRP")
     @classmethod
@@ -35,17 +34,6 @@ class ProfileUpdateRequest(BaseModel):
                 "Caractères autorisés : lettres, espaces, tirets, apostrophes."
             )
         return trimmed
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: str) -> str:
-        trimmed = value.strip()
-        if not trimmed:
-            return ""
-        if not _PHONE_PATTERN.match(trimmed):
-            raise ValueError("Numéro de téléphone invalide.")
-        return trimmed
-
 
 class UserResponse(BaseModel):
     id: int
@@ -148,6 +136,13 @@ class EmployeeOut(BaseModel):
     phone: str | None
     email: str | None = None
     arrival_date: date | None = None
+    gender: Literal["homme", "femme", "autre"] | None = None
+    birth_date: date | None = None
+    diploma: bool = False
+    boat_license: bool = False
+    boat_license_date: date | None = None
+    helicopter_license: bool = False
+    helicopter_license_date: date | None = None
     competencies: list[str]
     is_active: bool
     account_user_id: int | None
@@ -183,6 +178,13 @@ class EmployeeCreateRequest(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=254)
     arrival_date: date | None = None
+    gender: Literal["homme", "femme", "autre"] | None = None
+    birth_date: date | None = None
+    diploma: bool = False
+    boat_license: bool = False
+    boat_license_date: date | None = None
+    helicopter_license: bool = False
+    helicopter_license_date: date | None = None
     competencies: list[str] = Field(default_factory=list, max_length=20)
     grade_id: int | None = None
     account_user_id: int | None = None
@@ -230,6 +232,13 @@ class EmployeeUpdateRequest(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=254)
     arrival_date: date | None = None
+    gender: Literal["homme", "femme", "autre"] | None = None
+    birth_date: date | None = None
+    diploma: bool | None = None
+    boat_license: bool | None = None
+    boat_license_date: date | None = None
+    helicopter_license: bool | None = None
+    helicopter_license_date: date | None = None
     competencies: list[str] | None = Field(default=None, max_length=20)
     is_active: bool | None = None
     grade_id: int | None = None
@@ -924,6 +933,7 @@ class AgendaEventOut(BaseModel):
     color: str
     created_at: datetime
     updated_at: datetime
+    is_automatic: bool = False
 
 
 class MorgueEntryCreate(BaseModel):

@@ -174,6 +174,18 @@ const [
 const users = ref<AppUser[]>(initialUsers.value ?? [])
 const roles = ref<AppRole[]>(initialRoles.value ?? [])
 const registrations = ref<Registration[]>(initialRequests.value?.users ?? [])
+const realtimeRevision = useState<number>('realtime-data-revision', () => 0)
+async function refreshRegistrations() {
+  try {
+    const result = await $fetch<{ users: Registration[]; count: number }>('/api/auth/pending', {
+      credentials: 'include'
+    })
+    registrations.value = result.users
+  } catch {
+    // Une erreur temporaire ne doit pas effacer les demandes déjà affichées.
+  }
+}
+watch(realtimeRevision, () => void refreshRegistrations())
 const settings = reactive<AppSettings>(initialSettings.value ?? { registration_open: true })
 const persistedRegistrationOpen = ref(settings.registration_open)
 
@@ -493,6 +505,7 @@ async function resolveRegistration(registration: Registration, action: 'approve'
       credentials: 'include'
     })
     registrations.value = registrations.value.filter((item) => item.id !== registration.id)
+    await refreshNuxtData('sidebar-pending-registrations')
     const user = users.value.find((item) => item.id === registration.id)
     if (user) user.status = action === 'approve' ? 'active' : 'rejected'
     else await refreshUsers()
@@ -1718,7 +1731,7 @@ function statusLabel(status: string) {
 
 <style scoped>
 .admin-page { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: clamp(22px, 4vw, 48px); background: radial-gradient(ellipse at 86% 0, rgba(70, 153, 109, .11), transparent 40%), var(--dp-bg); }
-.admin-header, .admin-section, .admin-error { width: min(1180px, 100%); margin-right: auto; margin-left: auto; }
+.admin-header, .admin-section, .admin-error { width: 100%; margin-right: 0; margin-left: 0; }
 .admin-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 22px; padding: clamp(22px, 3vw, 34px); border: 1px solid var(--dp-line); border-radius: 22px; background: linear-gradient(110deg, rgba(70, 153, 109, .12), transparent 72%), var(--dp-panel); box-shadow: 0 18px 48px rgba(0, 0, 0, .16); }
 .admin-eyebrow { margin-bottom: 9px; color: var(--dp-accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
 .admin-header h1 { margin: 0; font-size: clamp(28px, 3.2vw, 38px); letter-spacing: -.04em; }
@@ -1726,14 +1739,14 @@ function statusLabel(status: string) {
 .admin-count { display: grid; min-width: 112px; grid-template-columns: auto auto; align-items: center; gap: 3px 9px; padding: 13px 15px; border: 1px solid var(--dp-line); border-radius: 13px; background: rgba(15, 18, 22, .45); color: var(--dp-accent); }
 .admin-count strong { color: var(--dp-text); font-size: 20px; font-variant-numeric: tabular-nums; }.admin-count span { grid-column: 2; color: var(--dp-text-2); font-size: 10px; }
 .admin-overview { display: flex; gap: 9px; }.admin-count--muted { color: var(--dp-text-dim); }.admin-count--warning { color: var(--dp-warn); }
-.admin-nav { display: flex; gap: 6px; width: min(1180px, 100%); margin: 0 auto 16px; padding: 7px; overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel); }
+.admin-nav { display: flex; gap: 6px; width: 100%; margin: 0 0 16px; padding: 7px; overflow-x: auto; border: 1px solid var(--dp-line); border-radius: 14px; background: var(--dp-panel); }
 .admin-nav button { position: relative; display: inline-flex; min-height: 42px; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid transparent; border-radius: 9px; color: var(--dp-text-2); background: transparent; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; }
 .admin-nav button:hover { color: var(--dp-text); background: var(--dp-panel-2); }
 .admin-nav button.is-active { border-color: var(--dp-accent-line); color: var(--dp-accent); background: var(--dp-accent-soft); }
 .admin-nav button:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: -2px; }
 .admin-nav button span { display: grid; min-width: 20px; height: 20px; place-items: center; border: 1px solid var(--dp-line); border-radius: 10px; color: var(--dp-text); background: var(--dp-panel-3); font-size: 9px; font-variant-numeric: tabular-nums; }
 .admin-nav button.is-active span { border-color: var(--dp-accent-line); color: var(--dp-accent); background: rgba(70, 153, 109, .13); }
-.admin-section { min-height: 300px; margin: 0 auto 16px; padding: clamp(18px, 3vw, 28px); border: 1px solid var(--dp-line); border-radius: 18px; background: linear-gradient(140deg, rgba(255,255,255,.025), transparent 55%), var(--dp-panel); box-shadow: 0 16px 40px rgba(0, 0, 0, .14); }
+.admin-section { min-height: 300px; margin: 0 0 16px; padding: clamp(18px, 3vw, 28px); border: 1px solid var(--dp-line); border-radius: 18px; background: linear-gradient(140deg, rgba(255,255,255,.025), transparent 55%), var(--dp-panel); box-shadow: 0 16px 40px rgba(0, 0, 0, .14); }
 .admin-section__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }.admin-section h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
 .admin-section__intro { display: flex; align-items: center; gap: 12px; }
 .admin-section__icon { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border: 1px solid var(--dp-accent-line); border-radius: 13px; color: var(--dp-accent); background: var(--dp-accent-soft); }

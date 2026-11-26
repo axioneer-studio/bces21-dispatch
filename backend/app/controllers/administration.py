@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.controllers.dispatch import push_employees_changed
+from app.controllers.dispatch import manager as ws_manager, push_employees_changed
 from app.deps import PAGE_KEYS, user_has_page_access
 from app.models import ApplicationSetting, Employee, Role, User, user_roles
 from app.schemas import (
@@ -210,6 +210,8 @@ async def set_user_activation(
         await _ensure_another_admin_remains(db, target)
     target.status = "active" if payload.is_active else "disabled"
     await db.commit()
+    if not payload.is_active:
+        await ws_manager.revoke_user(target.id)
     return MessageResponse(
         message="Compte activé." if payload.is_active else "Compte désactivé."
     )
@@ -236,6 +238,7 @@ async def delete_user(
 
     await db.delete(target)
     await db.commit()
+    await ws_manager.revoke_user(user_id)
     if employee is not None:
         await push_employees_changed()
     return MessageResponse(message="Compte utilisateur supprimé.")

@@ -78,6 +78,13 @@ _EMPLOYEE_ALTER_STATEMENTS = [
     "ALTER TABLE employees ADD COLUMN grade_id INTEGER REFERENCES grades(id) ON DELETE SET NULL",
     "ALTER TABLE employees ADD COLUMN email VARCHAR(254)",
     "ALTER TABLE employees ADD COLUMN arrival_date DATE",
+    "ALTER TABLE employees ADD COLUMN gender VARCHAR(12)",
+    "ALTER TABLE employees ADD COLUMN birth_date DATE",
+    "ALTER TABLE employees ADD COLUMN diploma BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE employees ADD COLUMN boat_license BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE employees ADD COLUMN boat_license_date DATE",
+    "ALTER TABLE employees ADD COLUMN helicopter_license BOOLEAN DEFAULT FALSE NOT NULL",
+    "ALTER TABLE employees ADD COLUMN helicopter_license_date DATE",
 ]
 
 _GRADE_ALTER_STATEMENTS = [
@@ -193,6 +200,21 @@ async def _run_employee_migrations(conn) -> None:
                 await conn.execute(text(stmt))
         except Exception:
             pass
+    await conn.execute(
+        text(
+            "UPDATE employees SET diploma = FALSE WHERE diploma IS NULL"
+        )
+    )
+    await conn.execute(
+        text(
+            "UPDATE employees SET boat_license = FALSE WHERE boat_license IS NULL"
+        )
+    )
+    await conn.execute(
+        text(
+            "UPDATE employees SET helicopter_license = FALSE WHERE helicopter_license IS NULL"
+        )
+    )
 
 
 async def _run_grade_migrations(conn) -> None:

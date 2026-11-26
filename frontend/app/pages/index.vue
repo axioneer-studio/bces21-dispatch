@@ -4,7 +4,7 @@ useHead({ title: 'Connexion • BCES' })
 const config = useRuntimeConfig()
 const toast = useAppToast()
 
-onMounted(() => {
+onMounted(async () => {
   const query = new URLSearchParams(window.location.search)
   const code = query.get('error')
   if (code) {
@@ -13,8 +13,7 @@ onMounted(() => {
     window.history.replaceState({}, '', window.location.pathname)
   }
   if (query.get('status') === 'pending') {
-    toast.warning(useErrorMessage('account_pending') ?? 'Compte en attente de validation.')
-    window.history.replaceState({}, '', window.location.pathname)
+    await navigateTo('/attente', { replace: true })
   }
 })
 </script>

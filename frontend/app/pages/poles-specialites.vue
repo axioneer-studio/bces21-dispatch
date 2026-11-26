@@ -356,15 +356,14 @@ function restoreCollapsed() {
   }
 }
 
-let refreshTimer: ReturnType<typeof setInterval> | undefined
+const realtimeRevision = useState<number>('realtime-data-revision', () => 0)
+watch(realtimeRevision, refresh)
 onMounted(() => {
   restoreCollapsed()
   void load()
-  refreshTimer = setInterval(refresh, 10_000)
   window.addEventListener('focus', refresh)
 })
 onBeforeUnmount(() => {
-  clearInterval(refreshTimer)
   window.removeEventListener('focus', refresh)
 })
 </script>

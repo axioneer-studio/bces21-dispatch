@@ -22,6 +22,26 @@ const { data: currentUser } = await useAsyncData('sidebar-current-user', async (
     return null
   }
 })
+const canViewRegistrations = computed(() => Boolean(
+  currentUser.value?.is_super_admin || currentUser.value?.page_access.includes('administration')
+))
+const { data: pendingRegistrationCount, refresh: refreshPendingRegistrationCount } = await useAsyncData(
+  'sidebar-pending-registrations',
+  async () => {
+    if (!canViewRegistrations.value) return 0
+    try {
+      const requestFetch = import.meta.server ? useRequestFetch() : $fetch
+      const result = await requestFetch<{ count: number }>('/api/auth/pending', {
+        credentials: 'include',
+        headers: requestHeaders
+      })
+      return result.count
+    } catch {
+      return 0
+    }
+  }
+)
+const realtimeRevision = useState<number>('realtime-data-revision', () => 0)
 
 const modeOptions: ReadonlyArray<{ value: SidebarMode; label: string; icon: string }> = [
   { value: 'collapsed', label: 'Réduite', icon: 'lucide:panel-left-close' },
@@ -123,6 +143,12 @@ watch(settingsOpen, (open) => {
 
 const toast = useAppToast()
 const route = useRoute()
+watch(() => route.fullPath, () => {
+  if (canViewRegistrations.value) void refreshPendingRegistrationCount()
+})
+watch(realtimeRevision, () => {
+  if (canViewRegistrations.value) void refreshPendingRegistrationCount()
+})
 const togglingSuperAdmin = ref(false)
 const superAdminEnabled = computed(() => Boolean(currentUser.value?.super_admin_enabled))
 const superAdminLabel = computed(() =>
@@ -186,6 +212,12 @@ async function logout() {
       >
         <Icon :name="item.icon" size="20" />
         <span v-if="expanded" class="sidebar__label">{{ item.label }}</span>
+        <span
+          v-if="item.page === 'administration' && pendingRegistrationCount > 0"
+          class="sidebar__badge"
+          :class="{ 'sidebar__badge--expanded': expanded }"
+          :aria-label="`${pendingRegistrationCount} inscription${pendingRegistrationCount > 1 ? 's' : ''} à valider`"
+        >{{ pendingRegistrationCount }}</span>
         <span v-if="expanded" class="sidebar__link-indicator" aria-hidden="true" />
       </NuxtLink>
     </nav>
@@ -511,6 +543,34 @@ async function logout() {
   width: 3px;
   background: transparent;
   transition: background 0.15s ease;
+}
+
+.sidebar__badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  padding: 0 4px;
+  border: 1px solid var(--dp-panel-2);
+  border-radius: 999px;
+  color: #fff;
+  background: #d9534f;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar__badge--expanded {
+  position: static;
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  margin-left: auto;
+  font-size: 10px;
 }
 
 .sidebar__link--button {

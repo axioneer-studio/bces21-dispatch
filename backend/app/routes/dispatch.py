@@ -11,6 +11,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.session import decode_token, get_session_cookie_name
+from app.controllers import agenda as ca
 from app.controllers import dispatch as cd
 from app.database import SessionLocal
 from app.deps import get_db, require_page_access, user_has_page_access
@@ -65,17 +66,24 @@ async def dispatch_ws(
         if (
             not user
             or (user.status or "active") != "active"
-            or not user_has_page_access(user, "dispatch")
         ):
             await ws.close(code=1008, reason="Compte non autorisé")
             return
 
-    await cd.manager.connect(ws)
+    await cd.manager.connect(ws, user.id)
     try:
-        async with cd.snapshot_lock:
+        if user_has_page_access(user, "dispatch"):
+            async with cd.snapshot_lock:
+                async with SessionLocal() as db:
+                    snap = await cd.build_snapshot(db)
+                await cd.manager.send(ws, {"type": "snapshot", "data": snap})
+        if user_has_page_access(user, "agenda"):
             async with SessionLocal() as db:
-                snap = await cd.build_snapshot(db)
-            await cd.manager.send(ws, {"type": "snapshot", "data": snap})
+                events = await ca.list_events(None, None, db)
+            await cd.manager.send(
+                ws,
+                {"type": "agenda_events", "data": [event.model_dump(mode="json") for event in events]},
+            )
         while True:
             msg = await ws.receive_text()
             if msg == "ping":

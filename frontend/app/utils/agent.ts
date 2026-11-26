@@ -5,6 +5,13 @@ export interface Agent {
   phone: string | null
   email: string | null
   arrival_date: string | null
+  gender: 'homme' | 'femme' | 'autre' | null
+  birth_date: string | null
+  diploma: boolean
+  boat_license: boolean
+  boat_license_date: string | null
+  helicopter_license: boolean
+  helicopter_license_date: string | null
   competencies: string[]
   is_active: boolean
   account_user_id: number | null

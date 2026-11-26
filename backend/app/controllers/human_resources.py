@@ -34,6 +34,15 @@ def _employee_out(
         phone=employee.phone,
         email=employee.email if include_hr_details else None,
         arrival_date=employee.arrival_date,
+        gender=employee.gender if include_hr_details else None,
+        birth_date=employee.birth_date if include_hr_details else None,
+        diploma=employee.diploma if include_hr_details else False,
+        boat_license=employee.boat_license if include_hr_details else False,
+        boat_license_date=employee.boat_license_date if include_hr_details else None,
+        helicopter_license=employee.helicopter_license if include_hr_details else False,
+        helicopter_license_date=(
+            employee.helicopter_license_date if include_hr_details else None
+        ),
         competencies=competencies if isinstance(competencies, list) else [],
         is_active=employee.is_active,
         account_user_id=employee.account_user_id,
@@ -144,6 +153,15 @@ async def create_employee(
         phone=payload.phone.strip() if payload.phone else None,
         email=payload.email,
         arrival_date=payload.arrival_date,
+        gender=payload.gender,
+        birth_date=payload.birth_date,
+        diploma=payload.diploma,
+        boat_license=payload.boat_license,
+        boat_license_date=payload.boat_license_date if payload.boat_license else None,
+        helicopter_license=payload.helicopter_license,
+        helicopter_license_date=(
+            payload.helicopter_license_date if payload.helicopter_license else None
+        ),
         competencies=json.dumps(payload.competencies, ensure_ascii=False),
         grade_id=payload.grade_id,
         grade=grade,
@@ -164,6 +182,10 @@ async def update_employee(
         raise HTTPException(status_code=404, detail="Employé introuvable.")
 
     data = payload.model_dump(exclude_unset=True)
+    if data.get("boat_license") is False:
+        data["boat_license_date"] = None
+    if data.get("helicopter_license") is False:
+        data["helicopter_license_date"] = None
     if "account_user_id" in data and data["account_user_id"] is not None:
         await _validate_account_link(db, data["account_user_id"], employee_id)
     if "grade_id" in data:
