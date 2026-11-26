@@ -458,7 +458,7 @@ async def validate_training(
         )
 
     member = await db.get(TrainingMember, (training.id, employee.id))
-    if member_status == "validated":
+    if member_status == "validated" and training.emoji is not None:
         if member is not None:
             await db.delete(member)
     elif member is None:

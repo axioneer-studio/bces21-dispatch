@@ -17,6 +17,7 @@ from app.auth.discord import (
     fetch_user_guilds,
 )
 from app.auth.session import (
+    current_user_id,
     get_session_cookie_name,
     issue_token,
 )
@@ -180,8 +181,8 @@ class DiscordExchangeRequest(BaseModel):
 class DiscordExchangeResponse(BaseModel):
     message: str
     redirect: str
-    token: str
-    expires: str
+    token: str | None = None
+    expires: str | None = None
 
 
 @router.post("/discord/exchange", response_model=DiscordExchangeResponse)
@@ -214,13 +215,15 @@ async def discord_exchange(
         me = await fetch_me(token_payload["access_token"])
     except DiscordAPIError as exc:
         logger.warning("Discord OAuth error: %s", exc)
+        if "rate limit" in str(exc).casefold():
+            raise HTTPException(
+                status_code=429,
+                detail="Discord limite temporairement les connexions. Réessaie dans quelques minutes.",
+            ) from exc
         raise HTTPException(
             status_code=400,
             detail="Connexion Discord refusée.",
         )
-
-    discord_id = str(me.get("id") or "")
-    await _check_guild_membership(token_payload["access_token"], discord_id or None)
 
     discord_id = str(me.get("id") or "")
     if not discord_id:
@@ -241,10 +244,21 @@ async def discord_exchange(
                 detail="Inscriptions fermées.",
             )
     elif user.status in {"disabled", "rejected"}:
-        raise HTTPException(
-            status_code=403,
-            detail="Compte désactivé ou accès refusé.",
+        _clear_session_cookie(response)
+        response.delete_cookie(
+            key=state_cookie_name,
+            path="/",
+            domain=settings.session_cookie_domain,
+            secure=settings.session_cookie_secure,
+            httponly=True,
+            samesite="lax",
         )
+        return DiscordExchangeResponse(
+            message="Compte refusé ou désactivé.",
+            redirect="/compte-refuse",
+        )
+
+    await _check_guild_membership(token_payload["access_token"], discord_id)
 
     if user is None:
         deadline = now + timedelta(seconds=get_settings().profile_deadline_seconds)
@@ -298,7 +312,7 @@ async def discord_exchange(
 
 def _status_redirect_target_path(user: User) -> str:
     if user.status == "pending":
-        return "/?status=pending"
+        return "/attente"
     if user.prenom_rp and user.nom_rp:
         return "/dispatch"
     deadline_iso = user.rp_name_deadline.isoformat() if user.rp_name_deadline else None
@@ -330,22 +344,18 @@ async def _handle_callback(
         token_payload = await exchange_code(code)
         me = await fetch_me(token_payload["access_token"])
         discord_id = str(me.get("id") or "")
-        await _check_guild_membership(token_payload["access_token"], discord_id or None)
     except DiscordAPIError as exc:
         logger.warning("Discord OAuth error: %s", exc)
+        if "rate limit" in str(exc).casefold():
+            return RedirectResponse(
+                _frontend_redirect("/", error="discord_rate_limited"),
+                status_code=302,
+            )
         return RedirectResponse(
             _frontend_redirect(
                 "/",
                 error="discord_failed",
                 error_description="Connexion Discord refusée.",
-            ),
-            status_code=302,
-        )
-    except HTTPException as exc:
-        logger.warning("Discord guild check failed: %s", exc.detail)
-        return RedirectResponse(
-            _frontend_redirect(
-                "/", error="guild_required", error_description=str(exc.detail)
             ),
             status_code=302,
         )
@@ -370,8 +380,20 @@ async def _handle_callback(
                 status_code=302,
             )
     elif user.status in {"disabled", "rejected"}:
+        refused_response = RedirectResponse(
+            _frontend_redirect("/compte-refuse"), status_code=302
+        )
+        _clear_session_cookie(refused_response)
+        return refused_response
+
+    try:
+        await _check_guild_membership(token_payload["access_token"], discord_id)
+    except HTTPException as exc:
+        logger.warning("Discord guild check failed: %s", exc.detail)
         return RedirectResponse(
-            _frontend_redirect("/", error="account_unavailable"),
+            _frontend_redirect(
+                "/", error="guild_required", error_description=str(exc.detail)
+            ),
             status_code=302,
         )
 
@@ -379,7 +401,7 @@ async def _handle_callback(
         deadline = now + timedelta(seconds=get_settings().profile_deadline_seconds)
         # Bootstrap : le tout premier compte de l'application est validé
         # automatiquement. Les suivants démarrent validés puis basculent en
-        # "pending" une fois leur profil (nom / prénom / téléphone) complet.
+        # "pending" une fois leur profil (nom et prénom) complété.
         total_users = (
             await db.execute(select(func.count()).select_from(User))
         ).scalar_one()
@@ -416,7 +438,7 @@ async def _handle_callback(
 
 def _status_redirect_target(user: User) -> str:
     if user.status == "pending":
-        return _frontend_redirect("/?status=pending")
+        return _frontend_redirect("/attente")
     if user.prenom_rp and user.nom_rp:
         return _frontend_redirect("/dispatch")
     deadline_iso = user.rp_name_deadline.isoformat() if user.rp_name_deadline else None
@@ -469,8 +491,6 @@ async def complete_profile(
 ) -> User:
     user.prenom_rp = payload.prenomRP
     user.nom_rp = payload.nomRP
-    if payload.phone:
-        user.phone = payload.phone
     user.rp_name_deadline = None
     # Une fois le profil complet (nom + prénom), le compte part en attente
     # de validation — sauf le compte fondateur (le tout premier).
@@ -507,3 +527,15 @@ async def list_pending(
         users=[PendingUserItem.model_validate(u) for u in rows],
         count=len(rows),
     )
+
+
+@router.get("/account-status")
+async def account_status(
+    user_id: int = Depends(current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Expose only the signed-in account's status, including pending/rejected accounts."""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Session invalide.")
+    return {"status": user.status or "active"}
