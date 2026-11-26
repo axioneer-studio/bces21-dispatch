@@ -1179,12 +1179,13 @@ async function confirmDeleteEmployee() {
 }
 .hr-overview {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(5, auto);
   gap: 9px;
+  justify-content: end;
 }
 .hr-stat {
   display: flex;
-  min-width: 0;
+  min-width: 250px;
   min-height: 82px;
   align-items: center;
   gap: 11px;
