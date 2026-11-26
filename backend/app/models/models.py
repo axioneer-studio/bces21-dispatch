@@ -492,8 +492,10 @@ class CrisisVictim(Base):
 
 
 class Training(Base):
-    """Formation de la page Formation. La valider pour un employé ajoute son emoji
-    aux compétences de l'employé : l'emoji est la trace de la validation.
+    """Formation de Pôles & Spé. La valider pour un employé ajoute son emoji aux
+    compétences de l'employé : l'emoji est la trace de la validation. L'emoji est
+    facultatif : sans emoji, la validation est une ligne « validated » de
+    TrainingMember.
 
     `kind` : « general » (formation de Pôles & Spé, ex. Pilote Medicopter). Les
     périodes d'essai et de formation ont leurs modules (InternModule).
@@ -503,7 +505,7 @@ class Training(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    emoji: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)
+    emoji: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True)
     kind: Mapped[str] = mapped_column(String(16), default="general", nullable=False)
     # Formation générale : « pole » (ex. Pilote Medicopter, Stock, Formateur) ou
     # « specialty » (ex. Médecin légiste). Sans effet sur les autres types.
@@ -518,7 +520,8 @@ class TrainingMember(Base):
     """Rôle d'un employé dans une formation générale, quand ce n'est pas un simple
     « Validé » (qui ne tient qu'à l'emoji dans ses compétences) : « lead »
     (Responsable) et « second » (Second) ont l'emoji, « in_progress » (En cours)
-    ne l'a pas encore."""
+    ne l'a pas encore. Dans une formation sans emoji, un Validé a sa ligne
+    « validated »."""
 
     __tablename__ = "training_members"
 

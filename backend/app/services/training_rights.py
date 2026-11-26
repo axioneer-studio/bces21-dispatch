@@ -3,9 +3,10 @@
 Une formation générale peut donner des droits (Formateur, Médecin légiste, RH)
 à ceux qui l'ont validée, c'est-à-dire aux employés qui ont son emoji dans leurs
 compétences (`pole_competencies` : sans les emojis des modules de leur étape de
-formation, qu'un pôle peut partager). Le compte lié à la tuile de l'employé
-reçoit ces droits. La Direction (grade `is_direction`) a le droit RH par
-défaut. Les super-admins ont tous les droits.
+formation, qu'un pôle peut partager). Pour une formation sans emoji, ce sont
+ses Responsables, Seconds et Validés (`VALIDATED_STATUSES`). Le compte lié à la
+tuile de l'employé reçoit ces droits. La Direction (grade `is_direction`) a le
+droit RH par défaut. Les super-admins ont tous les droits.
 """
 
 import json
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Employee, Training, User
+from app.models import Employee, Training, TrainingMember, User
 from app.services.formation_stages import employee_stage, module_emojis_by_stage
 
 TRAINER_PERMISSION = "training.validate"
@@ -34,6 +35,9 @@ TRAINING_PERMISSION_CATALOG = {
     HR_PERMISSION: "Ressources humaines",
     STOCK_PERMISSION: "Stock",
 }
+
+# Rôles de l'équipe qui valent validation d'une formation sans emoji.
+VALIDATED_STATUSES = ("lead", "second", "validated")
 
 
 def emoji_key(value: str) -> str:
@@ -77,12 +81,27 @@ async def _granting_trainings(db: AsyncSession) -> list[Training]:
     return [training for training in trainings if parse_training_permissions(training.permissions)]
 
 
-def _permissions_of(employee: Employee, trainings: list[Training], module_emojis: dict[str, list[str]]) -> set[str]:
+async def validated_memberships(db: AsyncSession) -> set[tuple[int, int]]:
+    """(formation, employé) des rôles qui valent validation d'une formation sans emoji."""
+    rows = await db.execute(
+        select(TrainingMember.training_id, TrainingMember.employee_id).where(
+            TrainingMember.status.in_(VALIDATED_STATUSES)
+        )
+    )
+    return {(training_id, employee_id) for training_id, employee_id in rows}
+
+
+def _permissions_of(
+    employee: Employee,
+    trainings: list[Training],
+    module_emojis: dict[str, list[str]],
+    memberships: set[tuple[int, int]],
+) -> set[str]:
     owned = {emoji_key(item) for item in pole_competencies(employee, module_emojis)}
     return {
         permission
         for training in trainings
-        if emoji_key(training.emoji) in owned
+        if (emoji_key(training.emoji) in owned if training.emoji else (training.id, employee.id) in memberships)
         for permission in parse_training_permissions(training.permissions)
     }
 
@@ -98,7 +117,12 @@ async def employees_with_training_permission(db: AsyncSession, permission: str) 
         )
     ).scalars().all()
     module_emojis = await module_emojis_by_stage(db)
-    return [employee for employee in employees if permission in _permissions_of(employee, trainings, module_emojis)]
+    memberships = await validated_memberships(db)
+    return [
+        employee
+        for employee in employees
+        if permission in _permissions_of(employee, trainings, module_emojis, memberships)
+    ]
 
 
 async def user_training_permissions(db: AsyncSession, user: User) -> list[str]:
@@ -109,7 +133,9 @@ async def user_training_permissions(db: AsyncSession, user: User) -> list[str]:
     employee = await db.scalar(select(Employee).where(Employee.account_user_id == user.id))
     if employee is None or not employee.is_active:
         return []
-    permissions = _permissions_of(employee, await _granting_trainings(db), await module_emojis_by_stage(db))
+    permissions = _permissions_of(
+        employee, await _granting_trainings(db), await module_emojis_by_stage(db), await validated_memberships(db)
+    )
     if employee.grade and employee.grade.is_direction:
         permissions.add(HR_PERMISSION)
     return [permission for permission in TRAINING_PERMISSION_CATALOG if permission in permissions]

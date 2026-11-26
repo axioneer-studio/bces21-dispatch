@@ -1319,7 +1319,7 @@ class TrainingOut(BaseModel):
 
     id: int
     name: str
-    emoji: str
+    emoji: str | None
     kind: TrainingKind
     category: TrainingCategory
     # Droits donnés à ceux qui l'ont validée (formation générale).
@@ -1335,7 +1335,8 @@ class _TrainingFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
-    emoji: str = Field(min_length=1, max_length=16)
+    # Facultatif : sans emoji, la validation ne se voit que dans l'équipe.
+    emoji: str | None = Field(default=None, max_length=16)
 
     @field_validator("name")
     @classmethod
@@ -1344,11 +1345,11 @@ class _TrainingFields(BaseModel):
 
     @field_validator("emoji")
     @classmethod
-    def _training_emoji(cls, value: str) -> str:
-        value = _clean_required(value, "L’emoji de la formation")
+    def _training_emoji(cls, value: str | None) -> str | None:
+        value = (value or "").strip()
         if "," in value:
             raise ValueError("L’emoji ne peut pas contenir de virgule.")
-        return value
+        return value or None
 
 
 class TrainingRequest(_TrainingFields):

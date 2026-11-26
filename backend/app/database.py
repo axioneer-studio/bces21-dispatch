@@ -4,7 +4,7 @@ import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import MetaData, inspect, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -101,6 +101,8 @@ _TRAINING_ALTER_STATEMENTS = [
     "ALTER TABLE trainings ADD COLUMN permissions TEXT DEFAULT '[]' NOT NULL",
     "ALTER TABLE trainings ADD COLUMN category VARCHAR(16) DEFAULT 'pole' NOT NULL",
     "ALTER TABLE intern_modules ADD COLUMN is_required BOOLEAN DEFAULT FALSE NOT NULL",
+    # Emoji facultatif. SQLite n'a pas d'ALTER COLUMN : voir _make_training_emoji_optional_sqlite.
+    "ALTER TABLE trainings ALTER COLUMN emoji DROP NOT NULL",
 ]
 
 
@@ -236,6 +238,27 @@ async def _run_training_migrations(conn) -> None:
                 await conn.execute(text(stmt))
         except Exception:
             pass
+    if conn.dialect.name == "sqlite":
+        await _make_training_emoji_optional_sqlite(conn)
+
+
+async def _make_training_emoji_optional_sqlite(conn) -> None:
+    """SQLite ne sait pas retirer le NOT NULL de `trainings.emoji` : la table est
+    recréée d'après le modèle et ses lignes recopiées. Seulement sans clés
+    étrangères actives, pour que la suppression de l'ancienne table ne vide pas
+    `training_members`."""
+    from app.models import Training
+
+    columns = (await conn.execute(text("PRAGMA table_info(trainings)"))).mappings().all()
+    emoji = next((column for column in columns if column["name"] == "emoji"), None)
+    if emoji is None or not emoji["notnull"] or (await conn.execute(text("PRAGMA foreign_keys"))).scalar():
+        return
+    rebuilt = Training.__table__.to_metadata(MetaData(), name="trainings_rebuilt")
+    names = ", ".join(column["name"] for column in columns if column["name"] in rebuilt.columns)
+    await conn.run_sync(rebuilt.create)
+    await conn.execute(text(f"INSERT INTO trainings_rebuilt ({names}) SELECT {names} FROM trainings"))
+    await conn.execute(text("DROP TABLE trainings"))
+    await conn.execute(text("ALTER TABLE trainings_rebuilt RENAME TO trainings"))
 
 
 _DISPATCH_STATE_RENAMES = [
