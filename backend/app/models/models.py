@@ -48,14 +48,21 @@ class User(Base):
     nom_rp: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="active", nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default="active", nullable=False, index=True
+    )
     competencies: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Interrupteur du super-admin lui-même (bouton « Superadmin ») : désactivé,
     # il garde son statut mais n'a plus que les accès de ses rôles et de son grade.
-    super_admin_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    super_admin_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
     roles: Mapped[list["Role"]] = relationship(
-        secondary=user_roles, back_populates="users", lazy="selectin", order_by="Role.name"
+        secondary=user_roles,
+        back_populates="users",
+        lazy="selectin",
+        order_by="Role.name",
     )
 
     rp_name_deadline: Mapped[datetime | None] = mapped_column(
@@ -76,13 +83,12 @@ class User(Base):
     def has_super_admin_rights(self) -> bool:
         """Super-admin dont les droits sont actifs : à utiliser pour tout contrôle d'accès."""
         return self.is_super_admin and self.super_admin_enabled
+
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (
-        Index("ix_users_rp_deadline", "rp_name_deadline"),
-    )
+    __table_args__ = (Index("ix_users_rp_deadline", "rp_name_deadline"),)
 
 
 class Role(Base):
@@ -92,8 +98,12 @@ class Role(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     pages: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
-    users: Mapped[list["User"]] = relationship(secondary=user_roles, back_populates="roles")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    users: Mapped[list["User"]] = relationship(
+        secondary=user_roles, back_populates="roles"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class Employee(Base):
@@ -114,10 +124,18 @@ class Employee(Base):
     grade_id: Mapped[int | None] = mapped_column(
         ForeignKey("grades.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    grade: Mapped[Optional["Grade"]] = relationship(back_populates="employees", lazy="selectin")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
-    assignments: Mapped[list["DispatchAssignment"]] = relationship(back_populates="employee")
+    grade: Mapped[Optional["Grade"]] = relationship(
+        back_populates="employees", lazy="selectin"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+    assignments: Mapped[list["DispatchAssignment"]] = relationship(
+        back_populates="employee"
+    )
 
 
 class Grade(Base):
@@ -200,11 +218,17 @@ class DispatchAssignment(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("employee_id", name="uq_dispatch_employee_assignments_employee"),
+        UniqueConstraint(
+            "employee_id", name="uq_dispatch_employee_assignments_employee"
+        ),
     )
 
-    slot: Mapped["DispatchSlot"] = relationship("DispatchSlot", back_populates="assignments")
-    employee: Mapped["Employee"] = relationship("Employee", back_populates="assignments")
+    slot: Mapped["DispatchSlot"] = relationship(
+        "DispatchSlot", back_populates="assignments"
+    )
+    employee: Mapped["Employee"] = relationship(
+        "Employee", back_populates="assignments"
+    )
 
 
 class DispatchRadio(Base):
@@ -220,7 +244,9 @@ class DispatchRadio(Base):
     )
     is_on: Mapped[bool] = mapped_column(default=False, nullable=False)
     is_loading: Mapped[bool] = mapped_column(default=False, nullable=False)
-    is_direction: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
+    is_direction: Mapped[bool] = mapped_column(
+        default=False, nullable=False, index=True
+    )
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
@@ -267,12 +293,20 @@ class AgendaEvent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(120), nullable=False)
-    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[str] = mapped_column(String(16), default="#46996d", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class Vehicle(Base):
@@ -284,8 +318,12 @@ class Vehicle(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     plate: Mapped[str | None] = mapped_column(String(16), nullable=True)
     model: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class ParkingSpot(Base):
@@ -295,7 +333,9 @@ class ParkingSpot(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class FleetEntry(Base):
@@ -314,8 +354,12 @@ class FleetEntry(Base):
     location: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     note: Mapped[str] = mapped_column(String(500), default="", nullable=False)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class HospitalRoom(Base):
@@ -326,7 +370,9 @@ class HospitalRoom(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
     beds: Mapped[list["HospitalBed"]] = relationship(
         back_populates="room",
         cascade="all, delete-orphan",
@@ -351,10 +397,16 @@ class HospitalBed(Base):
     arrival_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     care_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Forces de l'ordre : « none » (non concernées), « to_notify » (à prévenir), « notified » (prévenues).
-    police_status: Mapped[str] = mapped_column(String(16), default="none", nullable=False)
+    police_status: Mapped[str] = mapped_column(
+        String(16), default="none", nullable=False
+    )
     reason: Mapped[str] = mapped_column(String(64), default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class HospitalBedReason(Base):
@@ -364,7 +416,9 @@ class HospitalBedReason(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class MorgueEntry(Base):
@@ -384,12 +438,22 @@ class MorgueEntry(Base):
         ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
     )
     examiner: Mapped[Optional["Employee"]] = relationship(lazy="selectin")
-    emergency_contacts: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    emergency_contacts: Mapped[str] = mapped_column(
+        String(500), default="", nullable=False
+    )
     recoverable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    incinerated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    coffined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    incinerated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    coffined_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class InterventionStatus(Base):
@@ -412,7 +476,9 @@ class InterventionStatus(Base):
     # sont toujours proposés avant les lieux ; `order` range chaque type.
     kind: Mapped[str] = mapped_column(String(16), default="status", nullable=False)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 def intervention_status_order():
@@ -434,7 +500,9 @@ class AffiliationGroup(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     # Couleur « #rrggbb » de l'appartenance dans la Crise et la Morgue, ou aucune.
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class CrisisState(Base):
@@ -461,7 +529,9 @@ class CrisisMember(Base):
     employee: Mapped["Employee"] = relationship(lazy="selectin")
     # Un seul membre est le Primo Intervenant ; les autres l'assistent.
     is_primo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class CrisisVictim(Base):
@@ -477,18 +547,28 @@ class CrisisVictim(Base):
     severe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     unconscious: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     injuries: Mapped[str] = mapped_column(String(500), default="", nullable=False)
-    repatriating_doctor: Mapped[str] = mapped_column(String(120), default="", nullable=False)
-    treating_doctor: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    repatriating_doctor: Mapped[str] = mapped_column(
+        String(120), default="", nullable=False
+    )
+    treating_doctor: Mapped[str] = mapped_column(
+        String(120), default="", nullable=False
+    )
     # Arrivée à l'hôpital : l'heure est prise au moment où on coche la case.
-    arrived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    arrived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     care_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Cases de la Centrale : blessé ajouté au canal radio, et lit où il est installé.
     channel_added: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     bed_id: Mapped[int | None] = mapped_column(
         ForeignKey("hospital_beds.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class Training(Base):
@@ -513,7 +593,9 @@ class Training(Base):
     # Droits donnés à ceux qui l'ont validée (formation générale), en JSON : voir
     # training_rights.
     permissions: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class TrainingMember(Base):
@@ -525,10 +607,16 @@ class TrainingMember(Base):
 
     __tablename__ = "training_members"
 
-    training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id", ondelete="CASCADE"), primary_key=True)
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
+    training_id: Mapped[int] = mapped_column(
+        ForeignKey("trainings.id", ondelete="CASCADE"), primary_key=True
+    )
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 # --- Fiches des Internes (page Formation) ---
@@ -551,7 +639,9 @@ class InternModule(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     emoji: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True)
     is_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class InternQuestion(Base):
@@ -562,7 +652,9 @@ class InternQuestion(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class InternRecord(Base):
@@ -577,20 +669,30 @@ class InternRecord(Base):
 
     __tablename__ = "intern_records"
 
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     simulation: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     resident_simulation: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
-    resident_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resident_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     previous_grade_id: Mapped[int | None] = mapped_column(
         ForeignKey("grades.id", ondelete="SET NULL"), nullable=True
     )
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     completed_from_grade_id: Mapped[int | None] = mapped_column(
         ForeignKey("grades.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class InternMentor(Base):
@@ -598,8 +700,12 @@ class InternMentor(Base):
 
     __tablename__ = "intern_mentors"
 
-    intern_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
-    mentor_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
+    intern_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    mentor_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class InternModuleLevel(Base):
@@ -609,8 +715,12 @@ class InternModuleLevel(Base):
 
     __tablename__ = "intern_module_levels"
 
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
-    module_id: Mapped[int] = mapped_column(ForeignKey("intern_modules.id", ondelete="CASCADE"), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    module_id: Mapped[int] = mapped_column(
+        ForeignKey("intern_modules.id", ondelete="CASCADE"), primary_key=True
+    )
     level: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
@@ -619,5 +729,9 @@ class InternAnswer(Base):
 
     __tablename__ = "intern_answers"
 
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True)
-    question_id: Mapped[int] = mapped_column(ForeignKey("intern_questions.id", ondelete="CASCADE"), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), primary_key=True
+    )
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("intern_questions.id", ondelete="CASCADE"), primary_key=True
+    )

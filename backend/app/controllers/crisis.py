@@ -47,7 +47,9 @@ SURGERY_REASON = "En attente d’opération"
 
 
 def _employee_out(employee: Employee) -> CrisisEmployeeOut:
-    return CrisisEmployeeOut(id=employee.id, name=f"{employee.first_name} {employee.last_name}".strip())
+    return CrisisEmployeeOut(
+        id=employee.id, name=f"{employee.first_name} {employee.last_name}".strip()
+    )
 
 
 async def _user_display_name(db: AsyncSession, user: User) -> str:
@@ -141,19 +143,31 @@ async def _get_victim(db: AsyncSession, victim_id: int) -> CrisisVictim:
 
 async def get_crisis(db: AsyncSession, user: User) -> CrisisOut:
     members = (
-        await db.execute(select(CrisisMember).order_by(CrisisMember.created_at))
-    ).scalars().all()
+        (await db.execute(select(CrisisMember).order_by(CrisisMember.created_at)))
+        .scalars()
+        .all()
+    )
     primo = next((member.employee for member in members if member.is_primo), None)
     victims = (
-        await db.execute(select(CrisisVictim).order_by(CrisisVictim.created_at, CrisisVictim.id))
-    ).scalars().all()
-    employees = (
-        await db.execute(
-            select(Employee)
-            .where(Employee.is_active.is_(True))
-            .order_by(Employee.first_name, Employee.last_name)
+        (
+            await db.execute(
+                select(CrisisVictim).order_by(CrisisVictim.created_at, CrisisVictim.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
+    employees = (
+        (
+            await db.execute(
+                select(Employee)
+                .where(Employee.is_active.is_(True))
+                .order_by(Employee.first_name, Employee.last_name)
+            )
+        )
+        .scalars()
+        .all()
+    )
     beds = (
         await db.execute(
             select(HospitalBed, HospitalRoom.name)
@@ -166,11 +180,17 @@ async def get_crisis(db: AsyncSession, user: User) -> CrisisOut:
     return CrisisOut(
         zip_code=slot.zip_code if slot else (state.zip_code if state else None),
         primo=_employee_out(primo) if primo else None,
-        helpers=[_employee_out(member.employee) for member in members if not member.is_primo],
+        helpers=[
+            _employee_out(member.employee) for member in members if not member.is_primo
+        ],
         victims=[CrisisVictimOut.model_validate(victim) for victim in victims],
         employees=[_employee_out(employee) for employee in employees],
         beds=[
-            CrisisBedOut(id=bed.id, label=f"{room_name} · {bed.label}", patient_name=bed.patient_name)
+            CrisisBedOut(
+                id=bed.id,
+                label=f"{room_name} · {bed.label}",
+                patient_name=bed.patient_name,
+            )
             for bed, room_name in beds
         ],
         groups=await cg_affiliation.group_choices(db),
@@ -202,25 +222,26 @@ async def set_team(
             ).scalars()
         )
         if found != set(wanted):
-            raise HTTPException(status_code=404, detail="Employé introuvable ou inactif.")
+            raise HTTPException(
+                status_code=404, detail="Employé introuvable ou inactif."
+            )
     await db.execute(delete(CrisisMember))
     if payload.primo_id is not None:
         db.add(CrisisMember(employee_id=payload.primo_id, is_primo=True))
     for employee_id in helper_ids:
         db.add(CrisisMember(employee_id=employee_id, is_primo=False))
-    on_dispatch = payload.primo_id is not None and payload.primo_id != previous_primo_id
-    if on_dispatch:
+    on_dispatch = False
+    if payload.primo_id is not None and payload.primo_id != previous_primo_id:
         await _assign_primo_on_dispatch(db, payload.primo_id)
+        on_dispatch = True
     await db.commit()
     if on_dispatch:
         await push_snapshot(db)
         asyncio.create_task(_sync_employee_to_google_sheets())
-    return {"message": "Équipe de crise mise à jour."}
+    return MessageResponse(message="Équipe de crise mise à jour.")
 
 
-async def set_zip(
-    payload: CrisisZipRequest, db: AsyncSession
-) -> MessageResponse:
+async def set_zip(payload: CrisisZipRequest, db: AsyncSession) -> MessageResponse:
     """Code postal de la crise, repris sur l'intervention « Primo » du Dispatch."""
     state = await crisis_state(db)
     state.zip_code = payload.zip_code
@@ -230,7 +251,7 @@ async def set_zip(
     await db.commit()
     if slot is not None:
         await push_snapshot(db)
-    return {"message": "Code postal de la crise mis à jour."}
+    return MessageResponse(message="Code postal de la crise mis à jour.")
 
 
 async def create_victim(
@@ -265,7 +286,9 @@ async def update_victim(
         victim.arrived_at = utcnow()
     if not victim.care_done:
         if data.get("channel_added"):
-            raise HTTPException(status_code=409, detail="Cochez « Soigné » avant « Canal ».")
+            raise HTTPException(
+                status_code=409, detail="Cochez « Soigné » avant « Canal »."
+            )
         victim.channel_added = False
 
     if (newly_arrived and not victim.repatriating_doctor) or (
@@ -280,7 +303,8 @@ async def update_victim(
     if bed_requested and next_bed_id != victim.bed_id:
         if next_bed_id is not None and victim.care_done:
             raise HTTPException(
-                status_code=409, detail="Ce blessé est déjà soigné : il n’a plus besoin de lit."
+                status_code=409,
+                detail="Ce blessé est déjà soigné : il n’a plus besoin de lit.",
             )
         await _release_bed(db, victim)
         if next_bed_id is not None:
@@ -301,7 +325,7 @@ async def delete_victim(victim_id: int, db: AsyncSession) -> MessageResponse:
     await _release_bed(db, victim)
     await db.delete(victim)
     await db.commit()
-    return {"message": "Blessé retiré de la liste."}
+    return MessageResponse(message="Blessé retiré de la liste.")
 
 
 async def reset_crisis(db: AsyncSession) -> MessageResponse:
@@ -315,4 +339,4 @@ async def reset_crisis(db: AsyncSession) -> MessageResponse:
     await db.execute(delete(CrisisMember))
     await db.execute(delete(CrisisState))
     await db.commit()
-    return {"message": "Crise réinitialisée."}
+    return MessageResponse(message="Crise réinitialisée.")

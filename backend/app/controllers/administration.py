@@ -64,7 +64,9 @@ def _parse_app_permissions(value: str | None) -> list[str]:
         return []
     if not isinstance(permissions, list):
         return []
-    return [permission for permission in permissions if permission in APP_PERMISSION_CATALOG]
+    return [
+        permission for permission in permissions if permission in APP_PERMISSION_CATALOG
+    ]
 
 
 def _admin_user_out(user: User) -> AdminUserOut:
@@ -115,9 +117,7 @@ async def _ensure_another_admin_remains(db: AsyncSession, target: User) -> None:
         return
     users = (await db.execute(select(User).where(User.id != target.id))).scalars().all()
     if any(
-        _is_app_admin(user)
-        and (user.status or "active") == "active"
-        for user in users
+        _is_app_admin(user) and (user.status or "active") == "active" for user in users
     ):
         return
     raise HTTPException(
@@ -128,8 +128,14 @@ async def _ensure_another_admin_remains(db: AsyncSession, target: User) -> None:
 
 async def list_users(db: AsyncSession) -> list[AdminUserOut]:
     users = (
-        await db.execute(select(User).order_by(User.created_at.desc(), User.id.desc()))
-    ).scalars().all()
+        (
+            await db.execute(
+                select(User).order_by(User.created_at.desc(), User.id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return [_admin_user_out(user) for user in users]
 
 
@@ -250,23 +256,24 @@ async def list_roles(db: AsyncSession) -> list[RoleOut]:
 
 async def _role_users_count(db: AsyncSession, role_id: int) -> int:
     count = await db.scalar(
-        select(func.count()).select_from(user_roles).where(user_roles.c.role_id == role_id)
+        select(func.count())
+        .select_from(user_roles)
+        .where(user_roles.c.role_id == role_id)
     )
     return count or 0
 
 
 async def list_app_permissions() -> list[dict]:
     return [
-        {"key": key, "label": label}
-        for key, label in APP_PERMISSION_CATALOG.items()
+        {"key": key, "label": label} for key, label in APP_PERMISSION_CATALOG.items()
     ]
 
 
-async def create_role(
-    payload: RoleCreateRequest, db: AsyncSession
-) -> RoleOut:
+async def create_role(payload: RoleCreateRequest, db: AsyncSession) -> RoleOut:
     name = payload.name.strip()
-    existing = await db.scalar(select(Role.id).where(func.lower(Role.name) == name.lower()))
+    existing = await db.scalar(
+        select(Role.id).where(func.lower(Role.name) == name.lower())
+    )
     if existing is not None:
         raise HTTPException(status_code=409, detail="Ce rôle existe déjà.")
     role = Role(
@@ -302,10 +309,14 @@ async def update_role(
             raise HTTPException(status_code=409, detail="Ce rôle existe déjà.")
     if "pages" in data:
         next_pages = _validate_pages(data["pages"])
-        if "administration" in _parse_pages(role.pages) and "administration" not in next_pages:
+        if (
+            "administration" in _parse_pages(role.pages)
+            and "administration" not in next_pages
+        ):
             all_users = (await db.execute(select(User))).scalars().all()
             role_has_users = any(
-                any(user_role.id == role_id for user_role in user.roles) for user in all_users
+                any(user_role.id == role_id for user_role in user.roles)
+                for user in all_users
             )
             admin_remains = any(
                 (user.status or "active") == "active"
@@ -345,8 +356,10 @@ async def delete_role(role_id: int, db: AsyncSession) -> MessageResponse:
 
     if "administration" in _parse_pages(role.pages):
         users = (
-            await db.execute(select(User).options(selectinload(User.roles)))
-        ).scalars().all()
+            (await db.execute(select(User).options(selectinload(User.roles))))
+            .scalars()
+            .all()
+        )
         admin_remains = any(
             (user.status or "active") == "active"
             and (
@@ -400,7 +413,11 @@ def _storm_settings_out(schedule: storm.StormSchedule) -> StormSettingsOut:
         enabled=schedule.enabled,
         time=schedule.at.strftime("%H:%M"),
         timezone=zone.key,
-        next_storm_at=storm.next_storm(datetime.now(zone), schedule.at) if schedule.enabled else None,
+        next_storm_at=(
+            storm.next_storm(datetime.now(zone), schedule.at)
+            if schedule.enabled
+            else None
+        ),
     )
 
 
@@ -408,8 +425,12 @@ async def get_storm_settings(db: AsyncSession) -> StormSettingsOut:
     return _storm_settings_out(await storm.read_schedule(db))
 
 
-async def update_storm_settings(payload: StormSettingsUpdateRequest, db: AsyncSession) -> StormSettingsOut:
-    schedule = storm.StormSchedule(enabled=payload.enabled, at=time.fromisoformat(payload.time))
+async def update_storm_settings(
+    payload: StormSettingsUpdateRequest, db: AsyncSession
+) -> StormSettingsOut:
+    schedule = storm.StormSchedule(
+        enabled=payload.enabled, at=time.fromisoformat(payload.time)
+    )
     await storm.write_schedule(db, schedule)
     return _storm_settings_out(schedule)
 
@@ -435,7 +456,9 @@ async def get_google_sheets_config(db: AsyncSession) -> GoogleSheetsConfigOut:
     write_info_cell = str(settings["write_info_cell"])
 
     try:
-        service_account_configured = s3_service.object_exists(s3_key, prefix="credentials/")
+        service_account_configured = s3_service.object_exists(
+            s3_key, prefix="credentials/"
+        )
     except S3ServiceError:
         service_account_configured = False
 
@@ -491,13 +514,24 @@ async def update_google_sheets_config(
     """Met à jour la configuration Google Sheets (Spreadsheet ID, nom d'onglet, activation, délai)."""
 
     logger.info(
-        f"Saving Google Sheets config: spreadsheet_id={payload.spreadsheet_id}, sheet_name={payload.sheet_name}, enabled={payload.enabled}"
+        "Saving Google Sheets config: "
+        f"spreadsheet_id={payload.spreadsheet_id}, "
+        f"sheet_name={payload.sheet_name}, enabled={payload.enabled}"
     )
     logger.info(
-        f"Payload received: read_spreadsheet_id={payload.read_spreadsheet_id}, read_sheet_name={payload.read_sheet_name}, read_lses_cell={payload.read_lses_cell}, read_safd_cell={payload.read_safd_cell}, read_enabled={payload.read_enabled}"
+        "Payload received: "
+        f"read_spreadsheet_id={payload.read_spreadsheet_id}, "
+        f"read_sheet_name={payload.read_sheet_name}, "
+        f"read_lses_cell={payload.read_lses_cell}, "
+        f"read_safd_cell={payload.read_safd_cell}, "
+        f"read_enabled={payload.read_enabled}"
     )
     logger.info(
-        f"Payload write: write_name_cell={payload.write_name_cell}, write_phone_cell={payload.write_phone_cell}, write_hospital_cell={payload.write_hospital_cell}, write_info_cell={payload.write_info_cell}"
+        "Payload write: "
+        f"write_name_cell={payload.write_name_cell}, "
+        f"write_phone_cell={payload.write_phone_cell}, "
+        f"write_hospital_cell={payload.write_hospital_cell}, "
+        f"write_info_cell={payload.write_info_cell}"
     )
 
     async def _upsert(key: str, value: str) -> None:
@@ -518,7 +552,9 @@ async def update_google_sheets_config(
     await _upsert("google_sheets_read_sheet_name", payload.read_sheet_name)
     await _upsert("google_sheets_read_lses_cell", payload.read_lses_cell)
     await _upsert("google_sheets_read_safd_cell", payload.read_safd_cell)
-    await _upsert("google_sheets_read_enabled", "true" if payload.read_enabled else "false")
+    await _upsert(
+        "google_sheets_read_enabled", "true" if payload.read_enabled else "false"
+    )
     await _upsert("google_sheets_write_name_cell", payload.write_name_cell)
     await _upsert("google_sheets_write_phone_cell", payload.write_phone_cell)
     await _upsert("google_sheets_write_hospital_cell", payload.write_hospital_cell)
@@ -557,7 +593,9 @@ async def upload_google_service_account(
     logger.info(
         "Compte de service Google uploadé vers S3 (clé=credentials/%s).", s3_key
     )
-    return MessageResponse(message="Compte de service Google uploadé vers S3 avec succès.")
+    return MessageResponse(
+        message="Compte de service Google uploadé vers S3 avec succès."
+    )
 
 
 async def delete_google_service_account(db: AsyncSession) -> MessageResponse:
@@ -574,7 +612,9 @@ async def delete_google_service_account(db: AsyncSession) -> MessageResponse:
         ) from exc
 
     logger.info("Compte de service Google supprimé de S3 (clé=credentials/%s).", s3_key)
-    return MessageResponse(message="Compte de service Google supprimé de S3 avec succès.")
+    return MessageResponse(
+        message="Compte de service Google supprimé de S3 avec succès."
+    )
 
 
 async def test_google_sheets_connection(db: AsyncSession) -> GoogleSheetsTestResponse:
@@ -629,7 +669,9 @@ async def get_google_sheets_status(db: AsyncSession) -> GoogleSheetsConfigOut:
     write_info_cell = str(settings["write_info_cell"])
 
     try:
-        service_account_configured = s3_service.object_exists(s3_key, prefix="credentials/")
+        service_account_configured = s3_service.object_exists(
+            s3_key, prefix="credentials/"
+        )
     except S3ServiceError:
         service_account_configured = False
 

@@ -34,7 +34,9 @@ async def list_events(
 
 
 @router.post(
-    "/events", response_model=AgendaEventOut, status_code=status.HTTP_201_CREATED,
+    "/events",
+    response_model=AgendaEventOut,
+    status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_grade_permission("agenda.manage_events"))],
 )
 async def create_event(

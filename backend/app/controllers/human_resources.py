@@ -37,7 +37,9 @@ def _employee_out(
         competencies=competencies if isinstance(competencies, list) else [],
         is_active=employee.is_active,
         account_user_id=employee.account_user_id,
-        account_username=employee.account_user.discord_username if employee.account_user else None,
+        account_username=(
+            employee.account_user.discord_username if employee.account_user else None
+        ),
         grade_id=employee.grade_id,
         grade_name=employee.grade.name if employee.grade else None,
         grade_level=employee.grade.level if employee.grade else None,
@@ -66,7 +68,9 @@ async def _validate_account_link(
         filters.append(Employee.id != employee_id)
     existing = await db.execute(select(Employee.id).where(*filters))
     if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=409, detail="Ce compte est déjà lié à un employé.")
+        raise HTTPException(
+            status_code=409, detail="Ce compte est déjà lié à un employé."
+        )
     return user
 
 
@@ -88,12 +92,18 @@ async def list_employees(db: AsyncSession, current_user: User) -> list[EmployeeO
 
 async def list_employee_accounts(db: AsyncSession) -> list[dict]:
     users = (
-        await db.execute(
-            select(User)
-            .where(User.status == "active")
-            .order_by(User.prenom_rp.asc().nulls_last(), User.discord_username.asc())
+        (
+            await db.execute(
+                select(User)
+                .where(User.status == "active")
+                .order_by(
+                    User.prenom_rp.asc().nulls_last(), User.discord_username.asc()
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         {
             "id": user.id,
@@ -107,8 +117,10 @@ async def list_employee_accounts(db: AsyncSession) -> list[dict]:
 
 async def list_employee_grade_options(db: AsyncSession) -> list[GradeOption]:
     grades = (
-        await db.execute(select(Grade).order_by(Grade.level.asc(), Grade.name.asc()))
-    ).scalars().all()
+        (await db.execute(select(Grade).order_by(Grade.level.asc(), Grade.name.asc())))
+        .scalars()
+        .all()
+    )
     return [
         GradeOption(id=grade.id, name=grade.name, level=grade.level, color=grade.color)
         for grade in grades
@@ -118,7 +130,9 @@ async def list_employee_grade_options(db: AsyncSession) -> list[GradeOption]:
 async def create_employee(
     payload: EmployeeCreateRequest, db: AsyncSession
 ) -> EmployeeOut:
-    grade = await db.get(Grade, payload.grade_id) if payload.grade_id is not None else None
+    grade = (
+        await db.get(Grade, payload.grade_id) if payload.grade_id is not None else None
+    )
     if payload.grade_id is not None and grade is None:
         raise HTTPException(status_code=404, detail="Grade introuvable.")
     if payload.account_user_id is not None:
@@ -171,12 +185,17 @@ async def update_employee(
             )
     if data.get("is_active") is False:
         assignment = await db.execute(
-            select(DispatchAssignment.id).where(DispatchAssignment.employee_id == employee_id)
+            select(DispatchAssignment.id).where(
+                DispatchAssignment.employee_id == employee_id
+            )
         )
         radio = await db.execute(
             select(DispatchRadio.id).where(DispatchRadio.employee_id == employee_id)
         )
-        if assignment.scalar_one_or_none() is not None or radio.scalar_one_or_none() is not None:
+        if (
+            assignment.scalar_one_or_none() is not None
+            or radio.scalar_one_or_none() is not None
+        ):
             raise HTTPException(
                 status_code=409,
                 detail="Retirez cet employé des postes et des radios avant de le désactiver.",
@@ -219,12 +238,17 @@ async def delete_employee(employee_id: int, db: AsyncSession) -> MessageResponse
             detail="Déliez le compte utilisateur avant de supprimer cet employé.",
         )
     assignment = await db.execute(
-        select(DispatchAssignment.id).where(DispatchAssignment.employee_id == employee_id)
+        select(DispatchAssignment.id).where(
+            DispatchAssignment.employee_id == employee_id
+        )
     )
     radio = await db.execute(
         select(DispatchRadio.id).where(DispatchRadio.employee_id == employee_id)
     )
-    if assignment.scalar_one_or_none() is not None or radio.scalar_one_or_none() is not None:
+    if (
+        assignment.scalar_one_or_none() is not None
+        or radio.scalar_one_or_none() is not None
+    ):
         raise HTTPException(
             status_code=409,
             detail="Retirez d’abord cet employé des postes et des radios.",

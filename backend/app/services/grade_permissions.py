@@ -24,7 +24,11 @@ def parse_grade_permissions(value: str | None) -> list[str]:
         return []
     if not isinstance(permissions, list):
         return []
-    return [permission for permission in permissions if permission in GRADE_PERMISSION_CATALOG]
+    return [
+        permission
+        for permission in permissions
+        if permission in GRADE_PERMISSION_CATALOG
+    ]
 
 
 async def user_has_grade_permission(

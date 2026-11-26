@@ -51,7 +51,11 @@ async def _ensure_room_name_available(
 
 
 def _next_bed_label(room: HospitalRoom) -> str:
-    used = {int(match.group(1)) for bed in room.beds if (match := _BED_LABEL.match(bed.label))}
+    used = {
+        int(match.group(1))
+        for bed in room.beds
+        if (match := _BED_LABEL.match(bed.label))
+    }
     number = 1
     while number in used:
         number += 1
@@ -69,11 +73,19 @@ def clear_patient(bed: HospitalBed) -> None:
 
 async def get_rooms(db: AsyncSession, user) -> HospitalRoomsOut:
     rooms = (
-        await db.execute(select(HospitalRoom).order_by(HospitalRoom.order, HospitalRoom.id))
-    ).scalars().all()
+        (
+            await db.execute(
+                select(HospitalRoom).order_by(HospitalRoom.order, HospitalRoom.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     reasons = (
-        await db.execute(select(HospitalBedReason).order_by(HospitalBedReason.name))
-    ).scalars().all()
+        (await db.execute(select(HospitalBedReason).order_by(HospitalBedReason.name)))
+        .scalars()
+        .all()
+    )
     return HospitalRoomsOut(
         rooms=[HospitalRoomOut.model_validate(room) for room in rooms],
         reasons=[HospitalBedReasonOut.model_validate(reason) for reason in reasons],
@@ -113,7 +125,7 @@ async def delete_room(room_id: int, db: AsyncSession) -> MessageResponse:
         )
     await db.delete(room)
     await db.commit()
-    return {"message": "Chambre supprimée."}
+    return MessageResponse(message="Chambre supprimée.")
 
 
 async def create_bed(room_id: int, db: AsyncSession) -> HospitalBedOut:
@@ -140,7 +152,9 @@ async def rename_bed(
         .limit(1)
     )
     if duplicate is not None:
-        raise HTTPException(status_code=409, detail="Un lit de cette chambre porte déjà ce nom.")
+        raise HTTPException(
+            status_code=409, detail="Un lit de cette chambre porte déjà ce nom."
+        )
     bed.label = payload.label
     await db.commit()
     await db.refresh(bed)
@@ -150,10 +164,12 @@ async def rename_bed(
 async def delete_bed(bed_id: int, db: AsyncSession) -> MessageResponse:
     bed = await _get_bed(db, bed_id)
     if bed.patient_name:
-        raise HTTPException(status_code=409, detail="Libérez ce lit avant de le supprimer.")
+        raise HTTPException(
+            status_code=409, detail="Libérez ce lit avant de le supprimer."
+        )
     await db.delete(bed)
     await db.commit()
-    return {"message": "Lit supprimé."}
+    return MessageResponse(message="Lit supprimé.")
 
 
 async def set_patient(
@@ -196,9 +212,9 @@ async def create_reason(
     payload: HospitalBedReasonRequest, db: AsyncSession
 ) -> HospitalBedReasonOut:
     existing = await db.scalar(
-        select(HospitalBedReason.id).where(
-            func.lower(HospitalBedReason.name) == payload.name.lower()
-        ).limit(1)
+        select(HospitalBedReason.id)
+        .where(func.lower(HospitalBedReason.name) == payload.name.lower())
+        .limit(1)
     )
     if existing is not None:
         raise HTTPException(status_code=409, detail="Cette raison existe déjà.")
@@ -215,4 +231,4 @@ async def delete_reason(reason_id: int, db: AsyncSession) -> MessageResponse:
         raise HTTPException(status_code=404, detail="Raison introuvable.")
     await db.delete(reason)
     await db.commit()
-    return {"message": "Raison supprimée."}
+    return MessageResponse(message="Raison supprimée.")

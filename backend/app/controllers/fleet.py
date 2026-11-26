@@ -96,7 +96,12 @@ async def _all_vehicles(db: AsyncSession) -> list[Vehicle]:
     vehicles = (await db.execute(select(Vehicle))).scalars().all()
     by_plate = sorted(
         vehicles,
-        key=lambda v: (v.plate is None, (v.plate or "").casefold(), v.name.casefold(), v.id),
+        key=lambda v: (
+            v.plate is None,
+            (v.plate or "").casefold(),
+            v.name.casefold(),
+            v.id,
+        ),
     )
     return sorted(
         by_plate,
@@ -107,7 +112,9 @@ async def _all_vehicles(db: AsyncSession) -> list[Vehicle]:
 
 async def _clear_fleet_vehicles(db: AsyncSession, vehicle_ids: list[int]) -> None:
     await db.execute(
-        update(FleetEntry).where(FleetEntry.vehicle_id.in_(vehicle_ids)).values(vehicle_id=None)
+        update(FleetEntry)
+        .where(FleetEntry.vehicle_id.in_(vehicle_ids))
+        .values(vehicle_id=None)
     )
 
 
@@ -125,7 +132,8 @@ async def import_vehicles(
             continue
         if item.plate in seen_plates:
             raise HTTPException(
-                status_code=422, detail=f"La plaque {item.plate} apparaît plusieurs fois dans le fichier."
+                status_code=422,
+                detail=f"La plaque {item.plate} apparaît plusieurs fois dans le fichier.",
             )
         seen_plates.add(item.plate)
 
@@ -149,7 +157,11 @@ async def import_vehicles(
             created += 1
             continue
         kept_ids.add(vehicle.id)
-        if (vehicle.name, vehicle.plate, vehicle.model) != (item.name, item.plate, item.model):
+        if (vehicle.name, vehicle.plate, vehicle.model) != (
+            item.name,
+            item.plate,
+            item.model,
+        ):
             vehicle.name = item.name
             vehicle.plate = item.plate
             vehicle.model = item.model
@@ -168,13 +180,13 @@ async def import_vehicles(
         created=created,
         updated=updated,
         deleted=len(removed_ids),
-        vehicles=[VehicleOut.model_validate(vehicle) for vehicle in await _all_vehicles(db)],
+        vehicles=[
+            VehicleOut.model_validate(vehicle) for vehicle in await _all_vehicles(db)
+        ],
     )
 
 
-async def create_vehicle(
-    payload: VehicleCreateRequest, db: AsyncSession
-) -> VehicleOut:
+async def create_vehicle(payload: VehicleCreateRequest, db: AsyncSession) -> VehicleOut:
     await _ensure_plate_available(db, payload.plate)
     vehicle = Vehicle(name=payload.name, plate=payload.plate, model=payload.model)
     db.add(vehicle)
@@ -229,8 +241,10 @@ async def _ensure_spot_name_available(
 
 async def list_parking_spots(db: AsyncSession) -> list[ParkingSpotOut]:
     spots = (
-        await db.execute(select(ParkingSpot).order_by(ParkingSpot.name.asc()))
-    ).scalars().all()
+        (await db.execute(select(ParkingSpot).order_by(ParkingSpot.name.asc())))
+        .scalars()
+        .all()
+    )
     return [ParkingSpotOut.model_validate(spot) for spot in spots]
 
 

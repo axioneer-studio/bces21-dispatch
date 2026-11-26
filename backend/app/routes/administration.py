@@ -93,9 +93,7 @@ async def list_app_permissions(_: User = Depends(require_admin)):
     return await cad.list_app_permissions()
 
 
-@router.post(
-    "/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
 async def create_role(
     payload: RoleCreateRequest,
     db: AsyncSession = Depends(get_db),
@@ -180,9 +178,7 @@ async def update_google_sheets_config(
     return await cad.update_google_sheets_config(payload, db)
 
 
-@router.post(
-    "/settings/google-sheets/service-account", response_model=MessageResponse
-)
+@router.post("/settings/google-sheets/service-account", response_model=MessageResponse)
 async def upload_google_service_account(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -201,9 +197,7 @@ async def delete_google_service_account(
     return await cad.delete_google_service_account(db)
 
 
-@router.post(
-    "/settings/google-sheets/test", response_model=GoogleSheetsTestResponse
-)
+@router.post("/settings/google-sheets/test", response_model=GoogleSheetsTestResponse)
 async def test_google_sheets_connection(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
@@ -211,9 +205,7 @@ async def test_google_sheets_connection(
     return await cad.test_google_sheets_connection(db)
 
 
-@router.get(
-    "/settings/google-sheets/status", response_model=GoogleSheetsConfigOut
-)
+@router.get("/settings/google-sheets/status", response_model=GoogleSheetsConfigOut)
 async def get_google_sheets_status(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),

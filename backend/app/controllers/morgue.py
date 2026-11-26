@@ -37,7 +37,9 @@ def _employee_name(employee: Employee) -> str:
 
 def _entry_out(entry: MorgueEntry) -> MorgueEntryOut:
     return MorgueEntryOut.model_validate(entry).model_copy(
-        update={"examiner_name": _employee_name(entry.examiner) if entry.examiner else None}
+        update={
+            "examiner_name": _employee_name(entry.examiner) if entry.examiner else None
+        }
     )
 
 
@@ -47,7 +49,9 @@ async def _can_manage_autopsy(db: AsyncSession, user: User) -> bool:
     return is_direction(await linked_employee(db, user))
 
 
-async def _require_autopsy_rights(db: AsyncSession, user: User) -> tuple[bool, Employee | None]:
+async def _require_autopsy_rights(
+    db: AsyncSession, user: User
+) -> tuple[bool, Employee | None]:
     """Vérifie que le compte est légiste ou Direction ; renvoie s'il est légiste et sa tuile."""
     is_forensic = await user_has_training_permission(db, user, FORENSIC_PERMISSION)
     employee = await linked_employee(db, user)
@@ -63,7 +67,9 @@ async def _examiners(db: AsyncSession) -> list[Employee]:
     """Employés actifs, liés à un compte, qui ont validé une formation de médecin légiste."""
     return [
         employee
-        for employee in await employees_with_training_permission(db, FORENSIC_PERMISSION)
+        for employee in await employees_with_training_permission(
+            db, FORENSIC_PERMISSION
+        )
         if employee.account_user_id is not None
     ]
 
@@ -80,7 +86,9 @@ def _ensure_in_cell(entry: MorgueEntry) -> None:
     if entry.incinerated_at is not None:
         raise HTTPException(status_code=409, detail="Ce défunt a déjà été incinéré.")
     if entry.coffined_at is not None:
-        raise HTTPException(status_code=409, detail="Ce défunt a déjà été mis en cercueil.")
+        raise HTTPException(
+            status_code=409, detail="Ce défunt a déjà été mis en cercueil."
+        )
 
 
 def _ensure_autopsy_done(entry: MorgueEntry) -> None:
@@ -93,8 +101,14 @@ def _ensure_autopsy_done(entry: MorgueEntry) -> None:
 
 async def get_morgue(user: User, db: AsyncSession) -> MorgueOut:
     entries = (
-        await db.execute(select(MorgueEntry).order_by(MorgueEntry.death_date, MorgueEntry.id))
-    ).scalars().all()
+        (
+            await db.execute(
+                select(MorgueEntry).order_by(MorgueEntry.death_date, MorgueEntry.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     can_manage_autopsy = await _can_manage_autopsy(db, user)
     return MorgueOut(
         entries=[_entry_out(entry) for entry in entries],
@@ -159,7 +173,9 @@ async def set_examiner(
     entry = await _get_entry(db, entry_id)
     _ensure_in_cell(entry)
     if payload.examiner_id is not None and payload.examiner_id != entry.examiner_id:
-        if payload.examiner_id not in {employee.id for employee in await _examiners(db)}:
+        if payload.examiner_id not in {
+            employee.id for employee in await _examiners(db)
+        }:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Le médecin choisi n’a pas le rôle de légiste.",
@@ -194,4 +210,4 @@ async def delete_entry(entry_id: int, db: AsyncSession) -> MessageResponse:
     entry = await _get_entry(db, entry_id)
     await db.delete(entry)
     await db.commit()
-    return {"message": "Défunt retiré de la morgue."}
+    return MessageResponse(message="Défunt retiré de la morgue.")

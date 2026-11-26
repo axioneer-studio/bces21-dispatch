@@ -1,4 +1,11 @@
-import type { DispatchRadio, DispatchSlot, DispatchSnapshot, DispatchState, FleetEntry, FrequencyKind } from './useDispatchStore'
+import type {
+  DispatchRadio,
+  DispatchSlot,
+  DispatchSnapshot,
+  DispatchState,
+  FleetEntry,
+  FrequencyKind,
+} from './useDispatchStore'
 
 function base(): string {
   // Retourne une chaîne vide pour que les appels utilisent des URLs relatives

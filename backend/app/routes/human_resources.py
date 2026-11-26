@@ -48,7 +48,9 @@ async def list_employee_accounts(db: AsyncSession = Depends(get_db)) -> list[dic
     response_model=list[GradeOption],
     dependencies=[Depends(require_hr_access)],
 )
-async def list_employee_grade_options(db: AsyncSession = Depends(get_db)) -> list[GradeOption]:
+async def list_employee_grade_options(
+    db: AsyncSession = Depends(get_db),
+) -> list[GradeOption]:
     return await chr_.list_employee_grade_options(db)
 
 
