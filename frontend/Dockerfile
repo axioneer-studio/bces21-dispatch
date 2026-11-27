@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apk upgrade --no-cache
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 ARG API_INTERNAL_BASE=http://backend:8000
