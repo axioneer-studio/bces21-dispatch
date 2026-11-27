@@ -1,0 +1,13 @@
+[package]
+name = "bces-dev"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform development launcher for BCES Dispatch"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
