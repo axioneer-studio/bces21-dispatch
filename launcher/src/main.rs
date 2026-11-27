@@ -52,6 +52,7 @@ struct Paths {
     frontend: PathBuf,
     python: PathBuf,
     state: PathBuf,
+    backend_marker: PathBuf,
     frontend_marker: PathBuf,
     backend_pid_file: PathBuf,
     frontend_pid_file: PathBuf,
@@ -142,6 +143,7 @@ fn build_paths(root: PathBuf) -> Result<Paths> {
         frontend,
         python,
         state: cache_root.join("processes.json"),
+        backend_marker: cache_root.join("backend-dependencies.hash"),
         frontend_marker: cache_root.join("frontend-dependencies.hash"),
         backend_pid_file: cache_root.join("backend-terminal.pid"),
         frontend_pid_file: cache_root.join("frontend-terminal.pid"),
@@ -184,7 +186,7 @@ async fn start(paths: Paths) -> Result<()> {
     #[cfg(target_os = "linux")]
     let (backend_shell_pid, frontend_shell_pid) = tokio::join!(
         read_pid_file(&paths.backend_pid_file),
-        read_pid_file(&paths.frontend_pid_file),
+        read_pid_file(&paths.frontend_pid_file)
     );
     #[cfg(not(target_os = "linux"))]
     let (backend_shell_pid, frontend_shell_pid) = (None, None);
@@ -240,7 +242,7 @@ fn prepare_backend(paths: &Paths) -> Result<()> {
         .context("Could not determine Python virtual environment directory")?;
 
     if !paths.python.is_file() {
-        println!("[BCES] Creating Python virtual environment...");
+        println!("[BCES] Python virtual environment not found; creating it...");
         if cfg!(windows) {
             let status = Command::new("py")
                 .args(["-3", "-m", "venv"])
@@ -253,7 +255,9 @@ fn prepare_backend(paths: &Paths) -> Result<()> {
                         .status()
                 })?;
             if !status.success() {
-                bail!("Could not create Windows virtualenv. Install Python 3.11+ and the venv component.");
+                bail!(
+                    "Could not create Windows virtualenv. Install Python 3.11+ and the venv component."
+                );
             }
         } else {
             let status = Command::new("python3")
@@ -265,6 +269,8 @@ fn prepare_backend(paths: &Paths) -> Result<()> {
                 bail!("Could not create Python virtualenv. Install python3-venv.");
             }
         }
+    } else {
+        println!("[BCES] Python virtual environment already exists; reusing it.");
     }
 
     if !paths.python.is_file() {
@@ -274,42 +280,53 @@ fn prepare_backend(paths: &Paths) -> Result<()> {
         );
     }
 
-    // A previous run may have written a requirements hash even though pip installation
-    // was interrupted. Verify pip itself and run pip install on every start; pip is
-    // incremental and will only install/update what is actually missing.
-    let pip_check = Command::new(&paths.python)
-        .args(["-m", "pip", "--version"])
-        .current_dir(&paths.backend)
-        .status()
-        .context("Could not check pip in the backend virtualenv")?;
+    let requirements_file = paths.backend.join("requirements.txt");
+    let requirements_hash = {
+        let mut hasher = DefaultHasher::new();
+        fs::read(&requirements_file)?.hash(&mut hasher);
+        format!("{:x}", hasher.finish())
+    };
+    let previous_hash = fs::read_to_string(&paths.backend_marker).unwrap_or_default();
+    let requirements_changed = previous_hash != requirements_hash;
 
-    if !pip_check.success() {
-        println!("[BCES] pip is missing; bootstrapping it with ensurepip...");
-        run_python_module(&paths.python, &["ensurepip", "--upgrade"], &paths.backend)?;
+    if requirements_changed {
+        println!("[BCES] Python requirements are missing or have changed; checking pip...");
+
+        let pip_check = Command::new(&paths.python)
+            .args(["-m", "pip", "--version"])
+            .current_dir(&paths.backend)
+            .status()
+            .context("Could not check pip in the backend virtualenv")?;
+
+        if !pip_check.success() {
+            println!("[BCES] pip is missing; bootstrapping it with ensurepip...");
+            run_python_module(&paths.python, &["ensurepip", "--upgrade"], &paths.backend)?;
+        }
+
+        println!("[BCES] Installing Python requirements...");
+        run_python_module(
+            &paths.python,
+            &[
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "-r",
+                "requirements.txt",
+            ],
+            &paths.backend,
+        )?;
+    } else {
+        println!("[BCES] Python requirements are unchanged; skipping installation.");
     }
 
-    println!("[BCES] Installing/checking Python requirements...");
-    run_python_module(
-        &paths.python,
-        &[
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "-r",
-            "requirements.txt",
-        ],
-        &paths.backend,
-    )?;
-
-    // Uvicorn is the ASGI server used by this launcher. Keep the launcher resilient
-    // if it is accidentally absent from requirements.txt or a previous install was partial.
     let uvicorn_check = Command::new(&paths.python)
         .args(["-c", "import uvicorn"])
         .current_dir(&paths.backend)
         .status()
         .context("Could not verify the Uvicorn installation")?;
+
     if !uvicorn_check.success() {
-        println!("[BCES] Uvicorn is missing; installing uvicorn[standard]...");
+        println!("[BCES] Uvicorn is missing; installing it...");
         run_python_module(
             &paths.python,
             &[
@@ -322,13 +339,16 @@ fn prepare_backend(paths: &Paths) -> Result<()> {
         )?;
     }
 
-    let pip_check = Command::new(&paths.python)
-        .args(["-m", "pip", "check"])
-        .current_dir(&paths.backend)
-        .status()
-        .context("Could not validate Python dependencies")?;
-    if !pip_check.success() {
-        bail!("Python dependency validation failed. Review the pip errors above.");
+    if requirements_changed {
+        let pip_check = Command::new(&paths.python)
+            .args(["-m", "pip", "check"])
+            .current_dir(&paths.backend)
+            .status()
+            .context("Could not validate Python dependencies")?;
+        if !pip_check.success() {
+            bail!("Python dependency validation failed. Review the pip errors above.");
+        }
+        fs::write(&paths.backend_marker, &requirements_hash)?;
     }
 
     let env = paths.backend.join(".env");
@@ -364,10 +384,12 @@ fn run_python_module(python: &Path, args: &[&str], cwd: &Path) -> Result<()> {
 }
 
 fn prepare_frontend(paths: &Paths) -> Result<()> {
-    ensure_command("node", &["--version"], &paths.frontend)
-        .context("Node.js is not available in this environment. Install Node.js in the same OS where you run bces-dev.")?;
-    ensure_command("npm", &["--version"], &paths.frontend)
-        .context("npm is not available in this environment. Install Node.js/npm in the same OS where you run bces-dev.")?;
+    ensure_command("node", &["--version"], &paths.frontend).context(
+        "Node.js is not available in this environment. Install Node.js in the same OS where you run bces-dev."
+    )?;
+    ensure_command("npm", &["--version"], &paths.frontend).context(
+        "npm is not available in this environment. Install Node.js/npm in the same OS where you run bces-dev."
+    )?;
 
     let package_json = paths.frontend.join("package.json");
     let lock_file = paths.frontend.join("package-lock.json");
@@ -379,40 +401,18 @@ fn prepare_frontend(paths: &Paths) -> Result<()> {
     let current_hash = format!("{:x}", hasher.finish());
     let previous_hash = fs::read_to_string(&paths.frontend_marker).unwrap_or_default();
     let node_modules_exists = paths.frontend.join("node_modules").is_dir();
-    let installed_tree_valid = node_modules_exists && npm_dependencies_valid(&paths.frontend);
 
-    if !installed_tree_valid || previous_hash != current_hash {
-        println!("[BCES] Installing/checking frontend npm dependencies...");
-        if lock_file.is_file() {
-            run_npm(&paths.frontend, &["ci"])?;
-        } else {
-            run_npm(&paths.frontend, &["install"])?;
-        }
+    // npm ls can return a non-zero status for peer-dependency conflicts even
+    // when node_modules is populated. Do not use it to decide whether to install.
+    if !node_modules_exists || previous_hash.trim() != current_hash {
+        println!("[BCES] Frontend dependencies are missing or changed; running npm install...");
+        run_npm(&paths.frontend, &["install"])?;
         fs::write(&paths.frontend_marker, current_hash)?;
     } else {
-        println!("[BCES] Frontend npm dependencies are up to date; skipping installation.");
+        println!("[BCES] Frontend dependencies are already installed; skipping npm install.");
     }
 
     Ok(())
-}
-
-fn npm_dependencies_valid(cwd: &Path) -> bool {
-    let command_cwd = command_cwd(cwd);
-    let output = if cfg!(windows) {
-        Command::new("cmd")
-            .args(["/C", "npm.cmd", "ls", "--all"])
-            .current_dir(command_cwd)
-            .output()
-    } else {
-        Command::new("npm")
-            .args(["ls", "--all"])
-            .current_dir(command_cwd)
-            .output()
-    };
-
-    output
-        .map(|result| result.status.success())
-        .unwrap_or(false)
 }
 
 fn run_npm(cwd: &Path, args: &[&str]) -> Result<()> {
@@ -478,7 +478,7 @@ fn spawn_backend(paths: &Paths) -> Result<Child> {
         let script = format!(
             "$Host.UI.RawUI.WindowTitle = 'BCES Dispatch - Backend'; Set-Location -LiteralPath {}; Write-Host '[BCES] Starting FastAPI...' -ForegroundColor Cyan; & {} -m uvicorn main:app --reload --host 0.0.0.0 --port 8000; $exitCode = $LASTEXITCODE; if ($null -eq $exitCode) {{ $exitCode = 0 }}; Write-Host ''; if ($exitCode -eq 0) {{ Write-Host '[BCES] FastAPI stopped normally.' -ForegroundColor Yellow }} else {{ Write-Host ('[BCES] FastAPI stopped with exit code ' + $exitCode) -ForegroundColor Red }}; Write-Host '[BCES] This PowerShell window remains open for debugging.' -ForegroundColor Yellow",
             ps_quote(&paths.backend),
-            ps_quote(&paths.python),
+            ps_quote(&paths.python)
         );
         return spawn_windows_console(&script).context("Could not open the FastAPI console");
     }
@@ -525,7 +525,7 @@ fn spawn_frontend(paths: &Paths) -> Result<Child> {
     {
         let script = format!(
             "$Host.UI.RawUI.WindowTitle = 'BCES Dispatch - Frontend'; Set-Location -LiteralPath {}; Write-Host '[BCES] Starting Nuxt...' -ForegroundColor Cyan; & npm.cmd run dev -- --port 3000; $exitCode = $LASTEXITCODE; if ($null -eq $exitCode) {{ $exitCode = 0 }}; Write-Host ''; if ($exitCode -eq 0) {{ Write-Host '[BCES] Nuxt stopped normally.' -ForegroundColor Yellow }} else {{ Write-Host ('[BCES] Nuxt stopped with exit code ' + $exitCode) -ForegroundColor Red }}; Write-Host '[BCES] This PowerShell window remains open for debugging.' -ForegroundColor Yellow",
-            ps_quote(&paths.frontend),
+            ps_quote(&paths.frontend)
         );
         return spawn_windows_console(&script).context("Could not open the Nuxt console");
     }
@@ -570,8 +570,9 @@ fn spawn_linux_terminal(
     program: &Path,
     args: &[String],
 ) -> Result<Child> {
-    let terminal = find_linux_terminal()
-        .context("No supported terminal emulator found. Install GNOME Terminal, Konsole, XFCE Terminal, XTerm or another supported terminal.")?;
+    let terminal = find_linux_terminal().context(
+        "No supported terminal emulator found. Install GNOME Terminal, Konsole, XFCE Terminal, XTerm or another supported terminal."
+    )?;
     let executable_name = terminal
         .file_name()
         .and_then(std::ffi::OsStr::to_str)
@@ -588,7 +589,7 @@ fn spawn_linux_terminal(
         shell_quote(&pid_file.to_string_lossy()),
         shell_quote(&cwd.to_string_lossy()),
         title.replace('\'', ""),
-        command,
+        command
     );
 
     let mut terminal_command = TokioCommand::new(&terminal);
@@ -695,7 +696,9 @@ fn find_linux_terminal() -> Option<PathBuf> {
             .output()
         {
             Ok(output) => output,
-            Err(_) => continue,
+            Err(_) => {
+                continue;
+            }
         };
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();

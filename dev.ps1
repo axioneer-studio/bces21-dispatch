@@ -109,13 +109,13 @@ if (-not (Test-Path $frontendEnv)) {
 $missing = @()
 
 foreach ($key in @(
-    'DISCORD_CLIENT_ID',
-    'DISCORD_CLIENT_SECRET',
-    'SESSION_SECRET'
-)) {
+        'DISCORD_CLIENT_ID',
+        'DISCORD_CLIENT_SECRET',
+        'SESSION_SECRET'
+    )) {
     $pattern = '^\s*' + [regex]::Escape($key) + '\s*='
     $line = Select-String -Path $backendEnv -Pattern $pattern |
-        Select-Object -First 1
+    Select-Object -First 1
 
     if ($null -eq $line) {
         $missing += $key
@@ -238,15 +238,15 @@ Write-Log 'Starting FastAPI backend on port 8000...'
 $backendProcess = Start-Process `
     -FilePath $python `
     -ArgumentList @(
-        '-m',
-        'uvicorn',
-        'main:app',
-        '--reload',
-        '--host',
-        '127.0.0.1',
-        '--port',
-        '8000'
-    ) `
+    '-m',
+    'uvicorn',
+    'main:app',
+    '--reload',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    '8000'
+) `
     -WorkingDirectory $backend `
     -PassThru
 

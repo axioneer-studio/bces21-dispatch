@@ -1,4 +1,4 @@
-﻿# BCES Dispatch
+# BCES Dispatch
 
 Application de dispatch du BCES : tableau de bord temps réel des agents, des interventions et des radios, avec authentification Discord OAuth2.
 
@@ -14,7 +14,7 @@ Trois méthodes sont disponibles :
 
 ### 1. Launcher Rust (`bces-dev`) - recommandé
 
-Le launcher gère automatiquement le venv Python, les dépendances, le `.env` et lance les deux services dans des consoles séparées (Windows) ou un seul terminal (Linux/WSL).
+Le launcher gère automatiquement le venv Python, les dépendances, le `.env` et lance les deux services dans des consoles séparées (`Windows/Linux/WSL`).
 
 Depuis le dossier `launcher/` :
 
