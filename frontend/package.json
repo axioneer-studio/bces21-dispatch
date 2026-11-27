@@ -1,10 +1,11 @@
 {
   "name": "frontend",
   "type": "module",
-  "private": true,
+  "private": false,
+  "version": "1.0.0",
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev --host localhost",
+    "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"

@@ -7,7 +7,7 @@ services:
 
     environment:
       APP_NAME: "BCES Dispatch API"
-      APP_VERSION: "0.1.0"
+      APP_VERSION: "1.0.0"
       DEBUG: "false"
       APP_TIMEZONE: "Europe/Paris"
 
