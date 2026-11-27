@@ -96,6 +96,7 @@ from app.services.formation_stages import (
     module_stage,
 )
 from app.services.formation_thresholds import read_thresholds, write_thresholds
+from app.services.service_chief import ensure_chief_grade_free
 from app.services.hospital_access import (
     is_direction,
     linked_employee,
@@ -1020,6 +1021,7 @@ async def _change_grade(
 ) -> None:
     """Change le grade : les emojis de l'étape quittée partent, ceux de l'étape
     retrouvée reviennent selon les niveaux gardés."""
+    await ensure_chief_grade_free(db, grade.id, employee.id)
     await _stage_emojis(db, employee, leaving, present=False)
     employee.grade = grade
     if entering is not None:
@@ -1190,6 +1192,7 @@ async def cancel_completion(employee_id: int, db: AsyncSession) -> InternRecordO
             status_code=409,
             detail="Aucun grade « En formation » : cochez-le dans Direction.",
         )
+    await ensure_chief_grade_free(db, previous.id, employee.id)
     record.completed_at = None
     record.completed_from_grade_id = None
     employee.grade = previous

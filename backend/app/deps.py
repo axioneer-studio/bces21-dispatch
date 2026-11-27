@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.session import current_user_id
 from app.database import get_db
 from app.models import User
+from app.services.service_chief import is_service_chief
 
 # Pages ouvertes à tout compte validé par un admin, même sans rôle.
 OPEN_PAGES = frozenset(
@@ -34,6 +35,7 @@ async def get_current_user(
             else "Compte désactivé ou accès refusé."
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+    user.is_service_chief = await is_service_chief(db, user)
     return user
 
 
@@ -103,6 +105,17 @@ async def require_super_admin(user: User = Depends(get_current_user)) -> User:
             detail="Droits super-admin requis.",
         )
     return user
+
+
+async def require_super_admin_manager(user: User = Depends(get_current_user)) -> User:
+    """Donner et retirer le statut super-admin (page Direction) : le chef de
+    service, même s'il a désactivé ses droits super-admin, et les super-admins."""
+    if user.is_service_chief or user.has_super_admin_rights:
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Réservé au chef de service et aux super-admins.",
+    )
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:

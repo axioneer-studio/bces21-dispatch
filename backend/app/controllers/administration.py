@@ -39,6 +39,7 @@ from app.services.google_sheets_service import (
     load_settings_from_db,
 )
 from app.services.s3_service import S3ServiceError, s3_service
+from app.services.service_chief import ensure_chief_grade_free
 
 logger = logging.getLogger("bces.admin")
 
@@ -720,6 +721,7 @@ async def approve_registration(user_id: int, db: AsyncSession) -> MessageRespons
         await db.execute(select(Employee).where(Employee.account_user_id == target.id))
     ).scalar_one_or_none()
     if employee is not None:
+        await ensure_chief_grade_free(db, employee.grade_id, employee.id)
         employee.is_active = True
     await db.commit()
     if employee is not None:

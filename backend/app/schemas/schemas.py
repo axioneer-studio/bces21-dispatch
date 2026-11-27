@@ -53,6 +53,8 @@ class UserResponse(BaseModel):
     # Statut super-admin, actif ou non : affiche le bouton « Superadmin ».
     super_admin_available: bool = False
     super_admin_enabled: bool = True
+    # Chef de service (grade le plus élevé) : super-admin par son grade.
+    is_service_chief: bool = False
     page_access: list[str] = Field(default_factory=list)
     app_permissions: list[str] = Field(default_factory=list)
     grade_permissions: list[str] = Field(default_factory=list)
@@ -339,6 +341,8 @@ class GradeOut(BaseModel):
     is_trial: bool
     is_training: bool
     employees_count: int
+    # Grade le plus élevé : celui du chef de service (services/service_chief).
+    is_service_chief: bool = False
 
 
 class GradeOption(BaseModel):
@@ -392,6 +396,32 @@ class UserRoleUpdateRequest(BaseModel):
 
 class SuperAdminUpdateRequest(BaseModel):
     is_super_admin: bool
+
+
+class SuperAdminAccountOut(BaseModel):
+    """Compte de l'onglet Super-admins (page Direction)."""
+
+    id: int
+    name: str
+    discord_username: str
+    discord_avatar: str | None
+    # Tuile liée au compte, s'il y en a une.
+    employee_name: str | None
+    grade_name: str | None
+    grade_color: str | None
+    # Statut du compte, donné ou retiré dans l'onglet.
+    is_super_admin: bool
+    # Chef de service : super-admin par son grade, même sans le statut.
+    is_service_chief: bool
+    # Le compte connecté : son propre statut ne se change pas.
+    is_self: bool
+
+
+class DirectionSuperAdminsOut(BaseModel):
+    accounts: list[SuperAdminAccountOut]
+    # Grade du chef de service et nombre d'employés actifs qui l'ont (un seul attendu).
+    chief_grade_name: str | None
+    chief_count: int
 
 
 class SuperAdminToggleRequest(BaseModel):

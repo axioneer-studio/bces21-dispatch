@@ -149,6 +149,8 @@ Générer un secret de session : `openssl rand -hex 32`
 
 Le premier compte créé est automatiquement validé et reçoit les droits super-admin. Un compte validé accède au Dispatch, à la Crise, à l'Hôpital, à l'Agenda et au Stock, même sans rôle.
 
+Le **chef de service** est l'employé du grade le plus élevé (en tête de Direction › Grades, quel que soit son nom, ex. « Directeur »). Ce grade ne se donne qu'à une seule personne active (`409` sinon). Le compte lié à sa tuile a les droits super-admin tant qu'il a ce grade, même sans le statut super-admin du compte : s'il change de grade, il ne les garde que si son compte a ce statut. Le chef de service et les super-admins donnent et retirent ce statut aux autres comptes dans Direction › Super-admins, jamais le leur (`services/service_chief.py`).
+
 ---
 
 ## Pages principales
@@ -164,7 +166,7 @@ Le premier compte créé est automatiquement validé et reçoit les droits super
 | `/poles-specialites` | Formations générales, équipes et droits associés |
 | `/formation` | Fiches de formation (formateurs uniquement) |
 | `/ressources-humaines` | Employés, compétences et lien aux comptes |
-| `/direction` | Grades et permissions opérationnelles |
+| `/direction` | Grades et permissions opérationnelles ; onglet Super-admins pour le chef de service et les super-admins |
 | `/administration` | Utilisateurs, rôles, inscriptions, paramètres généraux |
 | `/complete-profile` | Prénom RP / nom RP / téléphone (obligatoire, délai 24 h) |
 
