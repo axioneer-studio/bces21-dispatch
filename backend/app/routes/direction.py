@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers import direction as cd
-from app.deps import get_db, require_page_access
+from app.deps import get_db, require_page_access, require_super_admin_manager
 from app.models import User
 from app.schemas import FrequencyKind
 
@@ -117,3 +117,24 @@ async def update_frequency(
     _: User = Depends(require_page_access("direction")),
 ) -> cd.FrequencySettingOut:
     return await cd.update_frequency(kind, payload, db)
+
+
+# --- Super-admins : chef de service et super-admins ---
+
+
+@router.get("/super-admins", response_model=cd.DirectionSuperAdminsOut)
+async def list_super_admins(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_super_admin_manager),
+) -> cd.DirectionSuperAdminsOut:
+    return await cd.list_super_admins(user, db)
+
+
+@router.put("/super-admins/{user_id}", response_model=cd.DirectionSuperAdminsOut)
+async def update_super_admin_status(
+    user_id: int,
+    payload: cd.SuperAdminUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_super_admin_manager),
+) -> cd.DirectionSuperAdminsOut:
+    return await cd.update_super_admin_status(user_id, payload, user, db)

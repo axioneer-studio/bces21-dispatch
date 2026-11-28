@@ -136,8 +136,8 @@ async def toggle_own_super_admin(
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     # Statut réel, pas les droits actifs : un super-admin désactivé doit
-    # toujours pouvoir se réactiver.
-    if not user.is_super_admin:
+    # toujours pouvoir se réactiver. Le chef de service a les mêmes droits.
+    if not (user.is_super_admin or user.is_service_chief):
         raise HTTPException(status_code=403, detail="Réservé aux super-admins.")
     user.super_admin_enabled = payload.enabled
     await db.commit()
@@ -160,7 +160,8 @@ async def _me_response(db: AsyncSession, user: User) -> UserResponse:
         update={
             "role_names": [role.name for role in user.roles],
             "is_super_admin": user.has_super_admin_rights,
-            "super_admin_available": user.is_super_admin,
+            "super_admin_available": user.is_super_admin or user.is_service_chief,
+            "is_service_chief": user.is_service_chief,
             "super_admin_enabled": user.super_admin_enabled,
             "page_access": page_access,
             "app_permissions": user_role_permissions(user),

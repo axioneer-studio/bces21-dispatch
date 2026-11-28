@@ -17,6 +17,7 @@ from app.schemas import (
     MessageResponse,
 )
 from app.services.grade_permissions import parse_grade_permissions
+from app.services.service_chief import ensure_chief_grade_free
 from app.services.training_rights import user_has_hr_access
 
 
@@ -144,6 +145,7 @@ async def create_employee(
     )
     if payload.grade_id is not None and grade is None:
         raise HTTPException(status_code=404, detail="Grade introuvable.")
+    await ensure_chief_grade_free(db, payload.grade_id)
     if payload.account_user_id is not None:
         await _validate_account_link(db, payload.account_user_id)
 
@@ -196,6 +198,10 @@ async def update_employee(
         )
         if data["grade_id"] is not None and target_grade is None:
             raise HTTPException(status_code=404, detail="Grade introuvable.")
+    # Le grade du chef de service ne va qu'à un seul employé actif.
+    if data.get("is_active", employee.is_active) and ("grade_id" in data or data.get("is_active") is True):
+        await ensure_chief_grade_free(db, data["grade_id"] if "grade_id" in data else employee.grade_id, employee.id)
+    if "grade_id" in data:
         employee.grade = target_grade
     target_account_id = employee.account_user_id
     if data.get("is_active") is True and target_account_id is not None:

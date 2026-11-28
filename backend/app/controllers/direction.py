@@ -1,8 +1,9 @@
-"""Contrôleur Direction : grades, radios et fréquences."""
+"""Contrôleur Direction : grades, radios, fréquences et statut super-admin des
+comptes (onglet du chef de service, voir services/service_chief)."""
 
 import json
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +13,12 @@ from app.controllers.dispatch import (
     push_snapshot,
     sorted_radios,
 )
-from app.models import DispatchRadio, DispatchState, Employee, Grade
+from app.models import DispatchRadio, DispatchState, Employee, Grade, User
 from app.schemas import (
     DirectionRadioCreateRequest,
     DirectionRadioOut,
     DirectionRadioUpdateRequest,
+    DirectionSuperAdminsOut,
     FrequencyKind,
     FrequencySettingOut,
     FrequencySettingUpdateRequest,
@@ -24,7 +26,10 @@ from app.schemas import (
     GradeOut,
     GradeUpdateRequest,
     MessageResponse,
+    SuperAdminAccountOut,
+    SuperAdminUpdateRequest,
 )
+from app.services.service_chief import chief_employees, chief_grade, ensure_single_chief
 from app.services.frequency_settings import (
     FREQUENCY_KINDS,
     current_frequency,
@@ -54,7 +59,9 @@ async def _grade_out(db: AsyncSession, grade: Grade) -> GradeOut:
     count = await db.scalar(
         select(func.count(Employee.id)).where(Employee.grade_id == grade.id)
     )
+    chief = await chief_grade(db)
     return GradeOut(
+        is_service_chief=chief is not None and chief.id == grade.id,
         id=grade.id,
         name=grade.name,
         level=grade.level,
@@ -138,10 +145,12 @@ async def update_grade(
             raise HTTPException(status_code=409, detail="Ce grade existe déjà.")
     if "permissions" in data:
         data["permissions"] = json.dumps(_validated_permissions(data["permissions"]))
+    previous_chief = await chief_grade(db)
     for key, value in data.items():
         setattr(grade, key, value)
     try:
         _check_training_flags(grade)
+        await ensure_single_chief(db, previous_chief.id if previous_chief else None)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -163,7 +172,9 @@ async def delete_grade(grade_id: int, db: AsyncSession) -> MessageResponse:
             status_code=409,
             detail="Réattribuez d’abord ce grade aux employés concernés.",
         )
+    previous_chief = await chief_grade(db)
     await db.delete(grade)
+    await ensure_single_chief(db, previous_chief.id if previous_chief else None)
     await db.commit()
     return MessageResponse(message="Grade supprimé.")
 
@@ -304,3 +315,70 @@ async def update_frequency(
     await db.commit()
     await push_snapshot(db)
     return await _frequency_setting_out(db, state, kind)
+
+
+# --- Super-admins (chef de service et super-admins) ---
+
+
+def _account_name(user: User) -> str:
+    return " ".join(filter(None, [user.prenom_rp, user.nom_rp])) or user.discord_username
+
+
+async def list_super_admins(current_user: User, db: AsyncSession) -> DirectionSuperAdminsOut:
+    """Comptes validés, avec leur tuile et leur statut super-admin."""
+    grade = await chief_grade(db)
+    chiefs = await chief_employees(db, grade)
+    chief_user_ids = {employee.account_user_id for employee in chiefs if employee.account_user_id is not None}
+    users = (await db.execute(select(User).where(User.status == "active"))).scalars().all()
+    employees = {
+        employee.account_user_id: employee
+        for employee in (
+            await db.execute(select(Employee).where(Employee.account_user_id.is_not(None)))
+        ).scalars().all()
+    }
+    accounts = []
+    for user in users:
+        employee = employees.get(user.id)
+        accounts.append(
+            SuperAdminAccountOut(
+                id=user.id,
+                name=_account_name(user),
+                discord_username=user.discord_username,
+                discord_avatar=user.discord_avatar,
+                employee_name=(
+                    " ".join(filter(None, [employee.first_name, employee.last_name])) if employee else None
+                ),
+                grade_name=employee.grade.name if employee and employee.grade else None,
+                grade_color=employee.grade.color if employee and employee.grade else None,
+                is_super_admin=user.is_super_admin,
+                is_service_chief=user.id in chief_user_ids,
+                is_self=user.id == current_user.id,
+            )
+        )
+    accounts.sort(key=lambda account: (account.name.casefold(), account.id))
+    return DirectionSuperAdminsOut(
+        accounts=accounts,
+        chief_grade_name=grade.name if grade else None,
+        chief_count=len(chiefs),
+    )
+
+
+async def update_super_admin_status(
+    user_id: int, payload: SuperAdminUpdateRequest, current_user: User, db: AsyncSession
+) -> DirectionSuperAdminsOut:
+    """Donne ou retire le statut super-admin d'un autre compte. Le chef de
+    service garde ses droits par son grade : son statut ne compte que s'il en
+    change."""
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Votre propre statut super-admin ne se change pas ici.",
+        )
+    target = await db.get(User, user_id)
+    if target is None or target.status != "active":
+        raise HTTPException(status_code=404, detail="Compte introuvable.")
+    if payload.is_super_admin and not target.is_super_admin:
+        target.super_admin_enabled = True
+    target.is_super_admin = payload.is_super_admin
+    await db.commit()
+    return await list_super_admins(current_user, db)

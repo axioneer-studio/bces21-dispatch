@@ -79,10 +79,16 @@ class User(Base):
         nullable=False,
     )
 
+    # Chef de service (services/service_chief) : pas une colonne, posé à chaque
+    # requête par deps.get_current_user. Il a les droits super-admin même sans
+    # le statut `is_super_admin`.
+    is_service_chief = False
+
     @property
     def has_super_admin_rights(self) -> bool:
-        """Super-admin dont les droits sont actifs : à utiliser pour tout contrôle d'accès."""
-        return self.is_super_admin and self.super_admin_enabled
+        """Super-admin (ou chef de service) dont les droits sont actifs : à
+        utiliser pour tout contrôle d'accès."""
+        return (self.is_super_admin or self.is_service_chief) and self.super_admin_enabled
 
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

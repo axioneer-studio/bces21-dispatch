@@ -19,6 +19,32 @@ interface Grade {
   /** En formation : en formation complémentaire (CDI, Résident). */
   is_training: boolean;
   employees_count: number;
+  /** Grade le plus élevé : celui du chef de service, donné à une seule personne. */
+  is_service_chief: boolean;
+}
+
+/** Compte de l'onglet Super-admins. */
+interface SuperAdminAccount {
+  id: number;
+  name: string;
+  discord_username: string;
+  discord_avatar: string | null;
+  employee_name: string | null;
+  grade_name: string | null;
+  grade_color: string | null;
+  /** Statut du compte, donné ou retiré dans l'onglet. */
+  is_super_admin: boolean;
+  /** Super-admin par son grade, même sans le statut du compte. */
+  is_service_chief: boolean;
+  /** Le compte connecté : son propre statut ne se change pas. */
+  is_self: boolean;
+}
+
+interface DirectionSuperAdmins {
+  accounts: SuperAdminAccount[];
+  chief_grade_name: string | null;
+  /** Employés actifs du grade de chef : un seul attendu. */
+  chief_count: number;
 }
 
 interface DirectionRadio {
@@ -61,6 +87,7 @@ const [
   { data: permissionOptions },
   { data: initialRadios },
   { data: initialFrequencies },
+  { data: initialSuperAdmins },
 ] = await Promise.all([
   useAsyncData("direction-grades", () =>
     $fetch<Grade[]>("/api/direction/grades", {
@@ -86,20 +113,49 @@ const [
       headers: requestHeaders,
     }),
   ),
+  // Onglet réservé au chef de service et aux super-admins : refusé (403)
+  // pour les autres, il reste caché.
+  useAsyncData("direction-super-admins", async () => {
+    try {
+      return await $fetch<DirectionSuperAdmins>("/api/direction/super-admins", {
+        credentials: "include",
+        headers: requestHeaders,
+      });
+    } catch {
+      return null;
+    }
+  }),
 ]);
 
-const directionSections = ["grades", "radios", "frequencies"] as const;
+const directionSections = [
+  "grades",
+  "radios",
+  "frequencies",
+  "super-admins",
+] as const;
 const { active: activeSection, select: selectSection } = useHashTab(
   directionSections,
   "grades",
 );
 
+const superAdmins = ref<DirectionSuperAdmins | null>(
+  initialSuperAdmins.value ?? null,
+);
+const canManageSuperAdmins = computed(() => superAdmins.value !== null);
+const visibleSections = computed(() =>
+  directionSections.filter(
+    (section) => section !== "super-admins" || canManageSuperAdmins.value,
+  ),
+);
+watch(activeSection, (section) => {
+  if (section === "super-admins" && !canManageSuperAdmins.value)
+    selectSection("grades");
+});
+
 function moveSectionTab(step: -1 | 1) {
-  const index = directionSections.indexOf(activeSection.value);
-  const next =
-    directionSections[
-      (index + step + directionSections.length) % directionSections.length
-    ];
+  const sections = visibleSections.value;
+  const index = sections.indexOf(activeSection.value);
+  const next = sections[(index + step + sections.length) % sections.length];
   if (!next) return;
   selectSection(next);
   nextTick(() =>
@@ -155,6 +211,62 @@ function messageFromError(cause: unknown, fallback: string) {
     }
   }
   return fallback;
+}
+
+// --- Super-admins : statut donné ou retiré par le chef de service et les super-admins ---
+
+const superAdminSearch = ref("");
+const savingSuperAdminId = ref<number | null>(null);
+/** Comptes qui ont les droits super-admin : par leur statut ou comme chef de service. */
+const superAdminCount = computed(
+  () =>
+    superAdmins.value?.accounts.filter(
+      (account) => account.is_super_admin || account.is_service_chief,
+    ).length ?? 0,
+);
+const visibleAccounts = computed(() => {
+  const accounts = superAdmins.value?.accounts ?? [];
+  const query = superAdminSearch.value.trim().toLocaleLowerCase("fr");
+  if (!query) return accounts;
+  return accounts.filter((account) =>
+    [
+      account.name,
+      account.discord_username,
+      account.employee_name ?? "",
+      account.grade_name ?? "",
+    ]
+      .join(" ")
+      .toLocaleLowerCase("fr")
+      .includes(query),
+  );
+});
+
+async function setSuperAdmin(account: SuperAdminAccount, event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (savingSuperAdminId.value !== null) {
+    input.checked = account.is_super_admin;
+    return;
+  }
+  savingSuperAdminId.value = account.id;
+  error.value = "";
+  try {
+    superAdmins.value = await $fetch<DirectionSuperAdmins>(
+      `/api/direction/super-admins/${account.id}`,
+      {
+        method: "PUT",
+        body: { is_super_admin: input.checked },
+        credentials: "include",
+      },
+    );
+  } catch (cause) {
+    input.checked = account.is_super_admin;
+    error.value = messageFromError(
+      cause,
+      "Modification du statut super-admin impossible.",
+    );
+  } finally {
+    savingSuperAdminId.value = null;
+  }
 }
 
 function resetForm() {
@@ -514,7 +626,7 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
           </div>
         </div>
         <div
-          v-else
+          v-else-if="activeSection === 'frequencies'"
           class="direction-overview"
           aria-label="Résumé des fréquences"
         >
@@ -523,6 +635,24 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
               frequencySettings.length
             }}</strong
             ><span>fréquences</span>
+          </div>
+        </div>
+        <div
+          v-else-if="activeSection === 'super-admins' && superAdmins"
+          class="direction-overview"
+          aria-label="Résumé des super-admins"
+        >
+          <div class="direction-count">
+            <Icon name="lucide:shield-check" size="18" /><strong>{{
+              superAdminCount
+            }}</strong
+            ><span>super-admin{{ superAdminCount > 1 ? "s" : "" }}</span>
+          </div>
+          <div class="direction-count direction-count--muted">
+            <Icon name="lucide:users-round" size="18" /><strong>{{
+              superAdmins.accounts.length
+            }}</strong
+            ><span>comptes</span>
           </div>
         </div>
         <button
@@ -581,6 +711,20 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
       >
         <Icon name="lucide:radio" size="16" /> Fréquences
         <span>{{ frequencySettings.length }}</span>
+      </button>
+      <button
+        v-if="canManageSuperAdmins"
+        id="direction-tab-super-admins"
+        type="button"
+        role="tab"
+        :aria-selected="activeSection === 'super-admins'"
+        aria-controls="direction-super-admins"
+        :tabindex="activeSection === 'super-admins' ? 0 : -1"
+        :class="{ 'is-active': activeSection === 'super-admins' }"
+        @click="selectSection('super-admins')"
+      >
+        <Icon name="lucide:shield-check" size="16" /> Super-admins
+        <span>{{ superAdminCount }}</span>
       </button>
     </nav>
 
@@ -796,6 +940,11 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
             ></span>
             <h3>{{ grade.name }}</h3>
             <code>{{ grade.color.toUpperCase() }}</code
+            ><span
+              v-if="grade.is_service_chief"
+              class="direction-grade__badge direction-grade__badge--chief"
+              title="Grade le plus élevé : une seule personne peut l’avoir, et elle est super-admin."
+              ><Icon name="lucide:crown" size="11" /> Chef de service</span
             ><span v-if="grade.is_direction" class="direction-grade__badge"
               ><Icon name="lucide:radio-tower" size="11" /> Direction</span
             ><span v-if="grade.is_training" class="direction-grade__badge"
@@ -1041,6 +1190,135 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
       <div v-if="!frequencySettings.length" class="direction-empty">
         <Icon name="lucide:radio" size="21" />
         <p>Aucune fréquence configurée.</p>
+      </div>
+    </section>
+
+    <section
+      v-if="superAdmins"
+      id="direction-super-admins"
+      v-show="activeSection === 'super-admins'"
+      class="direction-section"
+      role="tabpanel"
+      aria-labelledby="direction-tab-super-admins"
+    >
+      <div class="direction-section__heading">
+        <div>
+          <h2>Super-admins</h2>
+          <p>
+            Le chef de service<template v-if="superAdmins.chief_grade_name">
+              (grade « {{ superAdmins.chief_grade_name }} », en tête des
+              grades)</template
+            >
+            est super-admin par son grade. Un compte coché garde le statut
+            quel que soit son grade, chef de service compris. Votre propre
+            statut ne se change pas ici.
+          </p>
+        </div>
+        <label class="direction-search">
+          <Icon name="lucide:search" size="15" />
+          <input
+            v-model="superAdminSearch"
+            type="search"
+            aria-label="Rechercher un compte"
+            placeholder="Rechercher un compte"
+          />
+        </label>
+      </div>
+
+      <p
+        v-if="superAdmins.chief_count > 1"
+        class="direction-warning"
+        role="alert"
+      >
+        <Icon name="lucide:triangle-alert" size="15" />
+        {{ superAdmins.chief_count }} employés ont le grade «
+        {{ superAdmins.chief_grade_name }} », qui ne doit aller qu’à une
+        personne : changez le grade des autres dans Ressources humaines.
+      </p>
+      <p
+        v-else-if="superAdmins.chief_grade_name && !superAdmins.chief_count"
+        class="direction-muted direction-chief-note"
+      >
+        Personne n’a le grade « {{ superAdmins.chief_grade_name }} » : il n’y a
+        pas de chef de service pour l’instant.
+      </p>
+
+      <div
+        v-if="visibleAccounts.length"
+        class="direction-account-cols"
+        aria-hidden="true"
+      >
+        <span>Compte</span><span>Tuile</span><span>Super-admin</span>
+      </div>
+      <article
+        v-for="account in visibleAccounts"
+        :key="account.id"
+        class="direction-account"
+      >
+        <div class="direction-account__name">
+          <strong>{{ account.name }}</strong>
+          <small>@{{ account.discord_username }}</small>
+        </div>
+        <div
+          class="direction-account__tile"
+          :class="{ 'direction-muted': !account.employee_name }"
+        >
+          <span>{{ account.employee_name ?? "Aucune tuile liée" }}</span>
+          <span
+            v-if="account.grade_name"
+            class="direction-account__grade"
+            :style="{ '--grade-color': account.grade_color ?? 'var(--dp-line)' }"
+            >{{ account.grade_name }}</span
+          >
+        </div>
+        <div class="direction-account__status">
+          <span
+            v-if="account.is_service_chief"
+            class="direction-grade__badge direction-grade__badge--chief"
+            title="Super-admin par son grade, même sans le statut du compte."
+            ><Icon name="lucide:crown" size="11" /> Chef de service</span
+          >
+          <span v-if="account.is_self" class="direction-account__self"
+            >Votre compte{{ account.is_super_admin ? " · super-admin" : "" }}</span
+          >
+          <label
+            v-else
+            class="direction-check"
+            :title="
+              account.is_service_chief
+                ? 'Statut du compte : il le garde s’il quitte le grade de chef de service.'
+                : undefined
+            "
+          >
+            <input
+              type="checkbox"
+              :checked="account.is_super_admin"
+              :disabled="savingSuperAdminId !== null"
+              :aria-label="`Super-admin : ${account.name}`"
+              @change="setSuperAdmin(account, $event)"
+            />
+            <Icon
+              v-if="savingSuperAdminId === account.id"
+              name="lucide:loader-circle"
+              size="13"
+              class="direction-spin"
+            />
+            Super-admin
+          </label>
+        </div>
+      </article>
+      <div v-if="!visibleAccounts.length" class="direction-empty">
+        <Icon
+          :name="superAdminSearch ? 'lucide:search-x' : 'lucide:users-round'"
+          size="21"
+        />
+        <p>
+          {{
+            superAdminSearch
+              ? "Aucun compte ne correspond à cette recherche."
+              : "Aucun compte validé."
+          }}
+        </p>
       </div>
     </section>
   </main>
@@ -1763,6 +2041,112 @@ function onFrequencyFocusOut(kind: FrequencyKind, event: FocusEvent) {
   background: var(--dp-info-soft);
   font-size: 10px;
   font-weight: 650;
+}
+.direction-grade__badge--chief {
+  border-color: var(--dp-warn-line);
+  color: var(--dp-warn);
+  background: var(--dp-warn-soft);
+}
+.direction-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--dp-warn-line);
+  border-radius: 12px;
+  color: var(--dp-warn);
+  background: var(--dp-warn-soft);
+  font-size: 12px;
+}
+.direction-chief-note {
+  margin: 0 0 14px;
+  font-size: 12px;
+}
+.direction-account-cols,
+.direction-account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(220px, auto);
+  align-items: center;
+  gap: 12px;
+}
+.direction-account-cols {
+  padding: 0 12px 8px;
+  color: var(--dp-text-dim);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.direction-account {
+  padding: 10px 12px;
+  border: 1px solid var(--dp-line);
+  border-radius: 12px;
+  background: var(--dp-panel-2);
+}
+.direction-account + .direction-account {
+  margin-top: 8px;
+}
+.direction-account__name {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.direction-account__name strong,
+.direction-account__name small,
+.direction-account__tile > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.direction-account__name strong {
+  color: var(--dp-text);
+  font-size: 12px;
+}
+.direction-account__name small {
+  color: var(--dp-text-dim);
+  font-size: 10px;
+}
+.direction-account__tile {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--dp-text-2);
+  font-size: 12px;
+}
+.direction-account__grade {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--grade-color) 55%, transparent);
+  border-radius: 999px;
+  color: var(--dp-text);
+  background: color-mix(in srgb, var(--grade-color) 18%, transparent);
+  font-size: 10px;
+  font-weight: 650;
+}
+.direction-account__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.direction-account__self {
+  color: var(--dp-text-dim);
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .direction-account-cols {
+    display: none;
+  }
+  .direction-account {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .direction-account__status {
+    justify-content: flex-start;
+  }
 }
 @media (max-width: 760px) {
   .direction-radio-cols {
